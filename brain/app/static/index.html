@@ -73,6 +73,36 @@
   .controls button.play { width: 50px; height: 50px; padding: 0; justify-content: center; font-size: 16px;
     background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .controls button.play:hover:not(:disabled) { color: var(--accent-ink); filter: brightness(1.1); }
+  /* buffering spinner on the play button */
+  .controls button.play.busy { color: transparent; position: relative; }
+  .controls button.play.busy::after {
+    content: ""; position: absolute; inset: 0; margin: auto; width: 18px; height: 18px;
+    border: 2px solid rgba(26,18,0,.35); border-top-color: var(--accent-ink);
+    border-radius: 50%; animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  .badge.buf { color: var(--accent) !important; }
+  .badge.buf .dot { animation: pulse .8s ease-in-out infinite; }
+  .badge.err { color: #f0716a !important; }
+  #viz { border-radius: 5px; background: var(--panel2); border: 1px solid var(--line); }
+
+  /* equalizer */
+  .eq { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line);
+        border-radius: 12px; background: var(--panel); }
+  .eqhead { display: flex; align-items: center; gap: 12px; font-size: 11px;
+            letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+  .presets { margin-left: auto; display: inline-flex; gap: 4px; }
+  .presets button { border: 1px solid var(--line); background: var(--panel2); color: var(--muted);
+    border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 11px; cursor: pointer;
+    text-transform: none; letter-spacing: 0; }
+  .presets button:hover { border-color: var(--accent); color: var(--accent); }
+  .presets button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+  .bands { display: flex; gap: 14px; margin-top: 14px; }
+  .band { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .band input { width: 100%; accent-color: var(--accent); }
+  .band .hz { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .band .db { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
   .vol { display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--dim); }
   .vol input { width: 88px; accent-color: var(--accent); }
 
@@ -146,13 +176,23 @@
 
     <div class="pane">
       <div class="np">
-        <div class="badge" id="npBadge" style="display:none"><span class="dot"></span>LIVE</div>
+        <div class="badge" id="npBadge" style="display:none"><span class="dot"></span><span id="npState">LIVE</span></div>
         <div id="npBody"><div class="empty">Pick a station to start listening →</div></div>
         <div class="controls">
           <button class="play" id="playBtn" disabled>▶</button>
           <button id="skipBtn" disabled>⏭ Skip track</button>
           <button id="shareBtn" disabled>🔗 <span id="shareLbl">Share station</span></button>
+          <button id="eqBtn" disabled>🎛 EQ</button>
+          <canvas id="viz" width="80" height="26" title="live signal"></canvas>
           <div class="vol"><span>🔊</span><input type="range" id="vol" min="0" max="100" value="100"></div>
+        </div>
+
+        <div class="eq" id="eqPanel" style="display:none">
+          <div class="eqhead">
+            <span>Equalizer</span>
+            <span class="presets" id="presets"></span>
+          </div>
+          <div class="bands" id="bands"></div>
         </div>
       </div>
 
@@ -198,7 +238,7 @@
   </div>
 
 <script>
-const state = { channel: null, channels: [], messages: [], audio: new Audio(), playing: false, histScope: "channel" };
+const state = { channel: null, channels: [], messages: [], audio: new Audio(), playing: false, status: "paused", histScope: "channel" };
 state.audio.preload = "none";
 
 const $ = (id) => document.getElementById(id);
@@ -228,28 +268,143 @@ async function loadChannels() {
 
 function tune(slug) {
   state.channel = slug;
-  state.audio.src = streamUrl(slug);
-  state.audio.play().catch(() => {});
   $("playBtn").disabled = false; $("skipBtn").disabled = false; $("shareBtn").disabled = false;
   $("npBadge").style.display = "inline-flex";
+  setStatus("buffering");                    // the stream takes a beat — say so
+  state.audio.src = streamUrl(slug);
+  initAudio();
+  state.audio.play().catch(() => setStatus("paused"));
   loadChannels(); refresh();
 }
-function setPlaying(on) {
-  state.playing = on;
-  $("playBtn").textContent = on ? "⏸" : "▶";
-  $("onair").className = "onair" + (on ? " on" : "");
-  $("onairText").textContent = on ? "ON AIR · " + chName(state.channel)
-                                  : (state.channel ? "PAUSED" : "TUNED OUT");
+// A live stream takes a beat to buffer. Say so, instead of looking broken.
+// Driven by the audio element's real events, never guessed.
+function setStatus(kind) {
+  state.status = kind;                       // buffering | playing | paused | error
+  const playing = kind === "playing";
+  state.playing = playing;
+
+  const badge = $("npBadge"), btn = $("playBtn");
+  btn.classList.toggle("busy", kind === "buffering");
+  btn.textContent = playing ? "⏸" : "▶";
+  badge.className = "badge" + (kind === "buffering" ? " buf" : kind === "error" ? " err" : "");
+  $("npState").textContent = { buffering: "TUNING IN…", playing: "LIVE",
+                               paused: "PAUSED", error: "RECONNECTING…" }[kind] || "";
+
+  $("onair").className = "onair" + (playing ? " on" : "");
+  $("onairText").textContent =
+    kind === "buffering" ? "TUNING IN…" :
+    playing ? "ON AIR · " + chName(state.channel) :
+    state.channel ? (kind === "error" ? "RECONNECTING…" : "PAUSED") : "TUNED OUT";
   loadChannels();
 }
-state.audio.onplaying = () => setPlaying(true);
-state.audio.onpause   = () => setPlaying(false);
+state.audio.addEventListener("loadstart", () => { if (!state.audio.paused) setStatus("buffering"); });
+state.audio.addEventListener("waiting",   () => setStatus("buffering"));
+state.audio.addEventListener("stalled",   () => setStatus("buffering"));
+state.audio.addEventListener("playing",   () => setStatus("playing"));
+state.audio.addEventListener("pause",     () => setStatus("paused"));
+state.audio.addEventListener("error",     () => setStatus("error"));
 
 $("playBtn").onclick = () => {
   if (!state.channel) return;
-  if (state.audio.paused) { state.audio.src = streamUrl(state.channel); state.audio.play().catch(()=>{}); }
-  else state.audio.pause();
+  if (state.audio.paused) {
+    setStatus("buffering");
+    state.audio.src = streamUrl(state.channel);   // rejoin the live edge
+    initAudio();
+    state.audio.play().catch(() => setStatus("error"));
+  } else {
+    state.audio.pause();
+  }
 };
+
+/* ── Web Audio: equalizer + signal meter ───────────────────────────────────
+   Only possible because /stream/<slug> is same-origin (the brain proxies
+   icecast). A raw cross-origin stream would taint the graph and play silence. */
+const BANDS = [[60, "60"], [250, "250"], [1000, "1k"], [4000, "4k"], [12000, "12k"]];
+const PRESETS = {
+  Flat:      [0, 0, 0, 0, 0],
+  Warm:      [4, 2, 0, -1, -2],     // old tapes, harsh top end
+  Bright:    [-1, 0, 1, 3, 4],
+  "Bass up": [6, 3, 0, 0, 1],
+  Vocal:     [-2, 0, 3, 2, 0],      // pull the vocal/guitar out of a muddy board
+};
+let actx = null, filters = [], analyser = null;
+
+function initAudio() {
+  if (actx) { if (actx.state === "suspended") actx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  try {
+    actx = new AC();
+    const src = actx.createMediaElementSource(state.audio);
+    filters = BANDS.map(([hz], i) => {
+      const f = actx.createBiquadFilter();
+      f.type = i === 0 ? "lowshelf" : i === BANDS.length - 1 ? "highshelf" : "peaking";
+      f.frequency.value = hz; f.Q.value = 1; f.gain.value = 0;
+      return f;
+    });
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 64;
+    let node = src;
+    for (const f of filters) { node.connect(f); node = f; }
+    node.connect(analyser);
+    analyser.connect(actx.destination);
+    $("eqBtn").disabled = false;
+    drawViz();
+  } catch { actx = null; }             // graph already built, or unsupported
+}
+
+function buildEq() {
+  $("bands").innerHTML = BANDS.map(([hz, lbl], i) =>
+    `<div class="band"><input type="range" id="b${i}" min="-12" max="12" step="1" value="0"
+      orient="vertical"><span class="db" id="d${i}">0 dB</span><span class="hz">${lbl}</span></div>`).join("");
+  BANDS.forEach((_, i) => {
+    $("b" + i).oninput = (e) => {
+      const g = +e.target.value;
+      if (filters[i]) filters[i].gain.value = g;
+      $("d" + i).textContent = (g > 0 ? "+" : "") + g + " dB";
+      document.querySelectorAll("#presets button").forEach(b => b.classList.remove("on"));
+    };
+  });
+  $("presets").innerHTML = Object.keys(PRESETS)
+    .map(n => `<button data-p="${n}">${n}</button>`).join("");
+  document.querySelectorAll("#presets button").forEach(b => {
+    b.onclick = () => {
+      const gains = PRESETS[b.dataset.p];
+      gains.forEach((g, i) => {
+        if (filters[i]) filters[i].gain.value = g;
+        $("b" + i).value = g;
+        $("d" + i).textContent = (g > 0 ? "+" : "") + g + " dB";
+      });
+      document.querySelectorAll("#presets button").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+    };
+  });
+}
+
+$("eqBtn").onclick = () => {
+  const p = $("eqPanel");
+  const open = p.style.display === "none";
+  p.style.display = open ? "" : "none";
+  $("eqBtn").classList.toggle("on", open);
+};
+
+// the meter doubles as proof audio is actually flowing
+function drawViz() {
+  const c = $("viz"), ctx = c.getContext("2d");
+  const buf = new Uint8Array(analyser.frequencyBinCount);
+  (function frame() {
+    requestAnimationFrame(frame);
+    analyser.getByteFrequencyData(buf);
+    ctx.clearRect(0, 0, c.width, c.height);
+    const n = 14, w = c.width / n;
+    for (let i = 0; i < n; i++) {
+      const v = buf[i * 2] / 255;
+      const h = Math.max(1, v * c.height);
+      ctx.fillStyle = state.status === "playing" ? "#f59e0b" : "#2f3646";
+      ctx.fillRect(i * w + 1, c.height - h, w - 2, h);
+    }
+  })();
+}
 $("skipBtn").onclick = async () => {
   if (!state.channel) return;
   $("skipBtn").disabled = true;
@@ -331,8 +486,8 @@ async function refresh() {
     const pct = total ? Math.round((pos / total) * 100) : 0;
     $("showBar").style.width = pct + "%";
     $("showWhere").textContent =
-      !total ? "" : pct <= 20 ? "top of the show" : pct >= 85 ? "closing it out"
-                  : pct >= 55 ? "back half" : "into the set";
+      !total ? "" : pct <= 20 ? "just getting started" : pct >= 85 ? "near the end"
+                  : pct >= 55 ? "past halfway" : "early in the show";
 
     $("setlist").innerHTML = setlist.map((t, i) => {
       const isNow = i === pos - 1;
@@ -402,6 +557,7 @@ $("form").onsubmit = async (e) => {
 };
 
 // ?station=<slug> deep-links straight to a station (shareable; audio needs a click to start)
+buildEq();
 loadChannels().then(() => {
   const want = new URLSearchParams(location.search).get("station");
   if (want && state.channels.some(c => c.slug === want)) tune(want);

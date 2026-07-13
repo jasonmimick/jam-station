@@ -59,8 +59,12 @@ def make_channel(line) =
     s = crossfade(fade_in=1.5, fade_out=2.5, q)
     s = mksafe(s)
 
+    # The Archive hands us VBR MP3 derivatives (~190-240kbps), so encoding out at
+    # 128 CBR threw away real quality on top of an already-lossy source. 256 CBR
+    # is effectively transparent for that input; the cost is bandwidth per
+    # listener, which is nothing for a personal station.
     output.icecast(
-      %mp3(bitrate=128),
+      %mp3(bitrate=256),
       id="out_#{slug}",
       host=icecast_host, port=8000,
       password=icecast_pw,
