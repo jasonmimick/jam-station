@@ -146,6 +146,7 @@
         <div class="controls">
           <button class="play" id="playBtn" disabled>▶</button>
           <button id="skipBtn" disabled>⏭ Skip track</button>
+          <button id="shareBtn" disabled>🔗 <span id="shareLbl">Share station</span></button>
           <div class="vol"><span>🔊</span><input type="range" id="vol" min="0" max="100" value="100"></div>
         </div>
       </div>
@@ -219,7 +220,7 @@ function tune(slug) {
   state.channel = slug;
   state.audio.src = streamUrl(slug);
   state.audio.play().catch(() => {});
-  $("playBtn").disabled = false; $("skipBtn").disabled = false;
+  $("playBtn").disabled = false; $("skipBtn").disabled = false; $("shareBtn").disabled = false;
   $("npBadge").style.display = "inline-flex";
   loadChannels(); refresh();
 }
@@ -249,6 +250,25 @@ $("skipBtn").onclick = async () => {
   } finally { $("skipBtn").disabled = false; }
 };
 $("vol").oninput = (e) => { state.audio.volume = e.target.value / 100; };
+
+// Share the station you're on — a live link anyone can open straight to it.
+$("shareBtn").onclick = async () => {
+  if (!state.channel) return;
+  const url = `${location.origin}/?station=${state.channel}`;
+  const lbl = $("shareLbl"), was = "Share station";
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: "jam-station", text: `Listen to ${chName(state.channel)}`, url });
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+    lbl.textContent = "Link copied!";
+  } catch {
+    window.prompt("Copy this link:", url);   // clipboard blocked (http / denied)
+    return;
+  }
+  setTimeout(() => { lbl.textContent = was; }, 1800);
+};
 
 $("tabCh").onclick  = () => { state.histScope = "channel"; syncTabs(); refresh(); };
 $("tabAll").onclick = () => { state.histScope = "all";     syncTabs(); refresh(); };
