@@ -84,7 +84,12 @@ def list_channels(streamable_only: bool = False) -> list[dict]:
     out = []
     for r in rows:
         r["query"] = json.loads(r.get("query") or "{}")
-        if streamable_only and r["source"] not in STREAMABLE_SOURCES:
+        # A library channel is only real if the files are actually on disk —
+        # otherwise it mounts and broadcasts silence. Surface that as `playable`
+        # so the UI can say so, and keep it out of liquidsoap's mount list.
+        r["playable"] = (r["source"] != "library"
+                         or bool(library.pick_tracks(r["query"], count=1)))
+        if streamable_only and (r["source"] not in STREAMABLE_SOURCES or not r["playable"]):
             continue
         out.append(r)
     return out

@@ -45,6 +45,11 @@
   .station .d { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
   .station.active { background: var(--panel2); border-left-color: var(--accent); }
   .station.active .n { color: var(--accent); }
+  .station.dead { cursor: not-allowed; }
+  .station.dead .n { color: var(--dim); }
+  .station.dead .d { color: var(--dim); }
+  .tagno { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; }
   .station .bars { display: none; gap: 2px; align-items: flex-end; height: 11px; }
   .station.active.playing .bars { display: inline-flex; }
   .bars i { width: 2px; background: var(--accent); animation: eq .9s ease-in-out infinite; }
@@ -206,12 +211,17 @@ async function loadChannels() {
   const wrap = $("stations");
   wrap.innerHTML = "";
   for (const ch of state.channels) {           // every station — no source filtering
+    const dead = ch.playable === false;      // library channel with no files on disk
     const el = document.createElement("button");
     el.className = "station" + (state.channel === ch.slug ? " active" : "")
-                             + (state.channel === ch.slug && state.playing ? " playing" : "");
-    el.innerHTML = `<div class="n">${esc(ch.name)}<span class="bars"><i></i><i></i><i></i></span></div>`
-                 + (ch.description ? `<div class="d">${esc(ch.description)}</div>` : "");
-    el.onclick = () => tune(ch.slug);
+                             + (state.channel === ch.slug && state.playing ? " playing" : "")
+                             + (dead ? " dead" : "");
+    el.innerHTML = `<div class="n">${esc(ch.name)}<span class="bars"><i></i><i></i><i></i></span>`
+                 + (dead ? `<span class="tagno">no music</span>` : "") + `</div>`
+                 + `<div class="d">${dead
+                      ? "Needs your own files — nothing in music/" + esc((ch.query.folders || [])[0] || "")
+                      : esc(ch.description || "")}</div>`;
+    el.onclick = () => { if (!dead) tune(ch.slug); };
     wrap.appendChild(el);
   }
 }

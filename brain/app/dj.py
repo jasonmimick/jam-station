@@ -7,7 +7,7 @@ import re
 import anthropic
 
 from . import channels, config
-from .adapters import archive, phishin
+from .adapters import archive, library, phishin
 
 SYSTEM = """You are the DJ of jam-station, a personal internet radio station running on the
 owner's Mac mini. You are warm, knowledgeable, and a little bit of a music nerd — deep
@@ -33,8 +33,18 @@ playing/upcoming, skip the current track, and create brand-new channels from a v
 Ground rules:
 - When asked to play something, actually queue it with tools — don't just talk about it.
 - Prefer highly-rated tapes; mention the venue/date like a real DJ would.
-- Newly created channels start streaming after liquidsoap restarts
-  (`docker compose restart liquidsoap`) — tell the owner when that's needed.
+- New channels go on air by themselves within ~30 seconds — the radio engine notices the
+  new channel and reloads to open its mount. NEVER tell the owner to restart anything.
+- ALWAYS prove a channel can play before you create it: run search_shows / search_phish_shows
+  and confirm it returns tapes. Archive collection names are exact and unobvious (Goose is
+  'GooseBand'). create_channel will reject a query that returns nothing.
+- Only those three sources exist, and you cannot conjure music that isn't in one of them.
+  The Archive is taper-friendly LIVE tapes (jam bands) — studio/commercial catalogue is NOT
+  there: bebop (Parker, Dizzy), Weather Report, Mahavishnu, most jazz and rock records. That
+  music can only come from the owner's own library, and only if the files actually exist.
+  A "library" channel with no files is a silent, dead channel, and create_channel will
+  refuse to make one. If a request can't be sourced, SAY SO plainly and offer the closest
+  thing you can actually play. Never claim a channel is ready when it has no music.
 - Keep replies short and radio-friendly. You're on the air.
 """
 
@@ -176,11 +186,32 @@ def _run_tool(name: str, args: dict) -> dict | list:
     if name == "skip_track":
         return {"skipped": channels.skip(args["channel"])}
     if name == "create_channel":
+        source, query = args["source"], args["query"]
+        # A channel whose query yields nothing is a station that broadcasts silence.
+        # Prove it can produce at least one track BEFORE creating it — the prompt
+        # alone won't reliably stop the DJ announcing a station that can't play.
+        if source == "library" and not library.pick_tracks(query, count=1):
+            folders = ", ".join(query.get("folders") or []) or "music/"
+            return {"error": f"no audio files under music/{folders} — this channel would be "
+                             f"silent. Say plainly that you cannot source this music: it is "
+                             f"not on the Archive (live tapes only) and the owner's library "
+                             f"has no such files. Do NOT claim the channel is ready."}
+        if source == "archive" and not archive.search_shows(
+                collections=query.get("collections"), free_text=query.get("free_text"),
+                year=query.get("year"), min_rating=query.get("min_rating"), rows=1):
+            return {"error": "that Archive query returns no shows — the collection name is "
+                             "probably wrong (e.g. Goose is 'GooseBand', not 'Goose'). Run "
+                             "search_shows to find a query that actually returns tapes, then "
+                             "try again. Do NOT claim the channel is ready."}
+        if source == "phishin" and not phishin.search_shows(
+                year=query.get("year"), rows=1, sort=query.get("sort", "likes_count:desc")):
+            return {"error": "that phish.in query returns no shows. Check it with "
+                             "search_phish_shows first. Do NOT claim the channel is ready."}
         ch = channels.create_channel(args["slug"], args["name"],
-                                     args.get("description", ""),
-                                     args["source"], args["query"])
+                                     args.get("description", ""), source, query)
         return {"created": ch,
-                "note": "restart liquidsoap to open this channel's stream mount"}
+                "note": "on air within ~30s — the radio engine reloads itself. "
+                        "Do not tell the owner to restart anything."}
     return {"error": f"unknown tool {name}"}
 
 

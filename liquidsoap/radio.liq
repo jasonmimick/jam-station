@@ -4,8 +4,8 @@
 # brain for its next track: GET http://brain:8080/api/next?channel=<slug>
 # The brain replies with an annotate: URI (title/artist/album) or empty.
 #
-# Channels are fetched from the brain at startup — to pick up a channel the AI
-# just created, run: docker compose restart liquidsoap
+# Channels are fetched from the brain at startup. A channel created later is
+# picked up automatically: we watch the list and restart ourselves (see bottom).
 
 settings.server.telnet := true
 settings.server.telnet.bind_addr := "0.0.0.0"
@@ -83,3 +83,19 @@ else
   lines = string.split(separator="\n", chan_body)
   list.iter(make_channel, lines)
 end
+
+# A channel needs its own icecast mount, and mounts can only be opened at
+# startup — so a channel the DJ creates while we're running is inaudible until
+# we boot again. Watch the list and exit when it changes; the container's
+# restart policy brings us straight back with the new mounts. Same trick as the
+# brain-unreachable path above: let the supervisor do the restarting.
+def watch_channels() =
+  resp = try http.get("#{brain}/api/channels.liq") catch _ do "" end
+  body = string.trim("#{resp}")
+  if body != "" and body != chan_body then
+    log("jam-station: channel list changed — restarting to open the new mounts")
+    shutdown(code=1)
+  end
+end
+
+thread.run(delay=30., every=30., watch_channels)
