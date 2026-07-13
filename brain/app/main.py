@@ -136,7 +136,13 @@ def api_chat(body: ChatBody):
 # ---------------------------------------------------------------- debug
 
 @app.get("/api/history")
-def api_history(channel: str, limit: int = 30):
+def api_history(channel: str | None = None, limit: int = 30):
+    """Play log. Omit `channel` for the whole station network (rows carry the
+    channel so the UI can label them); pass one to scope it."""
+    if channel:
+        return db.query(
+            "SELECT channel, title, artist, album, played_at FROM history WHERE channel=? "
+            "ORDER BY id DESC LIMIT ?", (channel, limit))
     return db.query(
-        "SELECT title, artist, album, played_at FROM history WHERE channel=? "
-        "ORDER BY id DESC LIMIT ?", (channel, limit))
+        "SELECT channel, title, artist, album, played_at FROM history "
+        "ORDER BY id DESC LIMIT ?", (limit,))
