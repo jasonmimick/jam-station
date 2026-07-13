@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home Radio Station — Architecture</title>
+<style>
+  :root {
+    --ink: #1e293b; --muted: #64748b; --line: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f8fafc; color: var(--ink);
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .wrap { max-width: 860px; width: 100%; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  h2 { font-size: 16px; margin: 32px 0 10px; }
+  svg { width: 100%; height: auto; display: block; background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f1f5f9; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  p { font-size: 14px; line-height: 1.55; }
+  .note { font-size: 13px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Home Radio Station — Design</h1>
+  <p class="sub">Personal multi-channel AI radio · Mac mini + Docker · reached from the car over Tailscale</p>
+
+  <svg viewBox="0 0 820 1210" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+    <defs>
+      <marker id="mGreen" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0.5 L7,4 L0,7.5 Z" fill="#059669"/></marker>
+      <marker id="mBlue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0.5 L7,4 L0,7.5 Z" fill="#2563eb"/></marker>
+      <marker id="mTeal" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0.5 L7,4 L0,7.5 Z" fill="#0d9488"/></marker>
+      <marker id="mOrange" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0.5 L7,4 L0,7.5 Z" fill="#ea580c"/></marker>
+      <marker id="mPurple" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0.5 L7,4 L0,7.5 Z" fill="#7c3aed"/></marker>
+      <marker id="mSlate" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0.5 L7,4 L0,7.5 Z" fill="#64748b"/></marker>
+      <marker id="mGray" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0.5 L7,4 L0,7.5 Z" fill="#9ca3af"/></marker>
+    </defs>
+
+    <!-- ZONE: phone -->
+    <rect x="20" y="20" width="780" height="180" rx="14" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="40" y="48" font-size="15" font-weight="700" fill="#1e3a8a">📱 Your phone — in the car / traveling</text>
+    <text x="40" y="66" font-size="11.5" fill="#64748b">CarPlay / Android Auto · cellular</text>
+
+    <!-- phone boxes -->
+    <g>
+      <rect x="40" y="82" width="172" height="100" rx="10" fill="#fff" stroke="#cbd5e1"/>
+      <text x="52" y="104" font-size="13" font-weight="600">Library app</text>
+      <text x="52" y="122" font-size="11" fill="#64748b">Plexamp / play:Sub</text>
+      <text x="52" y="137" font-size="11" fill="#64748b">your own music,</text>
+      <text x="52" y="152" font-size="11" fill="#64748b">CarPlay + offline cache</text>
+
+      <rect x="232" y="82" width="172" height="100" rx="10" fill="#fff" stroke="#cbd5e1"/>
+      <text x="244" y="104" font-size="13" font-weight="600">Station web app</text>
+      <text x="244" y="122" font-size="11" fill="#64748b">chat with the AI DJ,</text>
+      <text x="244" y="137" font-size="11" fill="#64748b">pick / create channels,</text>
+      <text x="244" y="152" font-size="11" fill="#64748b">now playing</text>
+
+      <rect x="424" y="82" width="172" height="100" rx="10" fill="#fff" stroke="#cbd5e1"/>
+      <text x="436" y="104" font-size="13" font-weight="600">Any radio app</text>
+      <text x="436" y="122" font-size="11" fill="#64748b">Broadcasts / VLC —</text>
+      <text x="436" y="137" font-size="11" fill="#64748b">each channel is just</text>
+      <text x="436" y="152" font-size="11" fill="#64748b">a stream URL</text>
+
+      <rect x="616" y="82" width="172" height="100" rx="10" fill="#fff" stroke="#cbd5e1"/>
+      <text x="628" y="104" font-size="13" font-weight="600">Spotify / YouTube</text>
+      <text x="628" y="122" font-size="11" fill="#64748b">native apps play;</text>
+      <text x="628" y="137" font-size="11" fill="#64748b">your AI just curates</text>
+      <text x="628" y="152" font-size="11" fill="#64748b">their playlists</text>
+    </g>
+
+    <!-- ZONE: tailscale band -->
+    <rect x="20" y="240" width="780" height="64" rx="12" fill="#ecfdf5" stroke="#34d399" stroke-dasharray="6 4"/>
+    <text x="790" y="268" font-size="13" font-weight="700" fill="#065f46" text-anchor="end">🔒 Tailscale (already set up)</text>
+    <text x="790" y="286" font-size="11" fill="#047857" text-anchor="end">phone ↔ home, securely, from anywhere</text>
+
+    <!-- cross-zone arrows -->
+    <text x="137" y="224" font-size="11" fill="#0d9488" text-anchor="middle">your library</text>
+    <line x1="137" y1="396" x2="137" y2="190" stroke="#0d9488" stroke-width="2" marker-end="url(#mTeal)"/>
+
+    <text x="350" y="224" font-size="11" fill="#059669" text-anchor="middle">chat &amp; control</text>
+    <line x1="330" y1="188" x2="402" y2="392" stroke="#059669" stroke-width="2" marker-end="url(#mGreen)"/>
+
+    <text x="600" y="224" font-size="11" fill="#2563eb" text-anchor="middle">live channel streams</text>
+    <line x1="658" y1="396" x2="528" y2="192" stroke="#2563eb" stroke-width="2" marker-end="url(#mBlue)"/>
+
+    <!-- native apps dashed path (right margin) -->
+    <path d="M 788 120 L 806 120 L 806 1120 L 786 1120" fill="none" stroke="#9ca3af" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#mGray)"/>
+
+    <!-- ZONE: mac mini -->
+    <rect x="20" y="344" width="780" height="470" rx="14" fill="#faf5ff" stroke="#c4b5fd"/>
+    <text x="40" y="372" font-size="15" font-weight="700" fill="#4c1d95">🖥️ Mac mini — Docker</text>
+
+    <!-- navidrome -->
+    <rect x="40" y="400" width="210" height="105" rx="10" fill="#fff" stroke="#cbd5e1"/>
+    <text x="52" y="424" font-size="13" font-weight="600">navidrome</text>
+    <text x="52" y="442" font-size="11" fill="#64748b">:4533 · serves your own</text>
+    <text x="52" y="457" font-size="11" fill="#64748b">ripped/owned music</text>
+    <text x="52" y="472" font-size="11" fill="#64748b">(Subsonic API — great</text>
+    <text x="52" y="487" font-size="11" fill="#64748b">phone &amp; CarPlay clients)</text>
+
+    <!-- radio-brain -->
+    <rect x="290" y="400" width="250" height="130" rx="10" fill="#fff" stroke="#8b5cf6" stroke-width="1.5"/>
+    <text x="302" y="424" font-size="13" font-weight="700" fill="#4c1d95">radio-brain  (the app you build)</text>
+    <text x="302" y="443" font-size="11" fill="#64748b">:8080 · web app + chat API</text>
+    <text x="302" y="458" font-size="11" fill="#64748b">AI DJ (LLM tool-calling)</text>
+    <text x="302" y="473" font-size="11" fill="#64748b">channel manager (Dead ’77, Fusion…)</text>
+    <text x="302" y="488" font-size="11" fill="#64748b">source adapters: Archive · library ·</text>
+    <text x="302" y="503" font-size="11" fill="#64748b">Spotify · YouTube · phish.in · streams</text>
+
+    <!-- icecast -->
+    <rect x="570" y="400" width="210" height="105" rx="10" fill="#fff" stroke="#cbd5e1"/>
+    <text x="582" y="424" font-size="13" font-weight="600">icecast</text>
+    <text x="582" y="442" font-size="11" fill="#64748b">:8000 · one mount per channel</text>
+    <text x="582" y="460" font-size="11" fill="#64748b">/dead77   /jam   /fusion</text>
+    <text x="582" y="475" font-size="11" fill="#64748b">/latenight-jazz …</text>
+
+    <!-- liquidsoap -->
+    <rect x="290" y="570" width="250" height="85" rx="10" fill="#fff" stroke="#cbd5e1"/>
+    <text x="302" y="594" font-size="13" font-weight="600">liquidsoap</text>
+    <text x="302" y="612" font-size="11" fill="#64748b">per-channel play queue · crossfades</text>
+    <text x="302" y="627" font-size="11" fill="#64748b">track metadata · never runs dry</text>
+
+    <!-- music volume -->
+    <rect x="40" y="560" width="210" height="65" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="4 3"/>
+    <text x="52" y="584" font-size="12.5" font-weight="600" fill="#475569">🗄 music library (volume)</text>
+    <text x="52" y="602" font-size="11" fill="#64748b">your ripped / owned files</text>
+
+    <!-- channels.db volume -->
+    <rect x="40" y="660" width="210" height="65" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="4 3"/>
+    <text x="52" y="684" font-size="12.5" font-weight="600" fill="#475569">🗄 channels.db (volume)</text>
+    <text x="52" y="702" font-size="11" fill="#64748b">stations · queues · play history</text>
+
+    <!-- cache volume -->
+    <rect x="290" y="695" width="250" height="65" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-dasharray="4 3"/>
+    <text x="302" y="719" font-size="12.5" font-weight="600" fill="#475569">🗄 audio cache (volume)</text>
+    <text x="302" y="737" font-size="11" fill="#64748b">prefetched Archive MP3s</text>
+
+    <!-- internal arrows -->
+    <line x1="145" y1="507" x2="145" y2="558" stroke="#94a3b8" stroke-width="1.5"/>
+    <path d="M 290 500 L 262 500 L 262 690 L 254 690" fill="none" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#mGray)"/>
+    <line x1="415" y1="532" x2="415" y2="566" stroke="#64748b" stroke-width="2" marker-end="url(#mSlate)"/>
+    <text x="425" y="554" font-size="10.5" fill="#64748b">queue updates</text>
+    <path d="M 540 612 L 610 612 L 610 510" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#mSlate)"/>
+    <text x="618" y="580" font-size="10.5" fill="#64748b">encoded</text>
+    <text x="618" y="594" font-size="10.5" fill="#64748b">streams</text>
+    <line x1="415" y1="693" x2="415" y2="659" stroke="#7c3aed" stroke-width="2" marker-end="url(#mPurple)"/>
+
+    <!-- brain -> internet (orange lane) -->
+    <path d="M 540 470 L 556 470 L 556 944" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#mOrange)"/>
+    <text x="564" y="870" font-size="11" fill="#ea580c">search · LLM · playlist writes</text>
+
+    <!-- archive -> cache (purple) -->
+    <line x1="400" y1="986" x2="400" y2="766" stroke="#7c3aed" stroke-width="2" marker-end="url(#mPurple)"/>
+    <text x="390" y="870" font-size="11" fill="#7c3aed" text-anchor="end">MP3 audio (prefetch → cache)</text>
+
+    <!-- ZONE: internet -->
+    <rect x="20" y="950" width="780" height="240" rx="14" fill="#fff7ed" stroke="#fdba74"/>
+    <text x="40" y="976" font-size="15" font-weight="700" fill="#7c2d12">☁️ Internet (plain internet — not Tailscale)</text>
+
+    <rect x="40" y="990" width="220" height="75" rx="10" fill="#fff" stroke="#cbd5e1"/>
+    <text x="52" y="1013" font-size="13" font-weight="600">Claude API</text>
+    <text x="52" y="1031" font-size="11" fill="#64748b">the DJ’s brain — chat,</text>
+    <text x="52" y="1046" font-size="11" fill="#64748b">picks shows, writes intros</text>
+
+    <rect x="300" y="990" width="200" height="75" rx="10" fill="#fff" stroke="#cbd5e1"/>
+    <text x="312" y="1013" font-size="13" font-weight="600">archive.org</text>
+    <text x="312" y="1031" font-size="11" fill="#64748b">Live Music Archive —</text>
+    <text x="312" y="1046" font-size="11" fill="#64748b">search API + free MP3s</text>
+
+    <rect x="540" y="990" width="240" height="75" rx="10" fill="#fff" stroke="#cbd5e1"/>
+    <text x="552" y="1013" font-size="13" font-weight="600">phish.in · SomaFM · FMA</text>
+    <text x="552" y="1031" font-size="11" fill="#64748b">more free sources &amp; existing</text>
+    <text x="552" y="1046" font-size="11" fill="#64748b">jazz/fusion radio streams</text>
+
+    <rect x="300" y="1090" width="200" height="60" rx="10" fill="#fff" stroke="#cbd5e1"/>
+    <text x="312" y="1113" font-size="13" font-weight="600">Spotify Web API</text>
+    <text x="312" y="1131" font-size="11" fill="#64748b">AI writes your playlists</text>
+
+    <rect x="540" y="1090" width="240" height="60" rx="10" fill="#fff" stroke="#cbd5e1"/>
+    <text x="552" y="1113" font-size="13" font-weight="600">YouTube Data API</text>
+    <text x="552" y="1131" font-size="11" fill="#64748b">AI curates playlists (fusion!)</text>
+
+    <text x="40" y="1116" font-size="11" font-style="italic" fill="#9a3412">each source =</text>
+    <text x="40" y="1131" font-size="11" font-style="italic" fill="#9a3412">one adapter in radio-brain</text>
+
+    <text x="780" y="1080" font-size="10" fill="#9ca3af" text-anchor="end">native playback — AI only curates via API</text>
+  </svg>
+
+  <div class="legend">
+    <span><i class="sw" style="background:#059669"></i> chat &amp; control</span>
+    <span><i class="sw" style="background:#2563eb"></i> listening path</span>
+    <span><i class="sw" style="background:#0d9488"></i> your own library</span>
+    <span><i class="sw" style="background:#7c3aed"></i> audio pulled from Archive</span>
+    <span><i class="sw" style="background:#ea580c"></i> API calls from the brain</span>
+    <span><i class="sw" style="background:repeating-linear-gradient(90deg,#9ca3af 0 5px,transparent 5px 9px)"></i> Spotify/YouTube native apps</span>
+  </div>
+
+  <h2>What your phone actually opens (over Tailscale)</h2>
+  <table>
+    <tr><th>URL</th><th>What it is</th></tr>
+    <tr><td><code>http://macmini:8080</code></td><td>Station web app — chat with the AI DJ, switch channels, see now-playing</td></tr>
+    <tr><td><code>http://macmini:8000/fusion</code></td><td>A channel stream — works in any audio/radio app, Safari, or CarPlay radio apps (one URL per channel)</td></tr>
+    <tr><td><code>http://macmini:4533</code></td><td>Navidrome — your own library via polished apps (Plexamp-style, offline caching for dead zones)</td></tr>
+  </table>
+
+  <h2>The containers</h2>
+  <table>
+    <tr><th>Container</th><th>What it does</th><th>Image / tech</th></tr>
+    <tr><td><b>radio-brain</b></td><td>The part you build: chat UI + API, LLM tool-calling (search_shows, queue, make_channel), channel definitions, one adapter per source. Feeds liquidsoap's queues.</td><td>Custom — Node or Python (FastAPI), port 8080</td></tr>
+    <tr><td><b>liquidsoap</b></td><td>Radio engine: per-channel queue, pulls MP3s (from cache or straight from Archive URLs), crossfades, sends metadata + encoded audio to Icecast. This is what makes it feel like radio.</td><td><code>savonet/liquidsoap</code></td></tr>
+    <tr><td><b>icecast</b></td><td>Broadcast point: one mount per channel. Any client that can play a URL can tune in.</td><td><code>icecast</code> official, port 8000</td></tr>
+    <tr><td><b>navidrome</b></td><td>Your owned music (the fusion you rip/buy) with great mobile + CarPlay clients and offline sync.</td><td><code>deluan/navidrome</code>, port 4533</td></tr>
+    <tr><td><b>volumes</b></td><td><code>music/</code> (your files), <code>cache/</code> (prefetched Archive audio — kind to their bandwidth, smooth in the car), <code>channels.db</code> (SQLite: stations, queues, history)</td><td>Docker volumes / host folders</td></tr>
+  </table>
+
+  <h2>How a drive works</h2>
+  <p>You get in the car and either tap a saved channel URL in a radio app or open the station app and tell the AI "70s fusion, high energy." The brain tops up that channel's queue (Archive shows by rating, or your library for fusion), liquidsoap plays and crossfades it into the Icecast mount, and your phone streams it over Tailscale like any internet radio station — seamless on cellular. Spotify/YouTube channels don't touch the house at all: the AI maintains their playlists via API and the native apps play them in CarPlay.</p>
+
+  <h2>Notes</h2>
+  <p class="note">Docker on the Mac mini runs fine via OrbStack, Colima, or Docker Desktop — everything here is network-only (no audio hardware needed on the server). Tailscale runs on the macOS host, not in a container; containers just publish ports on the host, and optionally <code>tailscale serve</code> can front them with HTTPS. Keep Icecast/Navidrome bound to the tailnet only — nothing needs to be exposed to the public internet. Start order: icecast → liquidsoap → radio-brain.</p>
+</div>
+</body>
+</html>

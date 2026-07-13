@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+cache/
+music/*
+!music/.gitkeep
+!music/fusion/.gitkeep
+!music/jazz/.gitkeep
+.DS_Store

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jam-station</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #171a23; --line: #262b38;
+    --ink: #e6e9f0; --muted: #8b93a7; --accent: #f59e0b; --accent2: #34d399;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink); height: 100dvh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 14px 18px 10px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
+  header h1 span { color: var(--accent); }
+  .channels { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0 2px; }
+  .chip {
+    flex: 0 0 auto; padding: 7px 14px; border-radius: 999px; font-size: 13px;
+    background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+    cursor: pointer; white-space: nowrap;
+  }
+  .chip.active { background: var(--accent); color: #1a1200; border-color: var(--accent); font-weight: 600; }
+  .player {
+    display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .player button {
+    width: 46px; height: 46px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--accent); color: #1a1200; font-size: 18px; flex: 0 0 auto;
+  }
+  .player button.secondary { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+  .np { min-width: 0; flex: 1; }
+  .np .title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .np .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .live { font-size: 10px; color: var(--accent2); letter-spacing: 0.1em; }
+  #chat { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: #2b3550; border-bottom-right-radius: 4px; }
+  .msg.dj { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .msg.dj b.tag { color: var(--accent); font-size: 11px; letter-spacing: 0.08em; display: block; margin-bottom: 3px; }
+  .msg.thinking { color: var(--muted); font-style: italic; }
+  form { display: flex; gap: 8px; padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg); }
+  input[type="text"] {
+    flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); font-size: 15px; outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  form button { padding: 0 18px; border-radius: 12px; border: none; background: var(--accent); color: #1a1200; font-weight: 700; font-size: 14px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>⚡ jam-<span>station</span></h1>
+    <div class="channels" id="channels"></div>
+  </header>
+
+  <div class="player">
+    <button id="playBtn" title="play/pause">▶</button>
+    <div class="np">
+      <div class="live" id="live">TUNED OUT</div>
+      <div class="title" id="npTitle">Pick a channel</div>
+      <div class="sub" id="npSub">…or ask the DJ for something</div>
+    </div>
+    <button class="secondary" id="skipBtn" title="skip">⏭</button>
+  </div>
+
+  <div id="chat">
+    <div class="msg dj"><b class="tag">DJ</b>Hey — you're tuned to jam-station. Pick a channel above, or tell me what you're in the mood for. I can find shows on the Archive, queue them up, even build you a brand-new channel.</div>
+  </div>
+
+  <form id="form">
+    <input type="text" id="input" placeholder='Try: "play a great ’77 Dead show"' autocomplete="off">
+    <button type="submit">Send</button>
+  </form>
+
+<script>
+const state = { channel: null, channels: [], messages: [], audio: new Audio() };
+state.audio.preload = "none";
+
+const $ = (id) => document.getElementById(id);
+const streamUrl = (slug) => `http://${location.hostname}:8000/${slug}`;
+
+async function loadChannels() {
+  const res = await fetch("/api/channels");
+  state.channels = await res.json();
+  const wrap = $("channels");
+  wrap.innerHTML = "";
+  for (const ch of state.channels) {
+    if (!["archive", "library"].includes(ch.source)) continue;
+    const el = document.createElement("div");
+    el.className = "chip" + (state.channel === ch.slug ? " active" : "");
+    el.textContent = ch.name;
+    el.onclick = () => tune(ch.slug);
+    wrap.appendChild(el);
+  }
+}
+
+function tune(slug) {
+  state.channel = slug;
+  state.audio.src = streamUrl(slug);
+  state.audio.play().catch(() => {});
+  $("playBtn").textContent = "⏸";
+  $("live").textContent = "● LIVE — " + slug;
+  loadChannels();
+  refreshNowPlaying();
+}
+
+$("playBtn").onclick = () => {
+  if (!state.channel) return;
+  if (state.audio.paused) {
+    state.audio.src = streamUrl(state.channel); // rejoin live edge
+    state.audio.play().catch(() => {});
+    $("playBtn").textContent = "⏸";
+  } else {
+    state.audio.pause();
+    $("playBtn").textContent = "▶";
+  }
+};
+
+$("skipBtn").onclick = async () => {
+  if (!state.channel) return;
+  await fetch("/api/skip", { method: "POST", headers: {"Content-Type": "application/json"},
+                             body: JSON.stringify({ channel: state.channel }) });
+};
+
+async function refreshNowPlaying() {
+  if (!state.channel) return;
+  try {
+    const res = await fetch(`/api/nowplaying?channel=${state.channel}`);
+    const np = await res.json();
+    if (np.title) {
+      $("npTitle").textContent = np.title;
+      $("npSub").textContent = [np.artist, np.album].filter(Boolean).join(" — ");
+    }
+  } catch (e) {}
+}
+setInterval(refreshNowPlaying, 10000);
+
+function addMsg(text, cls) {
+  const el = document.createElement("div");
+  el.className = "msg " + cls;
+  if (cls === "dj") { const b = document.createElement("b"); b.className = "tag"; b.textContent = "DJ"; el.appendChild(b); }
+  el.appendChild(document.createTextNode(text));
+  $("chat").appendChild(el);
+  $("chat").scrollTop = $("chat").scrollHeight;
+  return el;
+}
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("input").value.trim();
+  if (!text) return;
+  $("input").value = "";
+  addMsg(text, "user");
+  state.messages.push({ role: "user", content: text });
+  const thinking = addMsg("digging through the crates…", "dj thinking");
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: state.messages }),
+    });
+    const data = await res.json();
+    thinking.remove();
+    addMsg(data.reply, "dj");
+    state.messages.push({ role: "assistant", content: data.reply });
+    loadChannels();      // the DJ may have created a channel
+    refreshNowPlaying();
+  } catch (err) {
+    thinking.remove();
+    addMsg("static on the line — " + err, "dj");
+  }
+};
+
+loadChannels();
+</script>
+</body>
+</html>

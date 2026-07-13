@@ -1,0 +1,67 @@
+services:
+  icecast:
+    image: libretime/icecast:2.4.4
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD:-changeme-source}
+      - ICECAST_ADMIN_PASSWORD=${ICECAST_ADMIN_PASSWORD:-changeme-admin}
+      - ICECAST_RELAY_PASSWORD=${ICECAST_RELAY_PASSWORD:-changeme-relay}
+      - ICECAST_ADMIN_USERNAME=admin
+      - ICECAST_MAX_SOURCES=10
+
+  brain:
+    build: ./brain
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      - DATA_DIR=/data
+      - CACHE_DIR=/cache
+      - MUSIC_DIR=/music
+      - LIQUIDSOAP_HOST=liquidsoap
+    volumes:
+      - brain-data:/data
+      - audio-cache:/cache
+      - ./music:/music:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  liquidsoap:
+    image: savonet/liquidsoap:v2.2.5
+    restart: unless-stopped
+    command: ["liquidsoap", "/etc/liquidsoap/radio.liq"]
+    environment:
+      - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD:-changeme-source}
+    volumes:
+      - ./liquidsoap:/etc/liquidsoap:ro
+      - audio-cache:/cache:ro
+      - ./music:/music:ro
+    depends_on:
+      brain:
+        condition: service_healthy
+      icecast:
+        condition: service_started
+
+  navidrome:
+    image: deluan/navidrome:latest
+    restart: unless-stopped
+    ports:
+      - "4533:4533"
+    environment:
+      - ND_SCANSCHEDULE=1h
+      - ND_LOGLEVEL=info
+    volumes:
+      - navidrome-data:/data
+      - ./music:/music:ro
+
+volumes:
+  brain-data:
+  audio-cache:
+  navidrome-data:
