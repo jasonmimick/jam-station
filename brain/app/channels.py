@@ -312,14 +312,26 @@ def enqueue_show(slug: str, identifier: str, clear: bool = False) -> int:
 # ---------------------------------------------------------------- skip
 
 def skip(slug: str) -> bool:
-    """Best-effort skip via liquidsoap's telnet server."""
-    for cmd in (f"{slug}.skip", f"out_{slug}.skip"):
+    """Skip the current track via liquidsoap's telnet server.
+
+    Commands are named after the sources in radio.liq. The icecast *output*
+    (`out_<slug>`) owns the playing track, so `out_<slug>.skip` is the one that
+    actually drops it. There is no `<slug>.skip` — the request.dynamic queue only
+    offers `<slug>.flush_and_skip`, which also throws away everything prefetched,
+    so it's a last resort.
+
+    Liquidsoap answers "Done!" or "ERROR ...". A connected socket is NOT proof of
+    a skip: sending a command that doesn't exist still connects and still sends,
+    which is how this used to report success while the track played on.
+    """
+    for cmd in (f"out_{slug}.skip", f"{slug}.flush_and_skip"):
         try:
             with socket.create_connection(
                     (config.LIQUIDSOAP_HOST, config.LIQUIDSOAP_TELNET_PORT), timeout=3) as s:
                 s.sendall(f"{cmd}\nquit\n".encode())
-                s.recv(1024)
-            return True
+                reply = s.recv(4096).decode(errors="replace")
         except OSError:
             continue
+        if "ERROR" not in reply.upper():
+            return True
     return False

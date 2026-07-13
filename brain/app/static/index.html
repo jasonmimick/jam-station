@@ -1,566 +1,637 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>jam-station</title>
 <style>
-  :root {
-    --bg: #0e1015; --panel: #161923; --panel2: #1c2030; --line: #272c3a;
-    --ink: #e8ebf2; --muted: #8b93a7; --dim: #626b80;
-    --accent: #f59e0b; --accent-ink: #1a1200; --live: #34d399;
+  /* ── Schiphol: signage yellow, black, white. Legible across a room. ─────── */
+  :root[data-theme="dark"] {
+    --board:#0F0F11; --panel:#17171A; --sunk:#0A0A0C; --line:#2B2B31;
+    --ink:#FFFFFF; --muted:#8C8C94; --faint:#5A5A62;
+    --yellow:#FFD200; --on-yellow:#12120C; --live:#2FD16A;
+    --flap:#1C1C20; --flap-ink:#FFD200;
   }
-  * { box-sizing: border-box; }
+  :root[data-theme="light"] {
+    --board:#FFFFFF; --panel:#F4F4F5; --sunk:#EAEAEC; --line:#DCDCE0;
+    --ink:#16161A; --muted:#63636B; --faint:#95959D;
+    --yellow:#FFD200; --on-yellow:#12120C; --live:#12894A;
+    --flap:#1C1C20; --flap-ink:#FFD200;
+  }
+  * { box-sizing:border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink); height: 100dvh; overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    display: flex; flex-direction: column;
+    margin:0; background:var(--board); color:var(--ink); height:100dvh; overflow:hidden;
+    font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+    display:flex; flex-direction:column; -webkit-font-smoothing:antialiased;
   }
-  header {
-    display: flex; align-items: center; gap: 14px;
-    padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--panel); flex: 0 0 auto;
-  }
-  header h1 { margin: 0; font-size: 17px; letter-spacing: .02em; white-space: nowrap; }
-  header h1 span { color: var(--accent); }
-  .onair { margin-left: auto; display: flex; align-items: center; gap: 7px;
-    font-size: 11px; letter-spacing: .12em; color: var(--dim); white-space: nowrap; }
-  .onair.on { color: var(--live); }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-  .onair.on .dot { animation: pulse 1.6s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+  .lbl { font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+  .num { font-variant-numeric:tabular-nums; }
 
-  .app { flex: 1; display: grid; grid-template-columns: 258px 1fr 330px; min-height: 0; }
-  .pane { min-height: 0; overflow-y: auto; }
-  .pane + .pane { border-left: 1px solid var(--line); }
-  .pane.stations, .pane.dj { background: var(--panel); }
-  .h { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim);
-    padding: 15px 16px 8px; display: flex; align-items: center; gap: 10px; }
-  .h .sp { margin-left: auto; text-transform: none; letter-spacing: 0; }
+  /* header — the terminal sign */
+  header { display:flex; align-items:center; gap:18px; padding:0 18px; height:58px;
+    background:var(--yellow); color:var(--on-yellow); flex:0 0 auto; }
+  header h1 { margin:0; font-size:20px; font-weight:800; letter-spacing:-.01em; white-space:nowrap; }
+  .modes { display:inline-flex; border:2px solid var(--on-yellow); border-radius:2px; overflow:hidden; }
+  .modes button { border:0; background:transparent; color:var(--on-yellow); cursor:pointer; font:inherit;
+    font-size:11px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; padding:7px 14px; }
+  .modes button.on { background:var(--on-yellow); color:var(--yellow); }
+  .hdr-r { margin-left:auto; display:flex; align-items:center; gap:14px; }
+  .status { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:800; letter-spacing:.14em; white-space:nowrap; }
+  .dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+  .status.live .dot { animation:blink 1.5s ease-in-out infinite; }
+  .status.buf .dot { animation:blink .6s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  .icon { width:34px; height:34px; border:2px solid var(--on-yellow); border-radius:2px; cursor:pointer;
+    background:transparent; color:var(--on-yellow); font-size:15px; line-height:1;
+    display:inline-flex; align-items:center; justify-content:center; }
+  .icon:hover { background:var(--on-yellow); color:var(--yellow); }
 
-  /* stations */
-  .station { display: block; width: 100%; text-align: left; cursor: pointer; padding: 11px 16px;
-    border: none; border-left: 3px solid transparent; background: transparent; color: var(--ink); font: inherit; }
-  .station:hover { background: var(--panel2); }
-  .station .n { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
-  .station .d { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
-  .station.active { background: var(--panel2); border-left-color: var(--accent); }
-  .station.active .n { color: var(--accent); }
-  .station.dead { cursor: not-allowed; }
-  .station.dead .n { color: var(--dim); }
-  .station.dead .d { color: var(--dim); }
-  .tagno { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
-    border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; }
-  .station .bars { display: none; gap: 2px; align-items: flex-end; height: 11px; }
-  .station.active.playing .bars { display: inline-flex; }
-  .bars i { width: 2px; background: var(--accent); animation: eq .9s ease-in-out infinite; }
-  .bars i:nth-child(1){height:5px;animation-delay:0s} .bars i:nth-child(2){height:11px;animation-delay:.2s}
-  .bars i:nth-child(3){height:7px;animation-delay:.4s}
-  @keyframes eq { 0%,100% { transform: scaleY(.4) } 50% { transform: scaleY(1) } }
+  .app { flex:1; display:grid; grid-template-columns:270px 1fr 320px; min-height:0; }
+  .pane { min-height:0; overflow-y:auto; }
+  .pane + .pane { border-left:1px solid var(--line); }
+  .pane.left, .pane.right { background:var(--panel); }
+  .ph { padding:16px 16px 10px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
 
-  /* now playing */
-  .np { padding: 24px 24px 18px; border-bottom: 1px solid var(--line); }
-  .np .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 10px;
-    letter-spacing: .14em; color: var(--live); margin-bottom: 12px; }
-  .np .title { font-size: 26px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
-  .np .artist { font-size: 15px; color: var(--accent); margin-top: 5px; font-weight: 600; }
-  .np .empty { font-size: 15px; color: var(--muted); }
-  .controls { display: flex; align-items: center; gap: 11px; margin-top: 20px; }
-  .controls button { height: 42px; border-radius: 999px; cursor: pointer; border: 1px solid var(--line);
-    background: var(--panel2); color: var(--ink); font-size: 13px; font-weight: 600;
-    display: inline-flex; align-items: center; gap: 7px; padding: 0 15px; }
-  .controls button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .controls button:disabled { opacity: .35; cursor: not-allowed; }
-  .controls button.play { width: 50px; height: 50px; padding: 0; justify-content: center; font-size: 16px;
-    background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-  .controls button.play:hover:not(:disabled) { color: var(--accent-ink); filter: brightness(1.1); }
-  /* buffering spinner on the play button */
-  .controls button.play.busy { color: transparent; position: relative; }
-  .controls button.play.busy::after {
-    content: ""; position: absolute; inset: 0; margin: auto; width: 18px; height: 18px;
-    border: 2px solid rgba(26,18,0,.35); border-top-color: var(--accent-ink);
-    border-radius: 50%; animation: spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg) } }
-  .badge.buf { color: var(--accent) !important; }
-  .badge.buf .dot { animation: pulse .8s ease-in-out infinite; }
-  .badge.err { color: #f0716a !important; }
-  #viz { border-radius: 5px; background: var(--panel2); border: 1px solid var(--line); }
+  /* departures = stations */
+  .dep { display:grid; grid-template-columns:14px 1fr; gap:12px; align-items:center; width:100%;
+    text-align:left; padding:13px 16px; border:0; border-bottom:1px solid var(--line);
+    background:transparent; color:var(--ink); font:inherit; cursor:pointer; }
+  .dep:hover { background:var(--sunk); }
+  .dep .mk { color:var(--faint); font-size:13px; }
+  .dep .nm { font-size:15px; font-weight:700; }
+  .dep .sub { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.35; }
+  .dep.on { background:var(--sunk); }
+  .dep.on .nm, .dep.on .mk { color:var(--yellow); }
+  .dep.dead { cursor:not-allowed; }
+  .dep.dead .nm, .dep.dead .sub { color:var(--faint); }
+  .chip { font-size:9px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+    border:1px solid var(--line); border-radius:2px; padding:1px 5px; color:var(--faint); margin-left:6px; }
+
+  /* the split-flap board — the signature */
+  .board { padding:24px 24px 20px; border-bottom:1px solid var(--line); }
+  .flaps { display:flex; flex-wrap:wrap; gap:3px; margin-top:12px; }
+  .flap { width:26px; height:38px; background:var(--flap); color:var(--flap-ink); border-radius:2px;
+    display:flex; align-items:center; justify-content:center; font-size:21px; font-weight:800;
+    position:relative; overflow:hidden; }
+  .flap::after { content:""; position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(0,0,0,.55); }
+  .flap.turn { animation:turn .11s linear; }
+  @keyframes turn { 0%{transform:rotateX(0)} 50%{transform:rotateX(-70deg)} 100%{transform:rotateX(0)} }
+  .byline { margin-top:14px; font-size:17px; font-weight:700; }
+  .byline .sm { color:var(--muted); font-weight:400; }
+  .empty { font-size:16px; color:var(--muted); font-weight:400; }
+
+  /* transport */
+  .tx { display:flex; align-items:center; gap:10px; margin-top:20px; flex-wrap:wrap; }
+  .tx button { height:44px; min-width:44px; padding:0 15px; border:2px solid var(--line); border-radius:2px;
+    background:transparent; color:var(--ink); font:inherit; font-size:12px; font-weight:800;
+    letter-spacing:.1em; text-transform:uppercase; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+  .tx button:hover:not(:disabled) { border-color:var(--yellow); color:var(--yellow); }
+  .tx button:disabled { opacity:.3; cursor:not-allowed; }
+  .tx button.go { background:var(--yellow); color:var(--on-yellow); border-color:var(--yellow);
+    width:54px; height:54px; min-width:54px; padding:0; font-size:16px; }
+  .tx button.go.busy { color:transparent; position:relative; }
+  .tx button.go.busy::after { content:""; position:absolute; inset:0; margin:auto; width:18px; height:18px;
+    border:2px solid rgba(0,0,0,.25); border-top-color:var(--on-yellow); border-radius:50%;
+    animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg) } }
+  .vol { display:flex; align-items:center; gap:8px; margin-left:auto; color:var(--muted); }
+  .vol input, .scrub input, .band input { accent-color:var(--yellow); }
+  .vol input { width:90px; }
+  canvas#viz { border:1px solid var(--line); border-radius:2px; background:var(--sunk); }
+
+  .scrub { display:flex; align-items:center; gap:12px; margin-top:16px; }
+  .scrub input { flex:1; }
+  .scrub .t { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:44px; }
 
   /* equalizer */
-  .eq { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line);
-        border-radius: 12px; background: var(--panel); }
-  .eqhead { display: flex; align-items: center; gap: 12px; font-size: 11px;
-            letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
-  .presets { margin-left: auto; display: inline-flex; gap: 4px; }
-  .presets button { border: 1px solid var(--line); background: var(--panel2); color: var(--muted);
-    border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 11px; cursor: pointer;
-    text-transform: none; letter-spacing: 0; }
-  .presets button:hover { border-color: var(--accent); color: var(--accent); }
-  .presets button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
-  .bands { display: flex; gap: 14px; margin-top: 14px; }
-  .band { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  .band input { width: 100%; accent-color: var(--accent); }
-  .band .hz { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .band .db { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .eq { margin-top:18px; padding:14px 16px; border:1px solid var(--line); border-radius:2px; background:var(--panel); }
+  .eqh { display:flex; align-items:center; gap:10px; }
+  .pre { margin-left:auto; display:inline-flex; gap:4px; flex-wrap:wrap; }
+  .pre button { border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:2px;
+    padding:4px 9px; font:inherit; font-size:11px; font-weight:700; cursor:pointer; }
+  .pre button:hover { border-color:var(--yellow); color:var(--yellow); }
+  .pre button.on { background:var(--yellow); color:var(--on-yellow); border-color:var(--yellow); }
+  .bands { display:flex; gap:16px; margin-top:14px; }
+  .band { flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .band input { width:100%; }
+  .band span { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; }
 
-  .vol { display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--dim); }
-  .vol input { width: 88px; accent-color: var(--accent); }
+  /* the schedule */
+  .showname { padding:12px 24px 0; font-size:14px; font-weight:700; }
+  .prog { display:flex; align-items:center; gap:12px; padding:10px 24px 4px; }
+  .prog .txt { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .track { flex:1; height:5px; background:var(--sunk); border-radius:2px; overflow:hidden; }
+  .track i { display:block; height:100%; background:var(--yellow); }
 
-  /* the show / setlist */
-  .show { padding: 4px 24px 8px; }
-  .show .name { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.4; }
-  .show .pos { display: flex; align-items: center; gap: 10px; margin-top: 9px;
-    font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .bar { flex: 1; height: 4px; border-radius: 999px; background: var(--panel2); overflow: hidden; }
-  .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
-  .where { font-size: 11px; color: var(--dim); }
-
-  .rows { padding: 2px 12px 16px; }
-  .row { display: flex; gap: 10px; padding: 7px 11px; border-radius: 8px; align-items: baseline; }
-  .row .i { font-size: 11px; color: var(--dim); width: 18px; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
-  .row .t { font-size: 13.5px; }
-  .row .a { font-size: 12px; color: var(--muted); }
-  .row .when { margin-left: auto; font-size: 11px; color: var(--dim); white-space: nowrap; }
-  .row .chn { font-size: 10px; color: var(--accent); border: 1px solid var(--line);
-    border-radius: 999px; padding: 1px 7px; margin-left: auto; white-space: nowrap; }
-  .row.done { opacity: .45; }
-  .row.done .i { color: var(--live); }
-  .row.cur { background: var(--panel2); }
-  .row.cur .t { color: var(--accent); font-weight: 700; }
-  .row.cur .i { color: var(--accent); }
-  .none { padding: 6px 23px 14px; font-size: 12.5px; color: var(--dim); }
-
-  .tabs { display: inline-flex; gap: 2px; background: var(--panel2); border-radius: 8px; padding: 2px; }
-  .tabs button { border: none; background: transparent; color: var(--muted); cursor: pointer;
-    font: inherit; font-size: 11px; padding: 4px 10px; border-radius: 6px; }
-  .tabs button.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .rows { padding:8px 12px 20px; }
+  .r { display:grid; grid-template-columns:20px 26px 1fr auto; gap:12px; align-items:center;
+    padding:10px 12px; border-radius:2px; border:0; width:100%; text-align:left;
+    background:transparent; color:var(--ink); font:inherit; }
+  .r.click { cursor:pointer; }
+  .r.click:hover { background:var(--sunk); }
+  .r .mk { font-size:12px; color:var(--faint); }
+  .r .n { font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; }
+  .r .ti { font-size:14px; font-weight:600; }
+  .r .st { font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
+  .r.done { opacity:.5; }
+  .r.done .mk { color:var(--live); }
+  .r.now { background:var(--sunk); }
+  .r.now .ti, .r.now .mk, .r.now .n, .r.now .st { color:var(--yellow); }
+  .r.now .ti { font-weight:800; }
+  .none { padding:10px 24px 18px; font-size:13px; color:var(--faint); }
 
   /* DJ */
-  .pane.dj { display: flex; flex-direction: column; overflow: hidden; }
-  #chat { flex: 1; overflow-y: auto; padding: 4px 13px 13px; display: flex; flex-direction: column; gap: 9px; }
-  .msg { max-width: 92%; padding: 9px 12px; border-radius: 13px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; }
-  .msg.user { align-self: flex-end; background: #2b3550; border-bottom-right-radius: 4px; }
-  .msg.dj { align-self: flex-start; background: var(--panel2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
-  .msg.dj b.tag { color: var(--accent); font-size: 10px; letter-spacing: .1em; display: block; margin-bottom: 4px; }
-  .msg.thinking { color: var(--muted); font-style: italic; }
-  .tunein { display: inline-flex; align-items: center; gap: 6px; margin-top: 9px; cursor: pointer;
-    background: var(--accent); color: var(--accent-ink); border: none; border-radius: 999px;
-    padding: 6px 13px; font-size: 12px; font-weight: 700; font-family: inherit; }
-  form { display: flex; gap: 8px; padding: 11px 13px calc(11px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
-  input[type=text] { flex: 1; padding: 11px 13px; border-radius: 11px; border: 1px solid var(--line);
-    background: var(--bg); color: var(--ink); font-size: 14px; outline: none; min-width: 0; }
-  input[type=text]:focus { border-color: var(--accent); }
-  form button { padding: 0 15px; border-radius: 11px; border: none; background: var(--accent);
-    color: var(--accent-ink); font-weight: 700; font-size: 13px; cursor: pointer; }
+  .pane.right { display:flex; flex-direction:column; overflow:hidden; }
+  #chat { flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:92%; padding:10px 12px; border-radius:2px; font-size:13.5px; line-height:1.5; white-space:pre-wrap; }
+  .msg.user { align-self:flex-end; background:var(--sunk); border:1px solid var(--line); }
+  .msg.dj { align-self:flex-start; border:1px solid var(--line); border-left:3px solid var(--yellow); }
+  .msg.dj b { display:block; font-size:10px; font-weight:800; letter-spacing:.14em; color:var(--yellow); margin-bottom:4px; }
+  .msg.thinking { color:var(--muted); font-style:italic; }
+  .tunein { display:inline-flex; margin-top:9px; cursor:pointer; background:var(--yellow); color:var(--on-yellow);
+    border:0; border-radius:2px; padding:7px 12px; font:inherit; font-size:11px; font-weight:800;
+    letter-spacing:.1em; text-transform:uppercase; }
+  form { display:flex; gap:8px; padding:12px 14px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); }
+  input[type=text] { flex:1; min-width:0; padding:11px 12px; border:1px solid var(--line); border-radius:2px;
+    background:var(--board); color:var(--ink); font-size:14px; outline:none; }
+  input[type=text]:focus { border-color:var(--yellow); }
+  form button { padding:0 16px; border:0; border-radius:2px; background:var(--yellow); color:var(--on-yellow);
+    font:inherit; font-size:12px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; cursor:pointer; }
 
-  @media (max-width: 1100px) {
-    body { overflow: auto; height: auto; min-height: 100dvh; }
-    .app { grid-template-columns: 1fr; }
-    .pane { overflow: visible; }
-    .pane + .pane { border-left: none; border-top: 1px solid var(--line); }
-    .pane.dj { height: 70vh; }
+  @media (max-width:1100px) {
+    body { overflow:auto; height:auto; min-height:100dvh; }
+    .app { grid-template-columns:1fr; }
+    .pane { overflow:visible; }
+    .pane + .pane { border-left:0; border-top:1px solid var(--line); }
+    .pane.right { height:70vh; }
+    .flap { width:20px; height:30px; font-size:16px; }
   }
 </style>
 </head>
 <body>
   <header>
-    <h1>⚡ jam-<span>station</span></h1>
-    <div class="onair" id="onair"><span class="dot"></span><span id="onairText">TUNED OUT</span></div>
+    <h1>⚡ JAM·STATION</h1>
+    <div class="modes">
+      <button id="mRadio" class="on">Radio</button>
+      <button id="mOnDemand">On demand</button>
+    </div>
+    <div class="hdr-r">
+      <div class="status" id="status"><span class="dot"></span><span id="statusTxt">TUNED OUT</span></div>
+      <button class="icon" id="theme" title="light / dark">☾</button>
+    </div>
   </header>
 
   <div class="app">
-    <div class="pane stations">
-      <div class="h">Stations</div>
+    <div class="pane left">
+      <div class="ph"><span class="lbl">Departures</span></div>
       <div id="stations"></div>
     </div>
 
     <div class="pane">
-      <div class="np">
-        <div class="badge" id="npBadge" style="display:none"><span class="dot"></span><span id="npState">LIVE</span></div>
-        <div id="npBody"><div class="empty">Pick a station to start listening →</div></div>
-        <div class="controls">
-          <button class="play" id="playBtn" disabled>▶</button>
-          <button id="skipBtn" disabled>⏭ Skip track</button>
-          <button id="shareBtn" disabled>🔗 <span id="shareLbl">Share station</span></button>
-          <button id="eqBtn" disabled>🎛 EQ</button>
-          <canvas id="viz" width="80" height="26" title="live signal"></canvas>
-          <div class="vol"><span>🔊</span><input type="range" id="vol" min="0" max="100" value="100"></div>
+      <div class="board">
+        <div class="lbl" id="boardLbl">Now playing</div>
+        <div class="flaps" id="flaps"></div>
+        <div class="byline" id="byline"><span class="empty">Select a station →</span></div>
+
+        <div class="tx">
+          <button class="go" id="play" disabled>▶</button>
+          <button id="prev" disabled title="previous track">⏮</button>
+          <button id="back" disabled title="back 15 seconds">↺ 15</button>
+          <button id="next" disabled title="next">⏭</button>
+          <button id="eqBtn" disabled>EQ</button>
+          <button id="share" disabled><span id="shareLbl">Share</span></button>
+          <canvas id="viz" width="76" height="26"></canvas>
+          <div class="vol">🔊<input type="range" id="vol" min="0" max="100" value="100"></div>
+        </div>
+
+        <div class="scrub" id="scrubWrap" style="display:none">
+          <span class="t" id="tNow">0:00</span>
+          <input type="range" id="scrub" min="0" max="1000" value="0">
+          <span class="t" id="tEnd">0:00</span>
         </div>
 
         <div class="eq" id="eqPanel" style="display:none">
-          <div class="eqhead">
-            <span>Equalizer</span>
-            <span class="presets" id="presets"></span>
-          </div>
+          <div class="eqh"><span class="lbl">Equalizer</span><span class="pre" id="pre"></span></div>
           <div class="bands" id="bands"></div>
         </div>
       </div>
 
-      <!-- where am I in the show -->
       <div id="showWrap" style="display:none">
-        <div class="h">This show</div>
-        <div class="show">
-          <div class="name" id="showName"></div>
-          <div class="pos">
-            <span id="showPos"></span>
-            <span class="bar"><i id="showBar" style="width:0%"></i></span>
-            <span class="where" id="showWhere"></span>
-          </div>
+        <div class="ph" style="border-bottom:0"><span class="lbl">The show</span></div>
+        <div class="showname" id="showName"></div>
+        <div class="prog">
+          <span class="txt" id="progTxt"></span>
+          <span class="track"><i id="progBar" style="width:0"></i></span>
+          <span class="txt" id="progWhere"></span>
         </div>
         <div class="rows" id="setlist"></div>
       </div>
 
-      <div id="afterWrap" style="display:none">
-        <div class="h">After this show</div>
-        <div class="rows" id="after"></div>
-      </div>
-
-      <div class="h">
-        Recently played
-        <span class="sp tabs">
-          <button id="tabCh" class="on">This station</button>
-          <button id="tabAll">All stations</button>
+      <div class="ph"><span class="lbl">Recently played</span>
+        <span class="pre" style="margin-left:auto">
+          <button id="tabCh" class="on">This station</button><button id="tabAll">All stations</button>
         </span>
       </div>
-      <div class="rows" id="history"><div class="none">Tune in to see the play log.</div></div>
+      <div class="rows" id="history"><div class="none">Tune in to see the log.</div></div>
     </div>
 
-    <div class="pane dj">
-      <div class="h">The DJ</div>
+    <div class="pane right">
+      <div class="ph"><span class="lbl">The DJ</span></div>
       <div id="chat">
-        <div class="msg dj"><b class="tag">DJ</b>Hey — you're tuned to jam-station. Pick a station on the left, or tell me what you're in the mood for. I can dig up shows, queue them, even build you a whole new station.</div>
+        <div class="msg dj"><b>DJ</b>Board's up. Pick a departure on the left, or tell me what you're in the mood for — I'll dig up a tape.</div>
       </div>
       <form id="form">
-        <input type="text" id="input" placeholder='"play a hot ’77 Dead show"' autocomplete="off">
+        <input type="text" id="input" placeholder='"a hot ’77 Dead show"' autocomplete="off">
         <button type="submit">Send</button>
       </form>
     </div>
   </div>
 
 <script>
-const state = { channel: null, channels: [], messages: [], audio: new Audio(), playing: false, status: "paused", histScope: "channel" };
-state.audio.preload = "none";
+const S = { channel:null, channels:[], msgs:[], mode:"radio", status:"idle",
+            histScope:"channel", audio:new Audio(), show:null, idx:-1 };
+S.audio.preload = "none";
+S.audio.crossOrigin = "anonymous";   // archive.org sends ACAO:* — keeps the Web Audio graph untainted
 
-const $ = (id) => document.getElementById(id);
-const streamUrl = (slug) => `/stream/${slug}`;
+const $  = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const chName = (slug) => (state.channels.find(c => c.slug === slug) || {}).name || slug;
+const chName = (slug) => (S.channels.find(c => c.slug === slug) || {}).name || slug;
+const mmss = (s) => (!isFinite(s) || s < 0) ? "0:00"
+  : Math.floor(s/60) + ":" + String(Math.floor(s%60)).padStart(2,"0");
 
+/* theme — dark by default, because a departure board is a dark board */
+const setTheme = (t) => {
+  document.documentElement.dataset.theme = t;
+  $("theme").textContent = t === "dark" ? "☾" : "☀";
+  localStorage.setItem("jam-theme", t);
+};
+setTheme(localStorage.getItem("jam-theme") || "dark");
+$("theme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+
+/* ── split-flap. A now-playing genuinely changes like a departure board. ─── */
+const CHARS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'’-.,>&/!?()\"";
+const CELLS = 20;
+let cells = [], timers = [];
+function buildFlaps() {
+  $("flaps").innerHTML = Array.from({length:CELLS}, () => `<div class="flap"> </div>`).join("");
+  cells = [...document.querySelectorAll(".flap")];
+}
+let lastFlap = "";
+function flapTo(text) {
+  const t = (text || "").toUpperCase().slice(0, CELLS).padEnd(CELLS, " ");
+  if (t === lastFlap) return;
+  lastFlap = t;
+  timers.forEach(clearInterval); timers = [];
+  cells.forEach((cell, i) => {
+    const target = CHARS.includes(t[i]) ? t[i] : " ";
+    if (cell.textContent === target) return;
+    let n = 0;
+    const steps = 5 + i * 2;                       // stagger left→right like the real board
+    const tm = setInterval(() => {
+      n++;
+      cell.textContent = n >= steps ? target : CHARS[Math.floor(Math.random()*CHARS.length)];
+      cell.classList.add("turn");
+      setTimeout(() => cell.classList.remove("turn"), 100);
+      if (n >= steps) clearInterval(tm);
+    }, 45);
+    timers.push(tm);
+  });
+}
+
+/* ── status, driven by the audio element's real events ───────────────────── */
+function setStatus(kind) {
+  S.status = kind;
+  const playing = kind === "playing";
+  $("play").classList.toggle("busy", kind === "buffering");
+  $("play").textContent = playing ? "❚❚" : "▶";
+  $("status").className = "status" + (playing ? " live" : kind === "buffering" ? " buf" : "");
+  $("statusTxt").textContent =
+    kind === "buffering" ? "TUNING IN…"
+    : playing ? (S.mode === "radio" ? "ON AIR · " + chName(S.channel).toUpperCase() : "PLAYING")
+    : kind === "error" ? "RECONNECTING…"
+    : S.channel ? "PAUSED" : "TUNED OUT";
+  renderStations();
+}
+["loadstart","waiting","stalled"].forEach(e =>
+  S.audio.addEventListener(e, () => { if (!S.audio.paused) setStatus("buffering"); }));
+S.audio.addEventListener("playing", () => setStatus("playing"));
+S.audio.addEventListener("pause",   () => setStatus("paused"));
+S.audio.addEventListener("error",   () => setStatus("error"));
+S.audio.addEventListener("ended",   () => { if (S.mode === "ondemand") playIdx(S.idx + 1); });
+S.audio.addEventListener("timeupdate", () => {
+  if (S.mode !== "ondemand") return;
+  const d = S.audio.duration || 0;
+  $("tNow").textContent = mmss(S.audio.currentTime);
+  $("tEnd").textContent = mmss(d);
+  if (d) $("scrub").value = Math.round((S.audio.currentTime / d) * 1000);
+});
+
+/* ── departures ──────────────────────────────────────────────────────────── */
 async function loadChannels() {
-  try { state.channels = await (await fetch("/api/channels")).json(); } catch { return; }
-  const wrap = $("stations");
-  wrap.innerHTML = "";
-  for (const ch of state.channels) {           // every station — no source filtering
-    const dead = ch.playable === false;      // library channel with no files on disk
-    const el = document.createElement("button");
-    el.className = "station" + (state.channel === ch.slug ? " active" : "")
-                             + (state.channel === ch.slug && state.playing ? " playing" : "")
-                             + (dead ? " dead" : "");
-    el.innerHTML = `<div class="n">${esc(ch.name)}<span class="bars"><i></i><i></i><i></i></span>`
-                 + (dead ? `<span class="tagno">no music</span>` : "") + `</div>`
-                 + `<div class="d">${dead
-                      ? "Needs your own files — nothing in music/" + esc((ch.query.folders || [])[0] || "")
-                      : esc(ch.description || "")}</div>`;
-    el.onclick = () => { if (!dead) tune(ch.slug); };
-    wrap.appendChild(el);
+  try { S.channels = await (await fetch("/api/channels")).json(); } catch { return; }
+  renderStations();
+}
+function renderStations() {
+  const w = $("stations"); w.innerHTML = "";
+  for (const ch of S.channels) {
+    const dead = ch.playable === false, on = S.channel === ch.slug;
+    const b = document.createElement("button");
+    b.className = "dep" + (on ? " on" : "") + (dead ? " dead" : "");
+    b.innerHTML =
+      `<span class="mk">${on && S.status === "playing" ? "▶" : on ? "■" : "○"}</span>` +
+      `<span><span class="nm">${esc(ch.name)}</span>` +
+      (dead ? `<span class="chip">No music</span>` : "") +
+      `<div class="sub">${dead
+        ? "Needs your own files — nothing in music/" + esc((ch.query.folders || [])[0] || "")
+        : esc(ch.description || "")}</div></span>`;
+    b.onclick = () => { if (!dead) tune(ch.slug); };
+    w.appendChild(b);
   }
 }
 
+/* ── modes ───────────────────────────────────────────────────────────────────
+   RADIO    — the live icecast broadcast: shared, no buffer, so nothing to seek.
+   ON DEMAND— the browser plays the tape's MP3s straight from archive.org, which
+              serves byte ranges. That's what buys jump-to-track, scrub, rewind. */
+function setMode(m) {
+  if (S.mode === m) return;
+  S.mode = m;
+  S.audio.pause();
+  $("mRadio").classList.toggle("on", m === "radio");
+  $("mOnDemand").classList.toggle("on", m === "ondemand");
+  $("scrubWrap").style.display = m === "ondemand" ? "" : "none";
+  $("boardLbl").textContent = m === "radio" ? "Now playing" : "On demand";
+  const live = m === "radio";
+  $("prev").disabled = live || !S.channel;
+  $("back").disabled = live || !S.channel;
+  $("next").title = live ? "skip — moves the station for everyone" : "next track";
+  if (!S.channel) return;
+  if (live) tune(S.channel); else loadShow(true);
+}
+$("mRadio").onclick    = () => setMode("radio");
+$("mOnDemand").onclick = () => setMode("ondemand");
+
+/* ── radio ───────────────────────────────────────────────────────────────── */
 function tune(slug) {
-  state.channel = slug;
-  $("playBtn").disabled = false; $("skipBtn").disabled = false; $("shareBtn").disabled = false;
-  $("npBadge").style.display = "inline-flex";
-  setStatus("buffering");                    // the stream takes a beat — say so
-  state.audio.src = streamUrl(slug);
+  S.channel = slug;
+  $("play").disabled = false; $("next").disabled = false;
+  $("eqBtn").disabled = false; $("share").disabled = false;
+  if (S.mode === "ondemand") { loadShow(true); return; }
+  setStatus("buffering");
+  S.audio.src = `/stream/${slug}`;      // same-origin proxy → graph stays untainted
   initAudio();
-  state.audio.play().catch(() => setStatus("paused"));
+  S.audio.play().catch(() => setStatus("paused"));
   loadChannels(); refresh();
 }
-// A live stream takes a beat to buffer. Say so, instead of looking broken.
-// Driven by the audio element's real events, never guessed.
-function setStatus(kind) {
-  state.status = kind;                       // buffering | playing | paused | error
-  const playing = kind === "playing";
-  state.playing = playing;
 
-  const badge = $("npBadge"), btn = $("playBtn");
-  btn.classList.toggle("busy", kind === "buffering");
-  btn.textContent = playing ? "⏸" : "▶";
-  badge.className = "badge" + (kind === "buffering" ? " buf" : kind === "error" ? " err" : "");
-  $("npState").textContent = { buffering: "TUNING IN…", playing: "LIVE",
-                               paused: "PAUSED", error: "RECONNECTING…" }[kind] || "";
-
-  $("onair").className = "onair" + (playing ? " on" : "");
-  $("onairText").textContent =
-    kind === "buffering" ? "TUNING IN…" :
-    playing ? "ON AIR · " + chName(state.channel) :
-    state.channel ? (kind === "error" ? "RECONNECTING…" : "PAUSED") : "TUNED OUT";
-  loadChannels();
-}
-state.audio.addEventListener("loadstart", () => { if (!state.audio.paused) setStatus("buffering"); });
-state.audio.addEventListener("waiting",   () => setStatus("buffering"));
-state.audio.addEventListener("stalled",   () => setStatus("buffering"));
-state.audio.addEventListener("playing",   () => setStatus("playing"));
-state.audio.addEventListener("pause",     () => setStatus("paused"));
-state.audio.addEventListener("error",     () => setStatus("error"));
-
-$("playBtn").onclick = () => {
-  if (!state.channel) return;
-  if (state.audio.paused) {
-    setStatus("buffering");
-    state.audio.src = streamUrl(state.channel);   // rejoin the live edge
-    initAudio();
-    state.audio.play().catch(() => setStatus("error"));
-  } else {
-    state.audio.pause();
+/* ── on demand ───────────────────────────────────────────────────────────── */
+async function loadShow(autoplay) {
+  if (!S.channel) return;
+  try { S.show = await (await fetch(`/api/show?channel=${encodeURIComponent(S.channel)}`)).json(); }
+  catch { return; }
+  if (!S.show.tracks.length) {
+    $("byline").innerHTML = `<span class="empty">Nothing loaded on this station yet.</span>`;
+    return;
   }
+  S.idx = Math.max(0, S.show.playing);
+  renderSetlist();
+  if (autoplay) playIdx(S.idx);
+}
+function playIdx(i) {
+  if (!S.show || i < 0 || i >= S.show.tracks.length) return;
+  S.idx = i;
+  const t = S.show.tracks[i];
+  setStatus("buffering");
+  S.audio.src = t.url;                  // archive.org: ACAO:* + accept-ranges → seekable
+  initAudio();
+  S.audio.play().catch(() => setStatus("paused"));
+  flapTo(t.title);
+  $("byline").innerHTML = `${esc(t.artist)} <span class="sm">· ${esc(t.album)}</span>`;
+  $("prev").disabled = i === 0;
+  $("next").disabled = i >= S.show.tracks.length - 1;
+  renderSetlist();
+}
+$("scrub").oninput = (e) => {
+  const d = S.audio.duration;
+  if (S.mode === "ondemand" && d) S.audio.currentTime = (e.target.value / 1000) * d;
+};
+$("back").onclick = () => { S.audio.currentTime = Math.max(0, S.audio.currentTime - 15); };
+$("prev").onclick = () => playIdx(S.idx - 1);
+
+/* ── transport ───────────────────────────────────────────────────────────── */
+$("play").onclick = () => {
+  if (!S.channel) return;
+  if (S.audio.paused) {
+    setStatus("buffering");
+    if (S.mode === "radio") S.audio.src = `/stream/${S.channel}`;   // rejoin the live edge
+    initAudio();
+    S.audio.play().catch(() => setStatus("error"));
+  } else S.audio.pause();
+};
+$("next").onclick = async () => {
+  if (!S.channel) return;
+  if (S.mode === "ondemand") return playIdx(S.idx + 1);
+  $("next").disabled = true;
+  try {
+    await fetch("/api/skip", { method:"POST", headers:{"Content-Type":"application/json"},
+                               body: JSON.stringify({ channel: S.channel }) });
+    setTimeout(refresh, 1200);
+  } finally { $("next").disabled = false; }
+};
+$("vol").oninput = (e) => { S.audio.volume = e.target.value / 100; };
+$("share").onclick = async () => {
+  if (!S.channel) return;
+  const url = `${location.origin}/?station=${S.channel}`;
+  try {
+    if (navigator.share) return navigator.share({ title:"jam-station", url });
+    await navigator.clipboard.writeText(url);
+    $("shareLbl").textContent = "Copied";
+    setTimeout(() => { $("shareLbl").textContent = "Share"; }, 1600);
+  } catch { window.prompt("Copy this link:", url); }
 };
 
-/* ── Web Audio: equalizer + signal meter ───────────────────────────────────
-   Only possible because /stream/<slug> is same-origin (the brain proxies
-   icecast). A raw cross-origin stream would taint the graph and play silence. */
-const BANDS = [[60, "60"], [250, "250"], [1000, "1k"], [4000, "4k"], [12000, "12k"]];
-const PRESETS = {
-  Flat:      [0, 0, 0, 0, 0],
-  Warm:      [4, 2, 0, -1, -2],     // old tapes, harsh top end
-  Bright:    [-1, 0, 1, 3, 4],
-  "Bass up": [6, 3, 0, 0, 1],
-  Vocal:     [-2, 0, 3, 2, 0],      // pull the vocal/guitar out of a muddy board
-};
-let actx = null, filters = [], analyser = null;
-
+/* ── Web Audio: EQ + signal meter ────────────────────────────────────────── */
+const BANDS = [[60,"60"],[250,"250"],[1000,"1k"],[4000,"4k"],[12000,"12k"]];
+const PRESETS = { Flat:[0,0,0,0,0], Warm:[4,2,0,-1,-2], Bright:[-1,0,1,3,4],
+                  Bass:[6,3,0,0,1], Vocal:[-2,0,3,2,0] };
+let actx=null, filters=[], analyser=null;
 function initAudio() {
   if (actx) { if (actx.state === "suspended") actx.resume(); return; }
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
   try {
     actx = new AC();
-    const src = actx.createMediaElementSource(state.audio);
+    let node = actx.createMediaElementSource(S.audio);
     filters = BANDS.map(([hz], i) => {
       const f = actx.createBiquadFilter();
-      f.type = i === 0 ? "lowshelf" : i === BANDS.length - 1 ? "highshelf" : "peaking";
+      f.type = i === 0 ? "lowshelf" : i === BANDS.length-1 ? "highshelf" : "peaking";
       f.frequency.value = hz; f.Q.value = 1; f.gain.value = 0;
-      return f;
+      node.connect(f); node = f; return f;
     });
-    analyser = actx.createAnalyser();
-    analyser.fftSize = 64;
-    let node = src;
-    for (const f of filters) { node.connect(f); node = f; }
-    node.connect(analyser);
-    analyser.connect(actx.destination);
-    $("eqBtn").disabled = false;
+    analyser = actx.createAnalyser(); analyser.fftSize = 64;
+    node.connect(analyser); analyser.connect(actx.destination);
     drawViz();
-  } catch { actx = null; }             // graph already built, or unsupported
+  } catch { actx = null; }
 }
-
 function buildEq() {
-  $("bands").innerHTML = BANDS.map(([hz, lbl], i) =>
-    `<div class="band"><input type="range" id="b${i}" min="-12" max="12" step="1" value="0"
-      orient="vertical"><span class="db" id="d${i}">0 dB</span><span class="hz">${lbl}</span></div>`).join("");
-  BANDS.forEach((_, i) => {
-    $("b" + i).oninput = (e) => {
-      const g = +e.target.value;
-      if (filters[i]) filters[i].gain.value = g;
-      $("d" + i).textContent = (g > 0 ? "+" : "") + g + " dB";
-      document.querySelectorAll("#presets button").forEach(b => b.classList.remove("on"));
-    };
+  $("bands").innerHTML = BANDS.map(([hz,l],i) =>
+    `<div class="band"><input type="range" id="b${i}" min="-12" max="12" step="1" value="0">
+     <span id="d${i}">0</span><span>${l}</span></div>`).join("");
+  BANDS.forEach((_,i) => $("b"+i).oninput = (e) => {
+    const g = +e.target.value;
+    if (filters[i]) filters[i].gain.value = g;
+    $("d"+i).textContent = (g>0?"+":"") + g;
+    document.querySelectorAll("#pre button").forEach(b => b.classList.remove("on"));
   });
-  $("presets").innerHTML = Object.keys(PRESETS)
-    .map(n => `<button data-p="${n}">${n}</button>`).join("");
-  document.querySelectorAll("#presets button").forEach(b => {
-    b.onclick = () => {
-      const gains = PRESETS[b.dataset.p];
-      gains.forEach((g, i) => {
-        if (filters[i]) filters[i].gain.value = g;
-        $("b" + i).value = g;
-        $("d" + i).textContent = (g > 0 ? "+" : "") + g + " dB";
-      });
-      document.querySelectorAll("#presets button").forEach(x => x.classList.remove("on"));
-      b.classList.add("on");
-    };
+  $("pre").innerHTML = Object.keys(PRESETS).map(n => `<button data-p="${n}">${n}</button>`).join("");
+  document.querySelectorAll("#pre button").forEach(b => b.onclick = () => {
+    PRESETS[b.dataset.p].forEach((g,i) => {
+      if (filters[i]) filters[i].gain.value = g;
+      $("b"+i).value = g; $("d"+i).textContent = (g>0?"+":"") + g;
+    });
+    document.querySelectorAll("#pre button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
   });
 }
-
 $("eqBtn").onclick = () => {
   const p = $("eqPanel");
-  const open = p.style.display === "none";
-  p.style.display = open ? "" : "none";
-  $("eqBtn").classList.toggle("on", open);
+  p.style.display = p.style.display === "none" ? "" : "none";
 };
-
-// the meter doubles as proof audio is actually flowing
 function drawViz() {
   const c = $("viz"), ctx = c.getContext("2d");
   const buf = new Uint8Array(analyser.frequencyBinCount);
   (function frame() {
     requestAnimationFrame(frame);
     analyser.getByteFrequencyData(buf);
-    ctx.clearRect(0, 0, c.width, c.height);
-    const n = 14, w = c.width / n;
+    ctx.clearRect(0,0,c.width,c.height);
+    const n = 13, w = c.width / n;
     for (let i = 0; i < n; i++) {
-      const v = buf[i * 2] / 255;
-      const h = Math.max(1, v * c.height);
-      ctx.fillStyle = state.status === "playing" ? "#f59e0b" : "#2f3646";
-      ctx.fillRect(i * w + 1, c.height - h, w - 2, h);
+      const h = Math.max(1, (buf[i*2]/255) * c.height);
+      ctx.fillStyle = S.status === "playing" ? "#FFD200" : "#3A3A42";
+      ctx.fillRect(i*w+1, c.height-h, w-2, h);
     }
   })();
 }
-$("skipBtn").onclick = async () => {
-  if (!state.channel) return;
-  $("skipBtn").disabled = true;
-  try {
-    await fetch("/api/skip", { method: "POST", headers: {"Content-Type":"application/json"},
-                               body: JSON.stringify({ channel: state.channel }) });
-    setTimeout(refresh, 1200);
-  } finally { $("skipBtn").disabled = false; }
-};
-$("vol").oninput = (e) => { state.audio.volume = e.target.value / 100; };
 
-// Share the station you're on — a live link anyone can open straight to it.
-$("shareBtn").onclick = async () => {
-  if (!state.channel) return;
-  const url = `${location.origin}/?station=${state.channel}`;
-  const lbl = $("shareLbl"), was = "Share station";
-  try {
-    if (navigator.share) {
-      await navigator.share({ title: "jam-station", text: `Listen to ${chName(state.channel)}`, url });
-      return;
-    }
-    await navigator.clipboard.writeText(url);
-    lbl.textContent = "Link copied!";
-  } catch {
-    window.prompt("Copy this link:", url);   // clipboard blocked (http / denied)
-    return;
-  }
-  setTimeout(() => { lbl.textContent = was; }, 1800);
-};
-
-$("tabCh").onclick  = () => { state.histScope = "channel"; syncTabs(); refresh(); };
-$("tabAll").onclick = () => { state.histScope = "all";     syncTabs(); refresh(); };
-function syncTabs() {
-  $("tabCh").className  = state.histScope === "channel" ? "on" : "";
-  $("tabAll").className = state.histScope === "all" ? "on" : "";
+/* ── the schedule ────────────────────────────────────────────────────────── */
+const where = (pct) => pct<=20 ? "just getting started" : pct>=85 ? "near the end"
+                     : pct>=55 ? "past halfway" : "early in the show";
+function renderSetlist() {
+  if (S.mode !== "ondemand" || !S.show || !S.show.tracks.length) return;
+  const t = S.show.tracks;
+  $("showWrap").style.display = "";
+  $("showName").textContent = S.show.album;
+  $("progTxt").textContent = `Track ${S.idx+1} of ${t.length}`;
+  const pct = ((S.idx+1)/t.length)*100;
+  $("progBar").style.width = pct + "%";
+  $("progWhere").textContent = where(pct);
+  $("setlist").innerHTML = t.map((x,i) => {
+    const now = i === S.idx;
+    return `<button class="r click ${now?"now":""}" data-i="${i}">
+      <span class="mk">${now?"▶":"·"}</span><span class="n num">${String(i+1).padStart(2,"0")}</span>
+      <span class="ti">${esc(x.title)}</span>
+      <span class="st">${now?"Now":"Play"}</span></button>`;
+  }).join("");
+  document.querySelectorAll("#setlist .r").forEach(r =>
+    r.onclick = () => playIdx(+r.dataset.i));      // ← jump anywhere in the tape
 }
 
 const ago = (ts) => {
-  const s = Math.max(0, (Date.now() - new Date(String(ts).replace(" ", "T") + "Z").getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return Math.floor(s / 60) + "m ago";
-  return Math.floor(s / 3600) + "h ago";
+  const s = Math.max(0,(Date.now() - new Date(String(ts).replace(" ","T")+"Z").getTime())/1000);
+  return s<60 ? "just now" : s<3600 ? Math.floor(s/60)+"m ago" : Math.floor(s/3600)+"h ago";
 };
-const trackRow = (t, cls, marker, right) =>
-  `<div class="row ${cls}"><span class="i">${marker}</span><span>` +
-  `<span class="t">${esc(t.title)}</span> <span class="a">${esc(t.artist)}</span></span>${right}</div>`;
-
 async function refresh() {
-  if (!state.channel) return;
-  const c = encodeURIComponent(state.channel);
-  let np = {}, q = {}, hist = [];
-  try {
-    [np, q, hist] = await Promise.all([
-      fetch(`/api/nowplaying?channel=${c}`).then(r => r.json()),
-      fetch(`/api/queue?channel=${c}`).then(r => r.json()),
-      fetch(`/api/history?channel=${c}&limit=80`).then(r => r.json()),
-    ]);
-  } catch { return; }
+  if (!S.channel) return;
+  const c = encodeURIComponent(S.channel);
 
-  // now playing
-  $("npBody").innerHTML = np.title
-    ? `<div class="title">${esc(np.title)}</div>` + (np.artist ? `<div class="artist">${esc(np.artist)}</div>` : "")
-    : `<div class="empty">Waiting for the next track…</div>`;
-
-  // ── THE SHOW: a live tape is one album. Reconstruct its setlist and mark where we are.
-  // history is newest-first and its head IS the current track; the queue holds what's still to come.
-  const show = np.album || "";
-  const upcoming = q.upcoming || [];
-  if (show) {
-    const played = hist.filter(t => t.album === show).reverse();   // oldest → now
-    const ahead  = upcoming.filter(t => t.album === show);         // rest of this show
-    const setlist = [...played, ...ahead];
-    const pos = played.length;                                     // 1-indexed: the current track
-    const total = setlist.length;
-
-    $("showWrap").style.display = "";
-    $("showName").textContent = show;
-    $("showPos").textContent = total ? `Track ${pos} of ${total}` : "";
-    const pct = total ? Math.round((pos / total) * 100) : 0;
-    $("showBar").style.width = pct + "%";
-    $("showWhere").textContent =
-      !total ? "" : pct <= 20 ? "just getting started" : pct >= 85 ? "near the end"
-                  : pct >= 55 ? "past halfway" : "early in the show";
-
-    $("setlist").innerHTML = setlist.map((t, i) => {
-      const isNow = i === pos - 1;
-      return trackRow(t, isNow ? "cur" : (i < pos - 1 ? "done" : ""),
-                      isNow ? "▸" : (i < pos - 1 ? "✓" : String(i + 1)), "");
-    }).join("") || `<div class="none">Setlist loading…</div>`;
-
-    // anything queued that isn't this show = the next tape
-    const after = upcoming.filter(t => t.album !== show);
-    $("afterWrap").style.display = after.length ? "" : "none";
-    $("after").innerHTML = after.map((t, i) => trackRow(t, "", String(i + 1), "")).join("");
-  } else {
-    $("showWrap").style.display = "none";
-    $("afterWrap").style.display = upcoming.length ? "" : "none";
-    $("after").innerHTML = upcoming.map((t, i) => trackRow(t, "", String(i + 1), "")).join("");
+  if (S.mode === "radio") {
+    let np={}, q={}, hist=[];
+    try {
+      [np,q,hist] = await Promise.all([
+        fetch(`/api/nowplaying?channel=${c}`).then(r=>r.json()),
+        fetch(`/api/queue?channel=${c}`).then(r=>r.json()),
+        fetch(`/api/history?channel=${c}&limit=80`).then(r=>r.json()),
+      ]);
+    } catch { return; }
+    if (np.title) {
+      flapTo(np.title);
+      $("byline").innerHTML = `${esc(np.artist)} <span class="sm">· ${esc(np.album)}</span>`;
+    }
+    const show = np.album || "";
+    if (show) {
+      const played = hist.filter(t=>t.album===show).reverse();
+      const ahead  = (q.upcoming||[]).filter(t=>t.album===show);
+      const set = [...played, ...ahead], pos = played.length;
+      $("showWrap").style.display = "";
+      $("showName").textContent = show;
+      $("progTxt").textContent = set.length ? `Track ${pos} of ${set.length}` : "";
+      const pct = set.length ? (pos/set.length)*100 : 0;
+      $("progBar").style.width = pct + "%";
+      $("progWhere").textContent = set.length ? where(pct) : "";
+      $("setlist").innerHTML = set.map((x,i) => {
+        const now = i === pos-1, done = i < pos-1;
+        return `<div class="r ${now?"now":done?"done":""}">
+          <span class="mk">${now?"▶":done?"✓":"·"}</span>
+          <span class="n num">${String(i+1).padStart(2,"0")}</span>
+          <span class="ti">${esc(x.title)}</span>
+          <span class="st">${now?"Now":done?"Played":"Next"}</span></div>`;
+      }).join("");
+    } else $("showWrap").style.display = "none";
   }
 
-  // ── play log: this station, or the whole network
-  const rows = state.histScope === "all"
-    ? await fetch(`/api/history?limit=25`).then(r => r.json()).catch(() => [])
-    : hist.slice(0, 20);
-  $("history").innerHTML = rows.length
-    ? rows.map(t => trackRow(t, "", "",
-        state.histScope === "all"
-          ? `<span class="chn">${esc(chName(t.channel))}</span>`
-          : `<span class="when">${esc(ago(t.played_at))}</span>`)).join("")
-    : `<div class="none">Nothing yet.</div>`;
+  const rows = S.histScope === "all"
+    ? await fetch(`/api/history?limit=25`).then(r=>r.json()).catch(()=>[])
+    : await fetch(`/api/history?channel=${c}&limit=20`).then(r=>r.json()).catch(()=>[]);
+  $("history").innerHTML = rows.length ? rows.map(t =>
+    `<div class="r"><span class="mk">·</span><span class="n"></span>
+     <span class="ti">${esc(t.title)} <span style="color:var(--muted);font-weight:400">${esc(t.artist)}</span></span>
+     <span class="st">${S.histScope==="all" ? esc(chName(t.channel)) : esc(ago(t.played_at))}</span></div>`
+  ).join("") : `<div class="none">Nothing yet.</div>`;
 }
-setInterval(refresh, 10000);
+setInterval(() => { if (S.mode === "radio") refresh(); }, 10000);
+$("tabCh").onclick  = () => { S.histScope="channel"; $("tabCh").classList.add("on"); $("tabAll").classList.remove("on"); refresh(); };
+$("tabAll").onclick = () => { S.histScope="all"; $("tabAll").classList.add("on"); $("tabCh").classList.remove("on"); refresh(); };
 
+/* ── DJ ──────────────────────────────────────────────────────────────────── */
 function addMsg(text, cls) {
   const el = document.createElement("div");
   el.className = "msg " + cls;
-  if (cls.startsWith("dj")) { const b = document.createElement("b"); b.className = "tag"; b.textContent = "DJ"; el.appendChild(b); }
+  if (cls.startsWith("dj")) { const b=document.createElement("b"); b.textContent="DJ"; el.appendChild(b); }
   el.appendChild(document.createTextNode(text));
   $("chat").appendChild(el); $("chat").scrollTop = $("chat").scrollHeight;
   return el;
-}
-function addTuneIns(el, reply) {
-  const hits = state.channels.filter(ch =>
-    reply.toLowerCase().includes(ch.name.toLowerCase()) || new RegExp(`\\b${ch.slug}\\b`, "i").test(reply));
-  for (const ch of hits.slice(0, 3)) {
-    const b = document.createElement("button");
-    b.className = "tunein"; b.textContent = "▶ Tune in to " + ch.name;
-    b.onclick = () => tune(ch.slug);
-    el.appendChild(document.createElement("br")); el.appendChild(b);
-  }
 }
 $("form").onsubmit = async (e) => {
   e.preventDefault();
   const text = $("input").value.trim(); if (!text) return;
   $("input").value = "";
-  addMsg(text, "user");
-  state.messages.push({ role: "user", content: text });
-  const thinking = addMsg("digging through the crates…", "dj thinking");
+  addMsg(text, "user"); S.msgs.push({role:"user", content:text});
+  const think = addMsg("digging through the crates…", "dj thinking");
   try {
-    const res = await fetch("/api/chat", { method: "POST", headers: {"Content-Type":"application/json"},
-                                           body: JSON.stringify({ messages: state.messages }) });
-    const data = await res.json();
-    thinking.remove();
-    const el = addMsg(data.reply, "dj");
-    state.messages.push({ role: "assistant", content: data.reply });
+    const r = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"},
+                                         body: JSON.stringify({ messages: S.msgs }) });
+    const d = await r.json();
+    think.remove();
+    const el = addMsg(d.reply, "dj");
+    S.msgs.push({role:"assistant", content:d.reply});
     await loadChannels();
-    addTuneIns(el, data.reply);
+    for (const ch of S.channels.filter(ch => ch.playable !== false &&
+          (d.reply.toLowerCase().includes(ch.name.toLowerCase()) ||
+           new RegExp(`\\b${ch.slug}\\b`,"i").test(d.reply))).slice(0,3)) {
+      const b = document.createElement("button");
+      b.className = "tunein"; b.textContent = "▶ Tune in to " + ch.name;
+      b.onclick = () => tune(ch.slug);
+      el.appendChild(document.createElement("br")); el.appendChild(b);
+    }
     refresh();
-  } catch (err) { thinking.remove(); addMsg("static on the line — " + err, "dj"); }
+  } catch (err) { think.remove(); addMsg("static on the line — " + err, "dj"); }
 };
 
-// ?station=<slug> deep-links straight to a station (shareable; audio needs a click to start)
-buildEq();
+buildFlaps(); buildEq();
 loadChannels().then(() => {
   const want = new URLSearchParams(location.search).get("station");
-  if (want && state.channels.some(c => c.slug === want)) tune(want);
+  if (want && S.channels.some(c => c.slug === want && c.playable !== false)) tune(want);
 });
 </script>
 </body>

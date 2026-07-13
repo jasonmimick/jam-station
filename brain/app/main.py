@@ -121,6 +121,30 @@ def api_skip(ref: ChannelRef):
     return {"skipped": channels.skip(ref.channel)}
 
 
+# ---------------------------------------------------------------- on demand
+
+@app.get("/api/show")
+def api_show(channel: str):
+    """The tape currently on a channel, as a *playable* tracklist.
+
+    The queue keeps served rows (and their direct MP3 url), so one show_id gives
+    the whole show — what's played, what's on, what's left — with URLs. That's
+    what lets the browser play a tape on demand (seek, scrub, jump, rewind)
+    instead of riding the live broadcast, which has no buffer to seek in.
+    """
+    cur = db.query("SELECT show_id FROM queue WHERE channel=? AND served=1 "
+                   "ORDER BY id DESC LIMIT 1", (channel,))
+    if not cur or not cur[0]["show_id"]:
+        return {"channel": channel, "album": "", "tracks": [], "playing": -1}
+    show_id = cur[0]["show_id"]
+    rows = db.query("SELECT title, artist, album, url, served FROM queue "
+                    "WHERE channel=? AND show_id=? ORDER BY id", (channel, show_id))
+    playing = max((i for i, r in enumerate(rows) if r["served"]), default=-1)
+    return {"channel": channel, "show_id": show_id,
+            "album": rows[0]["album"] if rows else "",
+            "tracks": rows, "playing": playing}
+
+
 # ---------------------------------------------------------------- AI DJ
 
 class ChatBody(BaseModel):
