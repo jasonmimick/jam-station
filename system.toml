@@ -1,0 +1,28 @@
+# jam-station as a slab system: brain (FastAPI) + icecast (streams) + jam-radio
+# (liquidsoap). Deploy to the home mac-mini:
+#
+#   slab -N jasons-mac-mini up .
+#   slab -N jasons-mac-mini secret set jam-brain ANTHROPIC_API_KEY=sk-ant-...
+#   slab -N jasons-mac-mini deploy jam-brain        # redeploy to pick up the secret
+#
+# Startup order doesn't matter: jam-radio exits if the brain isn't up yet and
+# slab restarts it until channel fetch succeeds.
+#
+# Not in this system (vs docker-compose): navidrome + the library/fusion
+# channel — they need the owner's music files mounted, which slab named
+# volumes don't cover yet. Archive + phish.in channels are unaffected.
+name = "jam-station"
+
+[apps.jam-brain]
+source = "./brain"
+
+[apps.jam-icecast]
+source = "./slab/icecast"
+
+[apps.jam-radio]
+source = "./liquidsoap"
+
+[wires]
+"jam-radio.BRAIN_URL" = "http://jam-brain:8080"
+"jam-radio.ICECAST_HOST" = "jam-icecast"
+"jam-brain.LIQUIDSOAP_HOST" = "jam-radio"

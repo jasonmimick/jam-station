@@ -11,11 +11,15 @@ settings.server.telnet := true
 settings.server.telnet.bind_addr := "0.0.0.0"
 settings.server.telnet.port := 1234
 
-brain = "http://brain:8080"
+# Hosts are env-overridable so the same script runs under docker-compose
+# (defaults) and slab (wires set BRAIN_URL / ICECAST_HOST).
+brain = environment.get(default="http://brain:8080", "BRAIN_URL")
+icecast_host = environment.get(default="icecast", "ICECAST_HOST")
 icecast_pw = environment.get("ICECAST_SOURCE_PASSWORD")
 
 def make_channel(line) =
-  parts = string.split(separator="|", line)
+  # NB: separator is a regex — "|" alone is alternation and splits every char
+  parts = string.split(separator="\\|", line)
   slug = list.nth(default="", parts, 0)
   name = list.nth(default=slug, parts, 1)
 
@@ -58,7 +62,7 @@ def make_channel(line) =
     output.icecast(
       %mp3(bitrate=128),
       id="out_#{slug}",
-      host="icecast", port=8000,
+      host=icecast_host, port=8000,
       password=icecast_pw,
       mount="/#{slug}",
       name=name,

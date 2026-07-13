@@ -1,0 +1,9 @@
+# slab manifest for the radio engine. No HTTP ingress — it pushes audio to
+# icecast and serves telnet :1234 to system-mates (the brain's skip command).
+name = "jam-radio"
+type = "service"
+port = 1234
+public = false
+
+[env]
+ICECAST_SOURCE_PASSWORD = "changeme-source"  # override: slab secret set jam-radio ICECAST_SOURCE_PASSWORD=...

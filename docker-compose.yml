@@ -15,7 +15,7 @@ services:
     build: ./brain
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8090:8080"   # host 8090 — slab's daemon owns 8080 on this machine
     env_file: .env
     environment:
       - DATA_DIR=/data

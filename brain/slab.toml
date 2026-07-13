@@ -1,0 +1,17 @@
+# slab manifest for the brain (FastAPI). Part of the jam-station system —
+# deploy the whole station with `slab up .` from the repo root.
+name = "jam-brain"
+type = "service"
+port = 8080
+volumes = ["data:/data"]
+secrets = ["ANTHROPIC_API_KEY"]   # set with: slab secret set jam-brain ANTHROPIC_API_KEY=...
+
+[env]
+DATA_DIR = "/data"
+CACHE_DIR = "/cache"
+MUSIC_DIR = "/music"
+# No shared cache volume between brain and liquidsoap under slab, so prefetch
+# would hand liquidsoap file paths it can't see. Stream URLs directly instead
+# (fine on the mac-mini's fast connection).
+PREFETCH = "false"
+TZ = "America/New_York"

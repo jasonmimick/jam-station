@@ -1,0 +1,12 @@
+# slab manifest for icecast — the public stream endpoint (one mount per channel).
+name = "jam-icecast"
+type = "service"
+image = "libretime/icecast:2.4.4"
+port = 8000
+
+[env]
+ICECAST_SOURCE_PASSWORD = "changeme-source"  # must match jam-radio's; override via slab secret set on BOTH
+ICECAST_ADMIN_PASSWORD = "changeme-admin"
+ICECAST_RELAY_PASSWORD = "changeme-relay"
+ICECAST_ADMIN_USERNAME = "admin"
+ICECAST_MAX_SOURCES = "10"
