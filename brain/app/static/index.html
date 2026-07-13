@@ -55,7 +55,9 @@
   .icon:hover { background:var(--on-yellow); color:var(--yellow); }
 
   .app { flex:1; display:grid; grid-template-columns:270px 1fr 320px; min-height:0; }
-  .pane { min-height:0; overflow-y:auto; }
+  .pane { min-height:0; min-width:0; overflow-y:auto; }   /* grid items default to
+     min-width:auto and will NOT shrink below their content — the whole pane grows
+     wider than the phone and everything inside it overflows with it. */
   .pane + .pane { border-left:1px solid var(--line); }
   .pane.left, .pane.right { background:var(--panel); }
   .ph { padding:16px 16px 10px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
@@ -212,6 +214,27 @@
     .r .st { font-size:9px; }
     .eq { margin-left:0; margin-right:0; }
     .bands { gap:8px; }
+  }
+
+  /* Last word on wrapping. A <button> in a grid will happily run its text off
+     the screen unless every box in the chain is allowed to shrink. */
+  .dep { max-width:100%; }
+  .dep > span { min-width:0; max-width:100%; }
+  .dep .nm, .dep .sub { white-space:normal; overflow-wrap:anywhere; max-width:100%; }
+  .dep .sub { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  html, body { max-width:100%; overflow-x:hidden; }
+  /* Stop negotiating with the content: below the breakpoint a pane IS the
+     viewport, and everything inside it wraps or clips. Grid auto-sizing will
+     otherwise let one long string widen the column and drag the whole app
+     sideways. */
+  @media (max-width:1100px) {
+    .app { width:100%; max-width:100vw; }
+    .pane { width:100%; max-width:100vw; min-width:0; }
+    .board, .rows, .ph, .prog, .showname, .eq, #chat, form { max-width:100vw; }
+    .tx { max-width:100%; }
+    .vol { min-width:0; }
+    .vol input { min-width:0; }
+    .r { max-width:100%; }
   }
 </style>
 </head>
