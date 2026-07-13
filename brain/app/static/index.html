@@ -4,19 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>jam-station</title>
+<link rel="icon" href='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 64"%3E%3Cpath d="M0 6 h56 l20 26 -20 26 H0 z" fill="%23FFD200"/%3E%3Cpath d="M36 14 L22 38 h9 l-3 16 L50 32 H38 z" fill="%2312120C"/%3E%3C/svg%3E'>
 <style>
   /* ── Schiphol: signage yellow, black, white. Legible across a room. ─────── */
+  /* Primary triad, De Stijl by way of Schiphol — and each colour has a job:
+     YELLOW = signage / brand.  BLUE = interaction.  RED = ON AIR (a tally light). */
   :root[data-theme="dark"] {
     --board:#0F0F11; --panel:#17171A; --sunk:#0A0A0C; --line:#2B2B31;
     --ink:#FFFFFF; --muted:#8C8C94; --faint:#5A5A62;
-    --yellow:#FFD200; --on-yellow:#12120C; --live:#2FD16A;
+    --yellow:#FFD200; --on-yellow:#12120C;
+    --blue:#3B82F6; --red:#F0402F; --live:#2FD16A;
     --flap:#1C1C20; --flap-ink:#FFD200;
   }
   :root[data-theme="light"] {
-    --board:#FFFFFF; --panel:#F4F4F5; --sunk:#EAEAEC; --line:#DCDCE0;
-    --ink:#16161A; --muted:#63636B; --faint:#95959D;
-    --yellow:#FFD200; --on-yellow:#12120C; --live:#12894A;
-    --flap:#1C1C20; --flap-ink:#FFD200;
+    --board:#FFFFFF; --panel:#F4F4F4; --sunk:#ECECEE; --line:#12120C33;
+    --ink:#12120C; --muted:#5B5B62; --faint:#8E8E96;
+    --yellow:#FFD200; --on-yellow:#12120C;
+    --blue:#0B4FD0; --red:#D62818; --live:#0E7A44;
+    --flap:#12120C; --flap-ink:#FFD200;
   }
   * { box-sizing:border-box; }
   body {
@@ -30,7 +35,9 @@
   /* header — the terminal sign */
   header { display:flex; align-items:center; gap:18px; padding:0 18px; height:58px;
     background:var(--yellow); color:var(--on-yellow); flex:0 0 auto; }
-  header h1 { margin:0; font-size:20px; font-weight:800; letter-spacing:-.01em; white-space:nowrap; }
+  header h1 { margin:0; font-size:20px; font-weight:800; letter-spacing:-.01em; white-space:nowrap;
+    display:flex; align-items:center; gap:10px; color:var(--on-yellow); }
+  header h1 .mark { flex:0 0 auto; }
   .modes { display:inline-flex; border:2px solid var(--on-yellow); border-radius:2px; overflow:hidden; }
   .modes button { border:0; background:transparent; color:var(--on-yellow); cursor:pointer; font:inherit;
     font-size:11px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; padding:7px 14px; }
@@ -38,6 +45,7 @@
   .hdr-r { margin-left:auto; display:flex; align-items:center; gap:14px; }
   .status { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:800; letter-spacing:.14em; white-space:nowrap; }
   .dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+  .status.live { color:var(--red); }
   .status.live .dot { animation:blink 1.5s ease-in-out infinite; }
   .status.buf .dot { animation:blink .6s ease-in-out infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
@@ -61,7 +69,8 @@
   .dep .nm { font-size:15px; font-weight:700; }
   .dep .sub { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.35; }
   .dep.on { background:var(--sunk); }
-  .dep.on .nm, .dep.on .mk { color:var(--yellow); }
+  .dep.on { box-shadow:inset 3px 0 0 var(--blue); }
+  .dep.on .nm, .dep.on .mk { color:var(--blue); }
   .dep.dead { cursor:not-allowed; }
   .dep.dead .nm, .dep.dead .sub { color:var(--faint); }
   .chip { font-size:9px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
@@ -86,7 +95,7 @@
     background:transparent; color:var(--ink); font:inherit; font-size:12px; font-weight:800;
     letter-spacing:.1em; text-transform:uppercase; cursor:pointer;
     display:inline-flex; align-items:center; justify-content:center; gap:6px; }
-  .tx button:hover:not(:disabled) { border-color:var(--yellow); color:var(--yellow); }
+  .tx button:hover:not(:disabled) { border-color:var(--blue); color:var(--blue); }
   .tx button:disabled { opacity:.3; cursor:not-allowed; }
   .tx button.go { background:var(--yellow); color:var(--on-yellow); border-color:var(--yellow);
     width:54px; height:54px; min-width:54px; padding:0; font-size:16px; }
@@ -96,7 +105,7 @@
     animation:spin .7s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg) } }
   .vol { display:flex; align-items:center; gap:8px; margin-left:auto; color:var(--muted); }
-  .vol input, .scrub input, .band input { accent-color:var(--yellow); }
+  .vol input, .scrub input, .band input { accent-color:var(--blue); }
   .vol input { width:90px; }
   canvas#viz { border:1px solid var(--line); border-radius:2px; background:var(--sunk); }
 
@@ -110,8 +119,8 @@
   .pre { margin-left:auto; display:inline-flex; gap:4px; flex-wrap:wrap; }
   .pre button { border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:2px;
     padding:4px 9px; font:inherit; font-size:11px; font-weight:700; cursor:pointer; }
-  .pre button:hover { border-color:var(--yellow); color:var(--yellow); }
-  .pre button.on { background:var(--yellow); color:var(--on-yellow); border-color:var(--yellow); }
+  .pre button:hover { border-color:var(--blue); color:var(--blue); }
+  .pre button.on { background:var(--blue); color:#fff; border-color:var(--blue); }
   .bands { display:flex; gap:16px; margin-top:14px; }
   .band { flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; }
   .band input { width:100%; }
@@ -122,7 +131,7 @@
   .prog { display:flex; align-items:center; gap:12px; padding:10px 24px 4px; }
   .prog .txt { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   .track { flex:1; height:5px; background:var(--sunk); border-radius:2px; overflow:hidden; }
-  .track i { display:block; height:100%; background:var(--yellow); }
+  .track i { display:block; height:100%; background:var(--blue); }
 
   .rows { padding:8px 12px 20px; }
   .r { display:grid; grid-template-columns:20px 26px 1fr auto; gap:12px; align-items:center;
@@ -137,7 +146,8 @@
   .r.done { opacity:.5; }
   .r.done .mk { color:var(--live); }
   .r.now { background:var(--sunk); }
-  .r.now .ti, .r.now .mk, .r.now .n, .r.now .st { color:var(--yellow); }
+  .r.now { box-shadow:inset 3px 0 0 var(--blue); }
+  .r.now .ti, .r.now .mk, .r.now .n, .r.now .st { color:var(--blue); }
   .r.now .ti { font-weight:800; }
   .none { padding:10px 24px 18px; font-size:13px; color:var(--faint); }
 
@@ -155,7 +165,7 @@
   form { display:flex; gap:8px; padding:12px 14px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); }
   input[type=text] { flex:1; min-width:0; padding:11px 12px; border:1px solid var(--line); border-radius:2px;
     background:var(--board); color:var(--ink); font-size:14px; outline:none; }
-  input[type=text]:focus { border-color:var(--yellow); }
+  input[type=text]:focus { border-color:var(--blue); }
   form button { padding:0 16px; border:0; border-radius:2px; background:var(--yellow); color:var(--on-yellow);
     font:inherit; font-size:12px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; cursor:pointer; }
 
@@ -171,7 +181,7 @@
 </head>
 <body>
   <header>
-    <h1>⚡ JAM·STATION</h1>
+    <h1><svg class="mark" viewBox="0 0 76 64" width="30" height="26" aria-label="jam-station"><path d="M0 6 h56 l20 26 -20 26 H0 z" fill="currentColor"/><path d="M36 14 L22 38 h9 l-3 16 L50 32 H38 z" fill="var(--yellow)"/><rect y="30" width="76" height="1.6" fill="var(--yellow)" opacity=".18"/></svg>JAM·STATION</h1>
     <div class="modes">
       <button id="mRadio" class="on">Radio</button>
       <button id="mOnDemand">On demand</button>
@@ -266,7 +276,8 @@ const setTheme = (t) => {
   $("theme").textContent = t === "dark" ? "☾" : "☀";
   localStorage.setItem("jam-theme", t);
 };
-setTheme(localStorage.getItem("jam-theme") || "dark");
+const qTheme = new URLSearchParams(location.search).get("theme");
+setTheme(qTheme === "light" || qTheme === "dark" ? qTheme : (localStorage.getItem("jam-theme") || "dark"));
 $("theme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
 /* ── split-flap. A now-playing genuinely changes like a departure board. ─── */
@@ -508,7 +519,8 @@ function drawViz() {
     const n = 13, w = c.width / n;
     for (let i = 0; i < n; i++) {
       const h = Math.max(1, (buf[i*2]/255) * c.height);
-      ctx.fillStyle = S.status === "playing" ? "#FFD200" : "#3A3A42";
+      const css = getComputedStyle(document.documentElement);
+      ctx.fillStyle = S.status === "playing" ? css.getPropertyValue("--blue").trim() || "#3B82F6" : "#3A3A42";
       ctx.fillRect(i*w+1, c.height-h, w-2, h);
     }
   })();

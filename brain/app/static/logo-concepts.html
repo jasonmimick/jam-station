@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  body{margin:0;background:#0F0F11;color:#fff;font:14px "Helvetica Neue",Arial,sans-serif;padding:30px}
+  h2{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#8C8C94;margin:0 0 4px}
+  p{font-size:12px;color:#63636B;margin:0 0 16px;max-width:300px;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:28px}
+  .cell{border:1px solid #2B2B31;padding:20px;border-radius:2px}
+  .row{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+  .swatch{background:#FFD200;padding:14px;border-radius:2px;display:inline-flex;gap:10px;align-items:center}
+  .wm{font-weight:800;font-size:19px;letter-spacing:-.01em}
+</style></head><body>
+<div class="grid">
+
+  <!-- A. THE FLAP — a single departure-board tile. The hinge line is the tell. -->
+  <div class="cell">
+    <h2>A · The Flap</h2>
+    <p>One split-flap tile. The hinge line across the middle is the Solari tell — the whole board in one glyph. The bolt doubles as a waveform.</p>
+    <div class="row">
+      <svg width="72" height="72" viewBox="0 0 64 64">
+        <rect width="64" height="64" rx="6" fill="#1C1C20"/>
+        <path d="M35 8 L18 36 h11 l-4 20 L46 28 H35 z" fill="#FFD200"/>
+        <rect x="0" y="31" width="64" height="2" fill="#0F0F11"/>
+      </svg>
+      <svg width="44" height="44" viewBox="0 0 64 64">
+        <rect width="64" height="64" rx="6" fill="#1C1C20"/>
+        <path d="M35 8 L18 36 h11 l-4 20 L46 28 H35 z" fill="#FFD200"/>
+        <rect x="0" y="31" width="64" height="2" fill="#0F0F11"/>
+      </svg>
+    </div>
+    <div class="swatch">
+      <svg width="26" height="26" viewBox="0 0 64 64">
+        <rect width="64" height="64" rx="6" fill="#12120C"/>
+        <path d="M35 8 L18 36 h11 l-4 20 L46 28 H35 z" fill="#FFD200"/>
+        <rect x="0" y="31" width="64" height="2" fill="#FFD200" opacity=".25"/>
+      </svg>
+      <span class="wm" style="color:#12120C">JAM·STATION</span>
+    </div>
+  </div>
+
+  <!-- B. THE BOARD — three tiles reading JAM, middle one caught mid-flip. -->
+  <div class="cell">
+    <h2>B · The Board</h2>
+    <p>Three tiles spelling J A M, the middle one caught mid-flip. Motion frozen in the mark — it says "this thing is always changing".</p>
+    <div class="row">
+      <svg width="120" height="56" viewBox="0 0 132 60">
+        <rect x="0"  y="4" width="38" height="52" rx="4" fill="#1C1C20"/>
+        <text x="19" y="42" font-family="Helvetica,Arial" font-size="34" font-weight="800" fill="#FFD200" text-anchor="middle">J</text>
+        <rect x="0" y="29" width="38" height="1.5" fill="#0F0F11"/>
+        <g transform="translate(47,4)">
+          <rect width="38" height="52" rx="4" fill="#1C1C20"/>
+          <rect y="0" width="38" height="26" rx="4" fill="#2A2A30"/>
+          <text x="19" y="42" font-family="Helvetica,Arial" font-size="34" font-weight="800" fill="#FFD200" text-anchor="middle">A</text>
+          <rect y="25" width="38" height="1.5" fill="#0F0F11"/>
+        </g>
+        <rect x="94" y="4" width="38" height="52" rx="4" fill="#1C1C20"/>
+        <text x="113" y="42" font-family="Helvetica,Arial" font-size="34" font-weight="800" fill="#FFD200" text-anchor="middle">M</text>
+        <rect x="94" y="29" width="38" height="1.5" fill="#0F0F11"/>
+      </svg>
+    </div>
+    <div class="swatch">
+      <svg width="26" height="26" viewBox="0 0 64 64">
+        <rect width="64" height="64" rx="6" fill="#12120C"/>
+        <text x="32" y="46" font-family="Helvetica,Arial" font-size="42" font-weight="800" fill="#FFD200" text-anchor="middle">J</text>
+        <rect y="31" width="64" height="2" fill="#FFD200" opacity=".25"/>
+      </svg>
+      <span class="wm" style="color:#12120C">JAM·STATION</span>
+    </div>
+  </div>
+
+  <!-- C. DEPARTURE — the bolt as a flight path lifting off a runway. -->
+  <div class="cell">
+    <h2>C · Departure</h2>
+    <p>The bolt reads as a takeoff path lifting off a runway, with signal arcs behind it. Radio + flight in one stroke. No tile.</p>
+    <div class="row">
+      <svg width="72" height="72" viewBox="0 0 64 64">
+        <g fill="none" stroke="#FFD200" stroke-width="3" stroke-linecap="round" opacity=".35">
+          <path d="M8 44 a20 20 0 0 1 12 -16"/>
+          <path d="M4 52 a30 30 0 0 1 18 -24"/>
+        </g>
+        <path d="M40 6 L24 34 h10 l-3 22 L52 26 H40 z" fill="#FFD200"/>
+        <rect x="6" y="56" width="52" height="4" rx="2" fill="#FFD200"/>
+        <rect x="14" y="56" width="6" height="4" fill="#0F0F11"/>
+        <rect x="30" y="56" width="6" height="4" fill="#0F0F11"/>
+        <rect x="46" y="56" width="6" height="4" fill="#0F0F11"/>
+      </svg>
+    </div>
+    <div class="swatch">
+      <svg width="26" height="26" viewBox="0 0 64 64">
+        <path d="M40 6 L24 34 h10 l-3 22 L52 26 H40 z" fill="#12120C"/>
+        <rect x="6" y="56" width="52" height="4" rx="2" fill="#12120C"/>
+      </svg>
+      <span class="wm" style="color:#12120C">JAM·STATION</span>
+    </div>
+  </div>
+
+  <!-- D. GATE — the bolt inside a gate/route sign chevron. Pure signage. -->
+  <div class="cell">
+    <h2>D · Gate</h2>
+    <p>The wayfinding chevron every airport uses, with the bolt as the destination. Most literally "signage" — reads at 16px and across a room.</p>
+    <div class="row">
+      <svg width="86" height="72" viewBox="0 0 76 64">
+        <path d="M0 6 h56 l20 26 -20 26 H0 z" fill="#FFD200"/>
+        <path d="M36 14 L22 38 h9 l-3 16 L50 32 H38 z" fill="#12120C"/>
+      </svg>
+    </div>
+    <div class="swatch" style="background:#12120C">
+      <svg width="30" height="26" viewBox="0 0 76 64">
+        <path d="M0 6 h56 l20 26 -20 26 H0 z" fill="#FFD200"/>
+        <path d="M36 14 L22 38 h9 l-3 16 L50 32 H38 z" fill="#12120C"/>
+      </svg>
+      <span class="wm" style="color:#FFD200">JAM·STATION</span>
+    </div>
+  </div>
+
+</div>
+</body></html>
