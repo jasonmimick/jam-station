@@ -66,7 +66,7 @@
     background:transparent; color:var(--ink); font:inherit; cursor:pointer; }
   .dep:hover { background:var(--sunk); }
   .dep .mk { color:var(--faint); font-size:13px; }
-  .dep .nm { font-size:15px; font-weight:700; }
+  .dep .nm { font-size:15px; font-weight:700; overflow-wrap:anywhere; }
   .dep .sub { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.35; }
   .dep.on { background:var(--sunk); }
   .dep.on { box-shadow:inset 3px 0 0 var(--blue); }
@@ -127,7 +127,7 @@
   .band span { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; }
 
   /* the schedule */
-  .showname { padding:12px 24px 0; font-size:14px; font-weight:700; }
+  .showname { padding:12px 24px 0; font-size:14px; font-weight:700; overflow-wrap:anywhere; }
   .prog { display:flex; align-items:center; gap:12px; padding:10px 24px 4px; }
   .prog .txt { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   .track { flex:1; height:5px; background:var(--sunk); border-radius:2px; overflow:hidden; }
@@ -141,7 +141,7 @@
   .r.click:hover { background:var(--sunk); }
   .r .mk { font-size:12px; color:var(--faint); }
   .r .n { font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; }
-  .r .ti { font-size:14px; font-weight:600; }
+  .r .ti { font-size:14px; font-weight:600; min-width:0; overflow-wrap:anywhere; }
   .r .st { font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
   .r.done { opacity:.5; }
   .r.done .mk { color:var(--live); }
@@ -170,12 +170,46 @@
     font:inherit; font-size:12px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; cursor:pointer; }
 
   @media (max-width:1100px) {
-    body { overflow:auto; height:auto; min-height:100dvh; }
+    body { overflow-x:hidden; overflow-y:auto; height:auto; min-height:100dvh; }
     .app { grid-template-columns:1fr; }
     .pane { overflow:visible; }
     .pane + .pane { border-left:0; border-top:1px solid var(--line); }
-    .pane.right { height:70vh; }
-    .flap { width:20px; height:30px; font-size:16px; }
+    .pane.right { height:auto; min-height:60vh; }
+  }
+  /* Phone. He is walking down a street with this in one hand. */
+  @media (max-width:640px) {
+    header { height:52px; gap:10px; padding:0 12px; }
+    header h1 { font-size:15px; gap:7px; }
+    header h1 .mark { width:24px; height:20px; }
+    .modes button { padding:6px 9px; font-size:10px; letter-spacing:.08em; }
+    .hdr-r { gap:8px; }
+    .status { font-size:0; gap:0; }              /* keep the tally dot, drop the words */
+    .status .dot { width:9px; height:9px; }
+    .icon { width:30px; height:30px; font-size:13px; }
+
+    .board { padding:18px 14px 16px; }
+    .flaps { gap:2px; }
+    .flap { width:26px; height:36px; font-size:19px; }
+    .byline { font-size:15px; }
+    .byline .sm { display:block; margin-top:2px; font-size:13px; }
+
+    .tx { gap:8px; margin-top:16px; }
+    .tx button { height:46px; min-width:46px; padding:0 12px; font-size:11px; }
+    .tx button.go { width:56px; height:56px; min-width:56px; }
+    .vol { margin-left:0; width:100%; }
+    .vol input { flex:1; width:auto; }
+    canvas#viz { display:none; }                 /* no room, and it's decorative */
+
+    .dep { padding:14px 14px; }
+    .dep .sub { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+                overflow:hidden; }
+    .ph, .showname, .prog, .none { padding-left:14px; padding-right:14px; }
+    .rows { padding:6px 4px 16px; }
+    .r { grid-template-columns:16px 22px 1fr auto; gap:8px; padding:12px 10px; }
+    .r .ti { font-size:14px; }
+    .r .st { font-size:9px; }
+    .eq { margin-left:0; margin-right:0; }
+    .bands { gap:8px; }
   }
 </style>
 </head>
@@ -282,7 +316,8 @@ $("theme").onclick = () => setTheme(document.documentElement.dataset.theme === "
 
 /* ── split-flap. A now-playing genuinely changes like a departure board. ─── */
 const CHARS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'’-.,>&/!?()\"";
-const CELLS = 20;
+const CELLS = window.matchMedia("(max-width:520px)").matches ? 11
+            : window.matchMedia("(max-width:900px)").matches ? 15 : 20;
 let cells = [], timers = [];
 function buildFlaps() {
   $("flaps").innerHTML = Array.from({length:CELLS}, () => `<div class="flap"> </div>`).join("");
