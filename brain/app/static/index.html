@@ -85,7 +85,7 @@ const state = { channel: null, channels: [], messages: [], audio: new Audio() };
 state.audio.preload = "none";
 
 const $ = (id) => document.getElementById(id);
-const streamUrl = (slug) => `http://${location.hostname}:8000/${slug}`;
+const streamUrl = (slug) => `/stream/${slug}`;  // same-origin proxy (brain -> icecast)
 
 async function loadChannels() {
   const res = await fetch("/api/channels");

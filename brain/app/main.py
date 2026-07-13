@@ -1,8 +1,9 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, PlainTextResponse
+import httpx
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import channels, config, db, dj
@@ -30,6 +31,40 @@ def health():
 @app.get("/")
 def index():
     return FileResponse(os.path.join(STATIC, "index.html"))
+
+
+# Same-origin proxy for the icecast mounts. icecast is a separate slab app on
+# its own origin, so a browser served this page can't reach it directly (esp.
+# through a tunnel). Streaming it through here means one hostname serves both
+# the UI and the audio — the front-end just uses /stream/<slug>.
+ICECAST_ORIGIN = os.environ.get("ICECAST_ORIGIN", "http://jam-icecast:8000")
+
+
+@app.get("/stream/{slug}")
+async def stream(slug: str):
+    client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
+    try:
+        upstream = await client.send(
+            client.build_request("GET", f"{ICECAST_ORIGIN}/{slug}"), stream=True)
+    except httpx.HTTPError:
+        await client.aclose()
+        raise HTTPException(502, "stream source unreachable")
+    if upstream.status_code != 200:
+        code = upstream.status_code
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(code, "no such stream")
+
+    async def body():
+        try:
+            async for chunk in upstream.aiter_raw():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        body(), media_type=upstream.headers.get("content-type", "audio/mpeg"))
 
 
 # ---------------------------------------------------------------- channels
