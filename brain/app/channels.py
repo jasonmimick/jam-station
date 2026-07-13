@@ -237,7 +237,7 @@ def next_track(slug: str) -> str:
     db.execute(
         "INSERT INTO history(channel, title, artist, album, show_id) VALUES(?,?,?,?,?)",
         (slug, row["title"], row["artist"], row["album"], row["show_id"]))
-    set_nowplaying(slug, row["title"], row["artist"], row["album"])
+    set_nowplaying(slug, row["title"], row["artist"], row["album"], row["url"])
 
     def background() -> None:
         try:
@@ -253,18 +253,20 @@ def next_track(slug: str) -> str:
 
 # ---------------------------------------------------------------- now playing
 
-def set_nowplaying(slug: str, title: str, artist: str, album: str) -> None:
+def set_nowplaying(slug: str, title: str, artist: str, album: str, url: str = "") -> None:
+    # The url rides along so the UI can Like the track that's on air right now —
+    # a favourite is only worth anything if it can be played back later.
     db.execute(
-        "INSERT INTO nowplaying(channel, title, artist, album, updated_at) "
-        "VALUES(?,?,?,?,datetime('now')) "
+        "INSERT INTO nowplaying(channel, title, artist, album, url, updated_at) "
+        "VALUES(?,?,?,?,?,datetime('now')) "
         "ON CONFLICT(channel) DO UPDATE SET title=excluded.title, artist=excluded.artist, "
-        "album=excluded.album, updated_at=excluded.updated_at",
-        (slug, title, artist, album))
+        "album=excluded.album, url=excluded.url, updated_at=excluded.updated_at",
+        (slug, title, artist, album, url))
 
 
 def get_nowplaying(slug: str) -> dict:
     rows = db.query("SELECT * FROM nowplaying WHERE channel=?", (slug,))
-    return rows[0] if rows else {"channel": slug, "title": "", "artist": "", "album": ""}
+    return rows[0] if rows else {"channel": slug, "title": "", "artist": "", "album": "", "url": ""}
 
 
 def queue_status(slug: str) -> dict:

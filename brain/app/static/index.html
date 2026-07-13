@@ -138,7 +138,7 @@
   .track i { display:block; height:100%; background:var(--blue); }
 
   .rows { padding:8px 12px 20px; }
-  .r { display:grid; grid-template-columns:20px 26px 1fr auto; gap:12px; align-items:center;
+  .r { display:grid; grid-template-columns:20px 26px 1fr auto auto; gap:12px; align-items:center;
     padding:10px 12px; border-radius:2px; border:0; width:100%; text-align:left;
     background:transparent; color:var(--ink); font:inherit; }
   .r.click { cursor:pointer; }
@@ -154,6 +154,18 @@
   .r.now .ti, .r.now .mk, .r.now .n, .r.now .st { color:var(--blue); }
   .r.now .ti { font-weight:800; }
   .none { padding:10px 24px 18px; font-size:13px; color:var(--faint); }
+
+  /* like — a favourite is only real if you can play it back, so it carries a url */
+  .like { border:0; background:transparent; cursor:pointer; padding:4px 6px; line-height:1;
+    font-size:15px; color:var(--faint); }
+  .like:hover { color:var(--red); }
+  .like.on { color:var(--red); }
+  .tx .like { height:44px; min-width:44px; border:2px solid var(--line); border-radius:2px; font-size:16px; }
+  .tx .like.on { border-color:var(--red); }
+  .dep.favs { border-bottom:2px solid var(--line); }
+  .dep.favs .nm { color:var(--red); }
+  .dep.favs.on .nm, .dep.favs.on .mk { color:var(--red); }
+  .dep.favs.on { box-shadow:inset 3px 0 0 var(--red); }
 
   /* DJ */
   .pane.right { display:flex; flex-direction:column; overflow:hidden; }
@@ -209,7 +221,7 @@
                 overflow:hidden; }
     .ph, .showname, .prog, .none { padding-left:14px; padding-right:14px; }
     .rows { padding:6px 4px 16px; }
-    .r { grid-template-columns:16px 22px 1fr auto; gap:8px; padding:12px 10px; }
+    .r { grid-template-columns:16px 22px 1fr auto auto; gap:8px; padding:12px 10px; }
     .r .ti { font-size:14px; }
     .r .st { font-size:9px; }
     .eq { margin-left:0; margin-right:0; }
@@ -268,6 +280,7 @@
           <button id="prev" disabled title="previous track">⏮</button>
           <button id="back" disabled title="back 15 seconds">↺ 15</button>
           <button id="next" disabled title="next">⏭</button>
+          <button class="like" id="likeNow" disabled title="like this track">&#9825;</button>
           <button id="eqBtn" disabled>EQ</button>
           <button id="share" disabled><span id="shareLbl">Share</span></button>
           <canvas id="viz" width="76" height="26"></canvas>
@@ -319,7 +332,7 @@
 
 <script>
 const S = { channel:null, channels:[], msgs:[], mode:"radio", status:"idle",
-            histScope:"channel", audio:new Audio(), show:null, idx:-1 };
+            histScope:"channel", audio:new Audio(), show:null, idx:-1, np:null };
 S.audio.preload = "none";
 S.audio.crossOrigin = "anonymous";   // archive.org sends ACAO:* — keeps the Web Audio graph untainted
 
@@ -405,6 +418,19 @@ async function loadChannels() {
 }
 function renderStations() {
   const w = $("stations"); w.innerHTML = "";
+
+  const favs = loadFavs();
+  const fb = document.createElement("button");
+  const fon = S.channel === FAVS;
+  fb.className = "dep favs" + (fon ? " on" : "");
+  fb.innerHTML =
+    `<span class="mk">${fon && S.status === "playing" ? "\u25B6" : "\u2665"}</span>` +
+    `<span><span class="nm">Favourites</span>` +
+    `<div class="sub">${favs.length ? favs.length + (favs.length === 1 ? " liked track" : " liked tracks") + " \u00B7 on demand"
+                                    : "Like a track and it lands here."}</div></span>`;
+  fb.onclick = () => { if (favs.length) tuneFavs(); };
+  w.appendChild(fb);
+
   for (const ch of S.channels) {
     const dead = ch.playable === false, on = S.channel === ch.slug;
     const b = document.createElement("button");
@@ -438,6 +464,12 @@ function setMode(m) {
   $("back").disabled = live || !S.channel;
   $("next").title = live ? "skip — moves the station for everyone" : "next track";
   if (!S.channel) return;
+  if (S.channel === FAVS) {
+    if (live) { S.mode = "ondemand";                 // there is no broadcast of your own list
+      $("mRadio").classList.remove("on"); $("mOnDemand").classList.add("on");
+      $("scrubWrap").style.display = ""; }
+    return loadShow(true);
+  }
   if (live) tune(S.channel); else loadShow(true);
 }
 $("mRadio").onclick    = () => setMode("radio");
@@ -456,9 +488,27 @@ function tune(slug) {
   loadChannels(); refresh();
 }
 
+function tuneFavs() {
+  S.channel = FAVS;
+  $("play").disabled = false; $("eqBtn").disabled = false; $("share").disabled = true;
+  if (S.mode !== "ondemand") setMode("ondemand");   // a personal list cannot be broadcast
+  else loadShow(true);
+  renderStations();
+}
+
 /* ── on demand ───────────────────────────────────────────────────────────── */
 async function loadShow(autoplay) {
   if (!S.channel) return;
+  if (S.channel === FAVS) {
+    const favs = loadFavs();
+    S.show = { channel: FAVS, album: `Favourites \u00B7 ${favs.length} track${favs.length===1?"":"s"}`,
+               tracks: favs, playing: -1 };
+    if (!favs.length) { $("showWrap").style.display = "none"; return; }
+    S.idx = Math.min(Math.max(0, S.idx), favs.length - 1);
+    renderSetlist();
+    if (autoplay) playIdx(S.idx < 0 ? 0 : S.idx);
+    return;
+  }
   try { S.show = await (await fetch(`/api/show?channel=${encodeURIComponent(S.channel)}`)).json(); }
   catch { return; }
   if (!S.show.tracks.length) {
@@ -481,6 +531,7 @@ function playIdx(i) {
   $("byline").innerHTML = `${esc(t.artist)} <span class="sm">· ${esc(t.album)}</span>`;
   $("prev").disabled = i === 0;
   $("next").disabled = i >= S.show.tracks.length - 1;
+  paintLikes();
   renderSetlist();
 }
 $("scrub").oninput = (e) => {
@@ -586,6 +637,48 @@ function drawViz() {
   })();
 }
 
+
+/* ── Favourites ──────────────────────────────────────────────────────────────
+   No auth and no sessions yet, so the browser is the account: likes live in
+   localStorage. A favourite stores the track's URL, not just its name — a liked
+   song is worthless if you can't play it back, and the archive.org url is what
+   makes that possible. Favourites are ON DEMAND by nature: you cannot
+   personalise a shared broadcast, but you can absolutely play your own list. */
+const FAVS_KEY = "jam-favs";
+const FAVS = "__favs";                      // the virtual station id
+const loadFavs = () => { try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; } catch { return []; } };
+const saveFavs = (f) => localStorage.setItem(FAVS_KEY, JSON.stringify(f));
+const favKey  = (t) => t && t.url ? t.url : "";
+const isFav   = (t) => !!favKey(t) && loadFavs().some(f => f.url === t.url);
+
+function toggleFav(t) {
+  if (!t || !t.url) return;                 // unplayable — refuse to fake a favourite
+  const favs = loadFavs();
+  const i = favs.findIndex(f => f.url === t.url);
+  if (i >= 0) favs.splice(i, 1);
+  else favs.unshift({ title:t.title, artist:t.artist, album:t.album, url:t.url,
+                      channel: S.channel === FAVS ? (t.channel || "") : S.channel,
+                      addedAt: new Date().toISOString() });
+  saveFavs(favs);
+  paintLikes();
+  renderStations();
+  if (S.channel === FAVS) loadShow(false);  // list changed under us
+}
+
+// the track the transport is currently on, in either mode
+function currentTrack() {
+  if (S.mode === "ondemand" && S.show && S.show.tracks[S.idx]) return S.show.tracks[S.idx];
+  return S.np && S.np.url ? S.np : null;    // radio: nowplaying now carries a url
+}
+function paintLikes() {
+  const t = currentTrack();
+  const b = $("likeNow");
+  b.disabled = !t || !t.url;
+  b.classList.toggle("on", !!t && isFav(t));
+  b.innerHTML = (t && isFav(t)) ? "&#9829;" : "&#9825;";
+}
+$("likeNow").onclick = () => toggleFav(currentTrack());
+
 /* ── the schedule ────────────────────────────────────────────────────────── */
 const where = (pct) => pct<=20 ? "just getting started" : pct>=85 ? "near the end"
                      : pct>=55 ? "past halfway" : "early in the show";
@@ -626,6 +719,8 @@ async function refresh() {
         fetch(`/api/history?channel=${c}&limit=80`).then(r=>r.json()),
       ]);
     } catch { return; }
+    S.np = np;                       // nowplaying carries a url — so it can be Liked
+    paintLikes();
     if (np.title) {
       flapTo(np.title);
       $("byline").innerHTML = `${esc(np.artist)} <span class="sm">· ${esc(np.album)}</span>`;

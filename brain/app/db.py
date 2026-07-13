@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS nowplaying(
   title TEXT DEFAULT '',
   artist TEXT DEFAULT '',
   album TEXT DEFAULT '',
+  url TEXT DEFAULT '',
   updated_at TEXT DEFAULT (datetime('now'))
 );
 """
@@ -59,6 +60,16 @@ def _connect() -> sqlite3.Connection:
 def init() -> None:
     with _lock, _connect() as con:
         con.executescript(SCHEMA)
+        # CREATE TABLE IF NOT EXISTS won't add a column to a table that already
+        # exists, and the live stations have been running for a while. Additive
+        # migrations go here — each one idempotent, each one safe to re-run.
+        for stmt in (
+            "ALTER TABLE nowplaying ADD COLUMN url TEXT DEFAULT ''",
+        ):
+            try:
+                con.execute(stmt)
+            except sqlite3.OperationalError:
+                pass          # already applied
 
 
 def query(sql: str, params: tuple = ()) -> list[dict]:
