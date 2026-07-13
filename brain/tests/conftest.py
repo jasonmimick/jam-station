@@ -29,6 +29,28 @@ METADATA = {
 }
 
 
+PHISHIN_SHOWS = [
+    {"date": "1997-11-17", "venue_name": "McNichols Arena", "tour_name": "Fall Tour 1997",
+     "venue": {"location": "Denver, CO"}, "likes_count": 172, "duration": 8971076,
+     "audio_status": "complete"},
+    {"date": "1999-12-31", "venue_name": "Big Cypress Seminole Indian Reservation",
+     "tour_name": "Big Cypress", "venue": {"location": "Big Cypress, FL"},
+     "likes_count": 313, "duration": 32774349, "audio_status": "complete"},
+]
+
+PHISHIN_SHOW = {
+    "date": "1997-11-17", "venue_name": "McNichols Arena", "likes_count": 172,
+    "tracks": [
+        {"title": "Tweezer", "position": 1, "slug": "tweezer", "duration": 1072274,
+         "mp3_url": "https://phish.in/blob/track1.mp3"},
+        {"title": "Reba", "position": 2, "slug": "reba", "duration": 900000,
+         "mp3_url": "https://phish.in/blob/track2.mp3"},
+        {"title": "No Audio", "position": 3, "slug": "no-audio", "duration": 0,
+         "mp3_url": None},
+    ],
+}
+
+
 def _handler(request: httpx.Request) -> httpx.Response:
     if request.url.path == "/advancedsearch.php":
         return httpx.Response(200, json={"response": {"docs": SEARCH_DOCS}})
@@ -36,6 +58,20 @@ def _handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=METADATA)
     if request.url.path.startswith("/download/"):
         return httpx.Response(200, content=b"\xff\xfb" + b"0" * 64)  # fake mp3 bytes
+    return httpx.Response(404)
+
+
+def _phishin_handler(request: httpx.Request) -> httpx.Response:
+    if request.url.path == "/api/v2/shows":
+        shows = PHISHIN_SHOWS
+        year = request.url.params.get("year")
+        if year:
+            shows = [s for s in shows if s["date"].startswith(year)]
+        return httpx.Response(200, json={"shows": shows, "total_entries": len(shows)})
+    if request.url.path.startswith("/api/v2/shows/"):
+        return httpx.Response(200, json=PHISHIN_SHOW)
+    if request.url.path.startswith("/blob/"):
+        return httpx.Response(200, content=b"\xff\xfb" + b"0" * 64)
     return httpx.Response(404)
 
 
@@ -49,12 +85,18 @@ def app_env(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "data" / "channels.db"))
     monkeypatch.setattr(config, "PREFETCH", False)
 
-    from app.adapters import archive
+    from app.adapters import archive, phishin
     archive.set_client(httpx.Client(transport=httpx.MockTransport(_handler),
                                     base_url="https://archive.org"))
+    phishin.set_client(httpx.Client(transport=httpx.MockTransport(_phishin_handler),
+                                    base_url="https://phish.in"))
 
     from app import db, channels
+    # background top-up threads from a previous test can still hold a
+    # per-channel lock; start each test with a fresh lock table
+    channels._topup_locks.clear()
     db.init()
     channels.ensure_seeded()
     yield
     archive.set_client(None)  # type: ignore[arg-type]
+    phishin.set_client(None)  # type: ignore[arg-type]

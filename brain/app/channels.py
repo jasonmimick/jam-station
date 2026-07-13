@@ -9,7 +9,11 @@ import threading
 import httpx
 
 from . import config, db
-from .adapters import archive, library
+from .adapters import archive, library, phishin
+
+# Sources whose channels enqueue whole shows via adapter.pick_show()/get_show().
+SHOW_ADAPTERS = {"archive": archive, "phishin": phishin}
+STREAMABLE_SOURCES = ("archive", "phishin", "library")
 
 SEED_CHANNELS = [
     {
@@ -29,6 +33,13 @@ SEED_CHANNELS = [
                             "StringCheeseIncident", "WidespreadPanic", "Goose"],
             "min_rating": 4.0,
         },
+    },
+    {
+        "slug": "phish",
+        "name": "Phish",
+        "description": "Phish from phish.in — the most-liked tapes across every era.",
+        "source": "phishin",
+        "query": {"sort": "likes_count:desc", "rows": 100},
     },
     {
         "slug": "fusion",
@@ -73,7 +84,7 @@ def list_channels(streamable_only: bool = False) -> list[dict]:
     out = []
     for r in rows:
         r["query"] = json.loads(r.get("query") or "{}")
-        if streamable_only and r["source"] not in ("archive", "library"):
+        if streamable_only and r["source"] not in STREAMABLE_SOURCES:
             continue
         out.append(r)
     return out
@@ -89,8 +100,8 @@ def get_channel(slug: str) -> dict | None:
 
 
 def create_channel(slug: str, name: str, description: str, source: str, query: dict) -> dict:
-    if source not in ("archive", "library"):
-        raise ValueError("source must be 'archive' or 'library'")
+    if source not in STREAMABLE_SOURCES:
+        raise ValueError(f"source must be one of {', '.join(STREAMABLE_SOURCES)}")
     db.execute(
         "INSERT OR REPLACE INTO channels(slug, name, description, source, query) "
         "VALUES(?,?,?,?,?)",
@@ -106,8 +117,8 @@ def _recent_show_ids(slug: str) -> set[str]:
     return {r["show_id"] for r in rows if r.get("show_id")}
 
 
-def _enqueue_archive(ch: dict) -> int:
-    show = archive.pick_show(ch["query"], _recent_show_ids(ch["slug"]))
+def _enqueue_show_channel(ch: dict, adapter) -> int:
+    show = adapter.pick_show(ch["query"], _recent_show_ids(ch["slug"]))
     if not show or not show["tracks"]:
         return 0
     album = f"{show['title']}"
@@ -144,8 +155,8 @@ def ensure_queue(slug: str) -> int:
             "SELECT COUNT(*) AS n FROM queue WHERE channel=? AND served=0", (slug,))[0]["n"]
         if unserved >= config.MIN_QUEUE:
             return 0
-        if ch["source"] == "archive":
-            return _enqueue_archive(ch)
+        if ch["source"] in SHOW_ADAPTERS:
+            return _enqueue_show_channel(ch, SHOW_ADAPTERS[ch["source"]])
         if ch["source"] == "library":
             return _enqueue_library(ch)
         return 0
@@ -261,14 +272,28 @@ def queue_status(slug: str) -> dict:
 
 
 def clear_queue(slug: str) -> int:
+    rows = db.query(
+        "SELECT local_path FROM queue WHERE channel=? AND served=0 "
+        "AND local_path IS NOT NULL", (slug,))
+    for row in rows:  # don't orphan prefetched files in the cache volume
+        try:
+            os.unlink(row["local_path"])
+        except OSError:
+            pass
     return db.execute("DELETE FROM queue WHERE channel=? AND served=0", (slug,))
 
 
 def enqueue_show(slug: str, identifier: str, clear: bool = False) -> int:
-    """Queue a specific Archive show on a channel (DJ tool)."""
+    """Queue a specific show on a channel (DJ tool).
+
+    The channel's source picks the adapter: archive identifiers for archive
+    channels, YYYY-MM-DD dates for phishin channels.
+    """
+    ch = get_channel(slug)
+    adapter = SHOW_ADAPTERS.get((ch or {}).get("source", ""), archive)
     if clear:
         clear_queue(slug)
-    show = archive.get_show(identifier)
+    show = adapter.get_show(identifier)
     if not show["tracks"]:
         return 0
     db.executemany(

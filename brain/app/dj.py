@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
+import re
 
 import anthropic
 
 from . import channels, config
-from .adapters import archive
+from .adapters import archive, phishin
 
 SYSTEM = """You are the DJ of jam-station, a personal internet radio station running on the
 owner's Mac mini. You are warm, knowledgeable, and a little bit of a music nerd — deep
@@ -17,13 +18,17 @@ The station has channels. Each channel is a saved recipe the station keeps toppe
   bands only: Grateful Dead, Umphrey's McGee, moe., Disco Biscuits, String Cheese, Widespread
   Panic, Goose, Medeski Martin & Wood, and many more). Community avg_rating lets you pick the
   GOOD tapes — use min_rating and 'avg_rating desc' sorting. Note: Phish is NOT on the
-  Archive (band restricts it), and commercial 70s fusion (Weather Report, Mahavishnu, RTF)
-  is not there either — that lives in the owner's own library channel.
+  Archive (band restricts it) — Phish lives on its own "phishin" source. Commercial 70s
+  fusion (Weather Report, Mahavishnu, RTF) isn't on the Archive either — that lives in
+  the owner's own library channel.
+- source "phishin": pulls Phish shows from phish.in. Community likes_count is the quality
+  signal. Show identifiers are dates (YYYY-MM-DD). The seeded "phish" channel plays the
+  most-liked tapes; make era channels with a year in the query.
 - source "library": plays the owner's own files from the music/ folder.
 
-What you can do with tools: search the Archive, inspect a show's tracklist, queue a specific
-show on a channel (optionally clearing what's queued), check what's playing/upcoming, skip
-the current track, and create brand-new channels from a vibe.
+What you can do with tools: search the Archive and phish.in, inspect a show's tracklist,
+queue a specific show on a channel (optionally clearing what's queued), check what's
+playing/upcoming, skip the current track, and create brand-new channels from a vibe.
 
 Ground rules:
 - When asked to play something, actually queue it with tools — don't just talk about it.
@@ -57,8 +62,23 @@ TOOLS = [
         },
     },
     {
+        "name": "search_phish_shows",
+        "description": ("Search phish.in for Phish shows. Returns date (the identifier), "
+                        "venue, tour, likes_count. Sort 'likes_count:desc' finds the "
+                        "classics; add year to browse an era."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "year": {"type": "integer"},
+                "rows": {"type": "integer", "default": 20},
+                "sort": {"type": "string", "default": "likes_count:desc"},
+            },
+        },
+    },
+    {
         "name": "get_show",
-        "description": "Get one show's metadata and tracklist by archive.org identifier.",
+        "description": ("Get one show's metadata and tracklist. Pass an archive.org "
+                        "identifier, or a YYYY-MM-DD date for a Phish show."),
         "input_schema": {
             "type": "object",
             "properties": {"identifier": {"type": "string"}},
@@ -67,8 +87,10 @@ TOOLS = [
     },
     {
         "name": "play_show",
-        "description": ("Queue a specific Archive show on a channel. clear=true plays it next "
-                        "(clears the unplayed queue), clear=false appends."),
+        "description": ("Queue a specific show on a channel. Use an archive.org identifier "
+                        "for archive channels, a YYYY-MM-DD date for phishin channels. "
+                        "clear=true plays it next (clears the unplayed queue), "
+                        "clear=false appends."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -100,15 +122,16 @@ TOOLS = [
     {
         "name": "create_channel",
         "description": ("Create (or overwrite) a channel. source 'archive' query supports: "
-                        "collections[], year, min_rating, free_text, sort. source 'library' "
-                        "query supports: folders[] (subfolders of music/)."),
+                        "collections[], year, min_rating, free_text, sort. source 'phishin' "
+                        "query supports: year, sort, rows. source 'library' query supports: "
+                        "folders[] (subfolders of music/)."),
         "input_schema": {
             "type": "object",
             "properties": {
                 "slug": {"type": "string", "description": "url-safe, e.g. 'spring90'"},
                 "name": {"type": "string"},
                 "description": {"type": "string"},
-                "source": {"type": "string", "enum": ["archive", "library"]},
+                "source": {"type": "string", "enum": ["archive", "phishin", "library"]},
                 "query": {"type": "object"},
             },
             "required": ["slug", "name", "source", "query"],
@@ -130,8 +153,16 @@ def _run_tool(name: str, args: dict) -> dict | list:
             sort=args.get("sort", "avg_rating desc"),
         )
         return docs[:25]
+    if name == "search_phish_shows":
+        return phishin.search_shows(
+            year=args.get("year"),
+            rows=args.get("rows", 20),
+            sort=args.get("sort", "likes_count:desc"),
+        )[:25]
     if name == "get_show":
-        show = archive.get_show(args["identifier"])
+        ident = args["identifier"]
+        adapter = phishin if re.fullmatch(r"\d{4}-\d{2}-\d{2}", ident) else archive
+        show = adapter.get_show(ident)
         show["tracks"] = show["tracks"][:40]
         return show
     if name == "play_show":
