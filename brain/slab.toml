@@ -4,6 +4,7 @@ name = "jam-brain"
 type = "service"
 port = 8080
 volumes = ["data:/data"]
+postgres = true   # members + sessions are coming; they need a real DB, and backups
 secrets = ["ANTHROPIC_API_KEY"]   # set with: slab secret set jam-brain ANTHROPIC_API_KEY=...
 
 [env]

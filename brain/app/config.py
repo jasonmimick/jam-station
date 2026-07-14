@@ -18,3 +18,7 @@ AUDIO_EXTENSIONS = (".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".wav")
 # Where icecast lives — the same origin the /stream proxy uses. This is the only
 # honest source of "what is on air", because the queue runs ahead of the encoder.
 ICECAST_ORIGIN = os.environ.get("ICECAST_ORIGIN", "http://jam-icecast:8000")
+
+# slab injects this when `postgres = true` in slab.toml (shared slab-postgres,
+# per-app database). Members and sessions are coming, and they need a real DB.
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://slab:slab@localhost:20432/slab_jam_brain")

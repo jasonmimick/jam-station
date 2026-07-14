@@ -164,8 +164,8 @@ def _lock_for(slug: str) -> threading.Lock:
 def ensure_seeded() -> None:
     for ch in SEED_CHANNELS:
         db.execute(
-            "INSERT OR IGNORE INTO channels(slug, name, description, source, query) "
-            "VALUES(?,?,?,?,?)",
+            "INSERT INTO channels(slug, name, description, source, query) "
+            "VALUES(?,?,?,?,?) ON CONFLICT (slug) DO NOTHING",
             (ch["slug"], ch["name"], ch["description"], ch["source"],
              json.dumps(ch["query"])),
         )
@@ -200,8 +200,9 @@ def create_channel(slug: str, name: str, description: str, source: str, query: d
     if source not in STREAMABLE_SOURCES:
         raise ValueError(f"source must be one of {', '.join(STREAMABLE_SOURCES)}")
     db.execute(
-        "INSERT OR REPLACE INTO channels(slug, name, description, source, query) "
-        "VALUES(?,?,?,?,?)",
+        "INSERT INTO channels(slug, name, description, source, query) VALUES(?,?,?,?,?) "
+        "ON CONFLICT (slug) DO UPDATE SET name=excluded.name, "
+        "description=excluded.description, source=excluded.source, query=excluded.query",
         (slug, name, description, source, json.dumps(query)),
     )
     return get_channel(slug)  # type: ignore[return-value]
@@ -371,7 +372,7 @@ def set_nowplaying(slug: str, title: str, artist: str, album: str, url: str = ""
             url = rows[0]["url"] or ""
     db.execute(
         "INSERT INTO nowplaying(channel, title, artist, album, url, updated_at) "
-        "VALUES(?,?,?,?,?,datetime('now')) "
+        "VALUES(?,?,?,?,?,to_char(now() AT TIME ZONE 'utc','YYYY-MM-DD HH24:MI:SS')) "
         "ON CONFLICT(channel) DO UPDATE SET title=excluded.title, artist=excluded.artist, "
         "album=excluded.album, url=excluded.url, updated_at=excluded.updated_at",
         (slug, title, artist, album, url))
