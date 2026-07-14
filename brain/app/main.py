@@ -33,6 +33,20 @@ def index():
     return FileResponse(os.path.join(STATIC, "index.html"))
 
 
+# Installable on a phone: a home-screen icon and a full-screen player instead of
+# browser chrome. He listens walking around; this makes it feel like an app.
+@app.get("/manifest.json")
+def manifest():
+    return FileResponse(os.path.join(STATIC, "manifest.json"), media_type="application/manifest+json")
+
+
+@app.get("/icon-{size}.png")
+def icon(size: str):
+    if size not in ("192", "512"):
+        raise HTTPException(404, "no such icon")
+    return FileResponse(os.path.join(STATIC, f"icon-{size}.png"), media_type="image/png")
+
+
 # Same-origin proxy for the icecast mounts. icecast is a separate slab app on
 # its own origin, so a browser served this page can't reach it directly (esp.
 # through a tunnel). Streaming it through here means one hostname serves both

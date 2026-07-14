@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>jam-station</title>
 <link rel="icon" href='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 64"%3E%3Cpath d="M0 6 h56 l20 26 -20 26 H0 z" fill="%23FFD200"/%3E%3Cpath d="M36 14 L22 38 h9 l-3 16 L50 32 H38 z" fill="%2312120C"/%3E%3C/svg%3E'>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FFD200">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="jam">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <style>
   /* ── Schiphol: signage yellow, black, white. Legible across a room. ─────── */
   /* Primary triad, De Stijl by way of Schiphol — and each colour has a job:
@@ -262,7 +268,7 @@
     </div>
     <div class="hdr-r">
       <div class="status" id="status"><span class="dot"></span><span id="statusTxt">TUNED OUT</span></div>
-      <button class="icon" id="theme" title="light / dark">☾</button>
+      <button class="icon" id="theme" title="light / dark" aria-label="switch light or dark theme">☾</button>
     </div>
   </header>
 
@@ -279,13 +285,13 @@
       <div class="board">
         <div class="lbl" id="boardLbl">Now playing</div>
         <div class="flaps" id="flaps"></div>
-        <div class="byline" id="byline"><span class="empty">Select a station →</span></div>
+        <div class="byline" id="byline" aria-live="polite"><span class="empty">Select a station →</span></div>
 
         <div class="tx">
-          <button class="go" id="play" disabled>▶</button>
-          <button id="prev" disabled title="previous track">⏮</button>
-          <button id="back" disabled title="back 15 seconds">↺ 15</button>
-          <button id="next" disabled title="next">⏭</button>
+          <button class="go" id="play" disabled aria-label="play or pause">▶</button>
+          <button id="prev" disabled title="previous track" aria-label="previous track">⏮</button>
+          <button id="back" disabled title="back 15 seconds" aria-label="back 15 seconds">↺ 15</button>
+          <button id="next" disabled title="next" aria-label="next track">⏭</button>
           <button class="like" id="likeNow" disabled title="like this track">&#9825;</button>
           <button id="eqBtn" disabled>EQ</button>
           <button id="share" disabled><span id="shareLbl">Share</span></button>

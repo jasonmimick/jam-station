@@ -254,8 +254,21 @@ def next_track(slug: str) -> str:
 # ---------------------------------------------------------------- now playing
 
 def set_nowplaying(slug: str, title: str, artist: str, album: str, url: str = "") -> None:
-    # The url rides along so the UI can Like the track that's on air right now —
-    # a favourite is only worth anything if it can be played back later.
+    """Record what's on air. The url rides along so the UI can Like the current
+    track — a favourite is worthless if it can't be played back.
+
+    Two callers race here: next_track() knows the url, but liquidsoap then POSTs
+    /api/nowplaying for the same track WITHOUT one when it actually starts
+    playing. Last write wins, so the POST would silently blank the url and make
+    the on-air track unlikeable. Rather than depend on ordering, resolve a
+    missing url from the queue row that fed this track.
+    """
+    if not url:
+        rows = db.query(
+            "SELECT url FROM queue WHERE channel=? AND title=? AND served=1 "
+            "ORDER BY id DESC LIMIT 1", (slug, title))
+        if rows:
+            url = rows[0]["url"] or ""
     db.execute(
         "INSERT INTO nowplaying(channel, title, artist, album, url, updated_at) "
         "VALUES(?,?,?,?,?,datetime('now')) "
