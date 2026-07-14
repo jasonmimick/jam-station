@@ -226,13 +226,87 @@ a number.**
 
 ---
 
-## 6. Open questions
+## 6. Resolved: carriage IS relay (Jason, 2026-07-13)
 
-- **Does an affiliate need the center at all,** or can two sovereign stations carry each other
-  directly? (Direct is purer; a center makes discovery and membership easier. Probably: direct
-  carriage, optional center for discovery.)
-- **Who pays for listener bandwidth** when dad's station is carried on *your* center and *your*
-  listeners hear it? (Today: you. At scale: this is exactly why the center is the thing worth
-  charging for.)
-- **Can a station be carried without being *listed*?** (Unlisted stations — you can tune in
-  with a link but it isn't on the dial. Probably yes; it's how people will actually share.)
+| # | question | **answer** |
+|---|---|---|
+| 1 | Does an affiliate need the center? | **No — direct carriage.** Two sovereign stations carry each other. Same paradigm as radio/TV. A center is *optional*, for discovery. |
+| 2 | Who pays for listener bandwidth? | **A node can ask its upstream "bigger market" to host it** — i.e. a **relay**. See below; this turned out to be the whole business. |
+| 3 | Can a station be carried without being listed? | **Yes.** Unlisted stations are reachable by link. It's how people actually share. |
+
+### "Ask the upstream bigger market to host" = **a relay**, and icecast does this natively
+
+Not an analogy. **icecast has built-in relaying** — one server pulls a mount from another and
+re-serves it. First-class feature, designed for precisely this.
+
+And it maps exactly onto radio, which is why the instinct found it:
+
+> **"Carrying" a station means rebroadcasting it on YOUR transmitter.**
+
+So **carriage = relay**, literally. Three visibility levels fall out:
+
+| level | who serves the listener | who pays |
+|---|---|---|
+| **Listed** | dad's origin — we just point at him | **dad** |
+| **Carried (relayed)** | **your transmitter** re-broadcasts him | **you** |
+| **Unlisted** | reachable by link only, not on the dial | dad |
+
+**Dad's upload stays flat at 256 kbps no matter how many people listen** — he pushes *once*,
+upstream. **The relay fans out.** That asymmetry is now a product, not a footnote.
+
+### The business, and it's demand-driven
+
+> *"Your station's getting popular — your home connection can't serve 50 people.
+> Let us relay it: $X/mo."*
+
+Better than selling storage in every way:
+
+- **unambiguous** — you're a CDN, not a librarian
+- **demand-driven** — they ask when they *need* it; no arm-twisting
+- **aligned** — you only earn when their station succeeds
+- **a natural ladder** — 3 listeners: their own uplink. 50: needs a relay. 5,000: several.
+
+### ⭐ And the economics enforce the legal boundary — for free
+
+A **private** station (dad's CDs, family) is **family-scale by definition.** His home uplink
+serves three listeners without noticing. **It never needs a relay.**
+
+So if a station ever *does* need a relay, **that is a signal it has stopped being private.**
+And you only relay **public-lane** content (Archive / CC / original), because **relaying is
+retransmission** — clean content, clean relay.
+
+> ### You cannot accidentally scale a private station.
+> Scaling requires asking us for a relay, and **we don't relay records.**
+
+The licensing wall stops being a rule someone has to remember and becomes **a thing the
+architecture simply will not do.** That is the strongest form of this design, and it came out
+of a bandwidth question.
+
+---
+
+## 7. THE DIAL — a separate epic (not designed)
+
+**We don't have one.** What exists today is a **list** (DEPARTURES). A *dial* implies:
+
+- **discovery** — what's out there?
+- **scanning** — turning the knob, serendipity
+- **other people's stations** — the network, not just yours
+
+**The dial is the UI *of the network*.** It's what "listed" means, it's where unlisted
+stations are absent, and it's how carriage becomes visible to a human.
+
+**Named here, deliberately not designed.** It's its own epic and it deserves the same
+treatment these docs got.
+
+---
+
+## 8. Still open
+
+- **Does the relay carry metadata and listener counts back to the origin?** (Dad should still
+  see *"Jason is listening"* even when Jason hears him via a relay. icecast relays forward
+  metadata; listener attribution across a relay needs thought — and it's the emotional core,
+  so it can't be an afterthought.)
+- **Multi-hop relays?** (A relay of a relay. Radio does this. Probably fine, but latency and
+  metadata fidelity compound.)
+- **Who owns the audience?** If your center relays dad's station, do *his* listeners appear to
+  him, or to you? (Radio's answer: the affiliate owns its local audience. Probably the same.)
