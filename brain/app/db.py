@@ -80,6 +80,60 @@ CREATE TABLE IF NOT EXISTS nowplaying(
   url TEXT DEFAULT '',
   updated_at TEXT DEFAULT ({_NOW})
 );
+
+-- ── auth. Email is the identity: no usernames, no passwords, no OAuth. ───────
+-- Tokens and codes are stored HASHED: a database leak must not be a pile of
+-- working logins. Sessions are server-side because the whole point is revocation.
+CREATE TABLE IF NOT EXISTS members(
+  email TEXT PRIMARY KEY,             -- lowercased. THE identity.
+  name TEXT DEFAULT '',
+  role TEXT DEFAULT 'member',         -- owner | member
+  status TEXT DEFAULT 'pending',      -- pending | approved | revoked
+  note TEXT DEFAULT '',               -- "I'm your cousin Bob"
+  created_at TEXT DEFAULT ({_NOW}),
+  approved_at TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS invites(
+  token_hash TEXT PRIMARY KEY,
+  label TEXT DEFAULT '',
+  created_at TEXT DEFAULT ({_NOW}),
+  revoked_at TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS approvals(
+  token_hash TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS login_attempts(
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL,
+  token_hash TEXT NOT NULL,           -- the magic link
+  code_hash TEXT NOT NULL,            -- the typeable code (any device)
+  expires_at TEXT NOT NULL,
+  used_at TEXT DEFAULT '',
+  attempts INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_login_email ON login_attempts(email, id);
+CREATE TABLE IF NOT EXISTS sessions(
+  id_hash TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  created_at TEXT DEFAULT ({_NOW}),
+  expires_at TEXT NOT NULL,
+  last_seen TEXT DEFAULT '',
+  user_agent TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email);
+CREATE TABLE IF NOT EXISTS favourites(
+  email TEXT NOT NULL,
+  url TEXT NOT NULL,                  -- a favourite is worthless if you can't play it back
+  title TEXT DEFAULT '',
+  artist TEXT DEFAULT '',
+  album TEXT DEFAULT '',
+  channel TEXT DEFAULT '',
+  added_at TEXT DEFAULT ({_NOW}),
+  PRIMARY KEY (email, url)
+);
 """
 
 # Additive, idempotent, safe to re-run. Postgres does ADD COLUMN IF NOT EXISTS natively, so
