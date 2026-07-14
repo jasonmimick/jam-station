@@ -4,6 +4,26 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Next up
 
+- [ ] **RENAME. "jam-station" is wrong and we know it.** The product outgrew the name: it
+      plays ragtime, klezmer, gamelan, newgrass, funk. "Jam" boxes it into one genre it left
+      behind. Deferred 2026-07-13 (needs more thought), but **it gets more expensive every
+      day** — repo, slab app names, DNS, the Cloudflare tunnel, docs, UI, PWA icons.
+
+      Checked and **available on `.fm`** (the radio TLD):
+      | name | for | against |
+      |---|---|---|
+      | **shortwave.fm** ⭐ | the romance of a faint voice arriving from far away — *literally the product* (dad in Florida, heard in NY). Genre-proof, which is exactly why "jam" broke. | a known email startup is called Shortwave (different category) |
+      | callsign.fm | a station's identity; maps onto subdomains (`dad.callsign.fm`) AND the auth work | an **identity-verification company** is called Callsign — awkward while building identity |
+      | longwave.fm | same romance, cleaner mindshare | less culturally loaded |
+      | kindred.fm | names the *relationship*, not the tech — lovely for a family network | abandons the radio metaphor the UI is built on |
+      | airwave.fm | clean, obvious | generic |
+
+      Taken: skywave.* · relay.fm (a podcast network) · dial.fm · onair.fm · tuner.fm ·
+      wavelength.fm · transmit.fm · tower.fm · static.fm
+
+      Recommendation: **Shortwave**. The vocabulary keeps working — *on air · call sign ·
+      affiliate · carriage · relay · the dial.*
+
 - [ ] **Mini-player for laptops.** A compact, always-visible player so the station
       keeps running while you work in another tab/window. Options, roughly in order
       of effort:
