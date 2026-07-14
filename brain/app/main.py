@@ -57,8 +57,12 @@ ICECAST_ORIGIN = os.environ.get("ICECAST_ORIGIN", "http://jam-icecast:8000")
 
 
 def _is_member(request: Request) -> bool:
-    m = auth.whoami(request.cookies.get(config.SESSION_COOKIE))
-    return bool(m and m.get("status") == "approved")
+    # whoami() ALREADY refuses anyone not approved — pending, revoked, expired all come back
+    # None. Re-checking a `status` field here looked careful and was the opposite: whoami
+    # doesn't return one, so the check read undefined, compared false, and welded the door
+    # shut for everybody. The gate looked locked and was actually broken. One owner of the
+    # invariant; ask it, don't re-derive it.
+    return auth.whoami(request.cookies.get(config.SESSION_COOKIE)) is not None
 
 
 @app.get("/music/{path:path}")
