@@ -40,3 +40,15 @@ SMTP_HOST    = os.environ.get("SMTP_HOST", "")
 SMTP_PORT    = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER    = os.environ.get("SMTP_USER", "")
 SMTP_PASS    = os.environ.get("SMTP_PASS", "")
+
+# liquidsoap is a DIFFERENT container and slab volumes are per-app, so it can never
+# see the brain's /music files. It CAN fetch a URL — that's how archive.org already
+# works. So the brain serves the library over HTTP and hands out urls, not paths.
+INTERNAL_URL = os.environ.get("INTERNAL_URL", "http://jam-brain:8080")
+
+# Private stations must still be FETCHABLE by liquidsoap, which cannot sign in. It gets a
+# keyed url; the browser uses its session cookie. Derived from AUTH_SECRET so there is no
+# second secret to rotate, and it never leaves the docker network (it lives only in the
+# annotate: URI, never in the queue rows the UI sees).
+import hashlib as _h
+MUSIC_KEY = _h.sha256((AUTH_SECRET + "|music").encode()).hexdigest()[:32]

@@ -60,6 +60,16 @@ SEED_CHANNELS = [
         "query": {"folders": ["fusion"]},
     },
     {
+        # Points at the whole cds/ folder, not one album — so `rip-cd.sh` is the entire
+        # workflow. Put a disc in the drive, run it, and the record is on the air. No
+        # station to create, no config to touch. The station grows with the shelf.
+        "slug": "disc-changer",
+        "name": "The Disc Changer",
+        "description": "Everything ripped from the CD drive on the mac-mini. Members only.",
+        "source": "library",
+        "query": {"folders": ["cds"]},
+    },
+    {
         "slug": "latenight-jazz",
         "name": "Late Night Jazz",
         "description": "Jam-jazz from the Archive: MMW, Jacob Fred, Garaj Mahal.",
@@ -181,6 +191,10 @@ def list_channels(streamable_only: bool = False) -> list[dict]:
         # so the UI can say so, and keep it out of liquidsoap's mount list.
         r["playable"] = (r["source"] != "library"
                          or bool(library.pick_tracks(r["query"], count=1)))
+        # PRIVATE IS DERIVED, NOT DECLARED. Your own CDs are your own CDs; everything else
+        # is a public rebroadcast of something already public. Making it a toggle would mean
+        # one wrong click puts a ripped album on the open internet — so there is no toggle.
+        r["private"] = (r["source"] == "library")
         if streamable_only and (r["source"] not in STREAMABLE_SOURCES or not r["playable"]):
             continue
         out.append(r)
@@ -314,11 +328,19 @@ def _cleanup_cache(slug: str, keep_last: int = 2) -> None:
 def _annotate(row: dict) -> str:
     def esc(s: str) -> str:
         return str(s or "").replace("\\", "").replace('"', "'")
-    src = row["url"]
+    src = _for_liquidsoap(row["url"])          # /music/... -> an absolute url it can fetch
     if row.get("local_path") and os.path.exists(row["local_path"]):
         src = row["local_path"]
     return (f'annotate:title="{esc(row["title"])}",artist="{esc(row["artist"])}",'
             f'album="{esc(row["album"])}":{src}')
+
+
+def _for_liquidsoap(url: str) -> str:
+    """The queue stores library tracks as same-origin urls ("/music/x.mp3") so the BROWSER
+    can play them directly (on-demand + the Web Audio EQ). liquidsoap is a different
+    container and needs an absolute one it can actually fetch."""
+    return (f"{config.INTERNAL_URL}{url}?k={config.MUSIC_KEY}"
+            if url.startswith("/music/") else url)
 
 
 def next_track(slug: str) -> str:

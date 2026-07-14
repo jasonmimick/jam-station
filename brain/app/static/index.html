@@ -88,6 +88,9 @@
   .dep.dead .nm, .dep.dead .sub { color:var(--faint); }
   .chip { font-size:9px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
     border:1px solid var(--line); border-radius:2px; padding:1px 5px; color:var(--faint); margin-left:6px; }
+  /* yellow is the board's signage colour: a private station is one the board knows about
+     and the public dial doesn't. Not a warning — a piece of station furniture. */
+  .chip.priv { color:var(--yellow); border-color:var(--yellow); opacity:.75; }
 
   /* the split-flap board — the signature */
   .board { padding:24px 24px 20px; border-bottom:1px solid var(--line); }
@@ -491,6 +494,9 @@ function renderStations() {
     b.innerHTML =
       `<span class="mk">${on && S.status === "playing" ? "▶" : on ? "■" : "○"}</span>` +
       `<span><span class="nm">${esc(ch.name)}</span>` +
+      // Only members ever receive a private station in /api/channels, so the badge isn't a
+      // gate — it's a reassurance. It says: this one is off the public dial.
+      (ch.private ? `<span class="chip priv">Members</span>` : "") +
       (dead ? `<span class="chip">No music</span>` : "") +
       `<div class="sub">${dead
         ? "Needs your own files — nothing in music/" + esc((ch.query.folders || [])[0] || "")

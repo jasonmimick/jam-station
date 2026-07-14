@@ -56,8 +56,38 @@ def icon(size: str):
 ICECAST_ORIGIN = os.environ.get("ICECAST_ORIGIN", "http://jam-icecast:8000")
 
 
+def _is_member(request: Request) -> bool:
+    m = auth.whoami(request.cookies.get(config.SESSION_COOKIE))
+    return bool(m and m.get("status") == "approved")
+
+
+@app.get("/music/{path:path}")
+def music(path: str, request: Request, k: str = ""):
+    """Serve the record library over HTTP.
+
+    This exists because slab volumes are PER-APP: liquidsoap can never see the brain's
+    /music disk, no matter what we mount. It CAN fetch a url — which is already how every
+    archive.org track reaches it. So the brain becomes the library's origin server, and
+    the same url plays in the browser (same-origin, so the EQ and on-demand work on your
+    own records too). One volume, one owner, no sharing.
+
+    Members only — these are Jason's actual CDs, not a public rebroadcast.
+    """
+    if k != config.MUSIC_KEY and not _is_member(request):
+        raise HTTPException(403, "members only")
+    full = os.path.realpath(os.path.join(config.MUSIC_DIR, path))
+    if not full.startswith(os.path.realpath(config.MUSIC_DIR) + os.sep):
+        raise HTTPException(403, "no")          # ../../etc/passwd
+    if not os.path.isfile(full):
+        raise HTTPException(404, "no such track")
+    return FileResponse(full, media_type="audio/mpeg")   # FileResponse honours Range
+
+
 @app.get("/stream/{slug}")
-async def stream(slug: str):
+async def stream(slug: str, request: Request):
+    ch = channels.get_channel(slug)
+    if ch and ch["source"] == "library" and not _is_member(request):
+        raise HTTPException(403, "members only")
     client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
     try:
         upstream = await client.send(
@@ -86,8 +116,11 @@ async def stream(slug: str):
 # ---------------------------------------------------------------- channels
 
 @app.get("/api/channels")
-def api_channels():
-    return channels.list_channels()
+def api_channels(request: Request):
+    chans = channels.list_channels()
+    if _is_member(request):
+        return chans
+    return [c for c in chans if not c["private"]]   # your CDs aren't on the public dial
 
 
 @app.get("/api/channels.liq", response_class=PlainTextResponse)

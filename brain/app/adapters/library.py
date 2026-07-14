@@ -2,7 +2,7 @@
 
 This is where the 70s fusion lives — music you own/ripped, served straight
 from disk. Liquidsoap mounts the same folder read-only, so queue entries are
-plain file paths.
+urls under /music/, NOT file paths — see config.INTERNAL_URL for why.
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def pick_tracks(cfg: dict, count: int = 25) -> list[dict]:
         if not title:
             artist, title = "", base
         tracks.append({
-            "url": p,
+            "url": "/music/" + os.path.relpath(p, config.MUSIC_DIR),
             "title": title.strip(),
             "artist": artist.strip(),
             "album": os.path.basename(os.path.dirname(p)),
