@@ -110,6 +110,7 @@
     display:inline-flex; align-items:center; justify-content:center; gap:6px; }
   .tx button:hover:not(:disabled) { border-color:var(--blue); color:var(--blue); }
   .tx button:disabled { opacity:.3; cursor:not-allowed; }
+  .tx button.on { border-color:var(--blue); color:var(--blue); }
   .tx button.go { background:var(--yellow); color:var(--on-yellow); border-color:var(--yellow);
     width:54px; height:54px; min-width:54px; padding:0; font-size:16px; }
   .tx button.go.busy { color:transparent; position:relative; }
@@ -293,6 +294,7 @@
           <button id="back" disabled title="back 15 seconds" aria-label="back 15 seconds">↺ 15</button>
           <button id="next" disabled title="next" aria-label="next track">⏭</button>
           <button class="like" id="likeNow" disabled title="like this track">&#9825;</button>
+          <button id="sleepBtn" title="sleep timer" aria-label="sleep timer">☾ <span id="sleepLbl">Sleep</span></button>
           <button id="eqBtn" disabled>EQ</button>
           <button id="share" disabled><span id="shareLbl">Share</span></button>
           <canvas id="viz" width="76" height="26"></canvas>
@@ -585,7 +587,7 @@ $("next").onclick = async () => {
 $("vol").oninput = (e) => { S.audio.volume = e.target.value / 100; };
 $("share").onclick = async () => {
   if (!S.channel) return;
-  const url = `${location.origin}/?station=${S.channel}`;
+  const url = shareUrl();
   try {
     if (navigator.share) return navigator.share({ title:"jam-station", url });
     await navigator.clipboard.writeText(url);
@@ -782,6 +784,51 @@ document.addEventListener("keydown", (e) => {
   else if (k === "arrowdown") { $("vol").value = Math.max(0,   +$("vol").value - 5); $("vol").oninput({target:$("vol")}); }
 });
 
+
+/* ── Sleep timer. It's a radio; you fall asleep to it. ────────────────────── */
+let sleepAt = null, sleepTick = null;
+const SLEEP_STEPS = [15, 30, 45, 60, 90, 0];        // 0 = off
+function setSleep(mins) {
+  clearInterval(sleepTick);
+  if (!mins) { sleepAt = null; $("sleepLbl").textContent = "Sleep"; $("sleepBtn").classList.remove("on"); return; }
+  sleepAt = Date.now() + mins * 60000;
+  $("sleepBtn").classList.add("on");
+  sleepTick = setInterval(() => {
+    const left = sleepAt - Date.now();
+    if (left <= 0) {
+      clearInterval(sleepTick); sleepAt = null;
+      S.userPaused = true;                           // a timer stop is deliberate — don't auto-reconnect
+      fade(() => { S.audio.pause(); S.audio.volume = $("vol").value / 100; });
+      $("sleepLbl").textContent = "Sleep"; $("sleepBtn").classList.remove("on");
+      return;
+    }
+    const m = Math.ceil(left / 60000);
+    $("sleepLbl").textContent = m + "m";
+  }, 1000);
+}
+function fade(done) {                                 // don't cut the music dead
+  const v0 = S.audio.volume, t0 = Date.now();
+  const f = setInterval(() => {
+    const k = Math.min(1, (Date.now() - t0) / 5000);
+    S.audio.volume = v0 * (1 - k);
+    if (k >= 1) { clearInterval(f); done(); }
+  }, 100);
+}
+$("sleepBtn").onclick = () => {
+  const cur = sleepAt ? Math.ceil((sleepAt - Date.now()) / 60000) : 0;
+  const i = SLEEP_STEPS.findIndex(m => m >= cur && m !== 0);
+  setSleep(SLEEP_STEPS[(i + 1) % SLEEP_STEPS.length]);
+};
+
+/* ── Share the moment, not just the station. ─────────────────────────────────
+   "listen to this" almost always means a specific track, so the on-demand share
+   carries the track index and drops the recipient straight on it. */
+function shareUrl() {
+  const base = `${location.origin}/?station=${S.channel}`;
+  return (S.mode === "ondemand" && S.idx >= 0 && S.channel !== FAVS)
+    ? `${base}&mode=ondemand&track=${S.idx}` : base;
+}
+
 /* ── the schedule ────────────────────────────────────────────────────────── */
 const where = (pct) => pct<=20 ? "just getting started" : pct>=85 ? "near the end"
                      : pct>=55 ? "past halfway" : "early in the show";
@@ -902,8 +949,16 @@ buildFlaps(); buildEq();
 $("find").oninput = (e) => { S.filter = e.target.value; renderStations(); };
 
 loadChannels().then(() => {
-  const want = new URLSearchParams(location.search).get("station");
-  if (want && S.channels.some(c => c.slug === want && c.playable !== false)) return tune(want);
+  const qs = new URLSearchParams(location.search);
+  const want = qs.get("station");
+  if (want && S.channels.some(c => c.slug === want && c.playable !== false)) {
+    if (qs.get("mode") === "ondemand") S.mode = "ondemand",
+      $("mRadio").classList.remove("on"), $("mOnDemand").classList.add("on"),
+      $("scrubWrap").style.display = "";
+    const t = parseInt(qs.get("track"), 10);
+    if (S.mode === "ondemand" && !isNaN(t)) { S.idx = t; S.channel = want; return loadShow(true); }
+    return tune(want);
+  }
   // otherwise put him back where he was — a radio you reopen should still be on
   try {
     const last = JSON.parse(localStorage.getItem("jam-last") || "null");

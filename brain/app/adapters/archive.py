@@ -77,6 +77,52 @@ def _track_sort_key(f: dict):
     return (1, 0, f.get("name", ""))
 
 
+# A tape whose tracks are called "goose2018-12-11t01" makes the setlist useless —
+# and the setlist is the whole point of knowing where you are in a show. Plenty of
+# Archive items carry NO per-file title on any format, but do spell the songs out
+# in the item description. Mine it, and only trust it when the count lines up.
+
+_HTML = re.compile(r"<[^>]+>")
+# lines that are clearly not songs: the band, the date, the venue, taper credits
+_NOT_A_SONG = re.compile(
+    r"^\s*$|^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\s*$|"
+    r"(taper|source|lineage|transfer|recorded|mics?|matrix|sbd|aud|set\s*[12ivx]+|encore|disc\s*\d|"
+    r"^\s*(the\s+)?\w+\s+(theater|theatre|arena|hall|club|room|ballroom|amphitheat)\w*)",
+    re.I,
+)
+# "01. Bertha", "1) Bertha", "t01 Bertha" -> "Bertha"
+_LEADING_NUM = re.compile(r"^\s*[\[\(]?\d{1,2}[\]\).:\-]?\s+")
+
+
+def _setlist_from_description(desc: str, n_tracks: int) -> list[str]:
+    if not desc or n_tracks <= 0:
+        return []
+    text = _HTML.sub("\n", desc)
+    text = text.replace("&amp;", "&").replace("&gt;", ">").replace("&nbsp;", " ")
+    songs = []
+    for raw in text.splitlines():
+        line = _LEADING_NUM.sub("", raw.strip(" \t.-–—*"))
+        if not line or len(line) > 90 or _NOT_A_SONG.match(line):
+            continue
+        songs.append(line)
+    # Only believe it if it lines up with the actual files — a mismatched setlist
+    # is worse than an honest "Track 3", because it silently mislabels the music.
+    return songs if len(songs) == n_tracks else []
+
+
+def _title_for(f: dict, name: str, setlist: list[str], i: int) -> str:
+    title = (f.get("title") or "").strip()
+    if title:
+        return title
+    if setlist:
+        return setlist[i]
+    stem = re.sub(r"\.[^.]+$", "", name)
+    # a stem that is just the identifier + track number carries no information
+    if re.fullmatch(r"[a-z0-9._-]*?[dt]?\d{1,3}", stem, re.I) or not re.search(r"[a-z]{3}", stem, re.I):
+        return f"Track {i + 1}"
+    return stem
+
+
 def get_show(identifier: str) -> dict:
     r = client().get(f"{BASE}/metadata/{identifier}")
     r.raise_for_status()
@@ -91,12 +137,14 @@ def get_show(identifier: str) -> dict:
     chosen = vbr or mp3s
     chosen.sort(key=_track_sort_key)
 
+    setlist = _setlist_from_description(meta.get("description", ""), len(chosen))
+
     tracks = []
-    for f in chosen:
+    for i, f in enumerate(chosen):
         name = f.get("name", "")
         tracks.append({
             "name": name,
-            "title": f.get("title") or re.sub(r"\.[^.]+$", "", name),
+            "title": _title_for(f, name, setlist, i),
             "length": f.get("length", ""),
             "url": f"{BASE}/download/{identifier}/{urllib.parse.quote(name)}",
         })
