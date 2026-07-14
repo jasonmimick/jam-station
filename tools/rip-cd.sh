@@ -36,7 +36,9 @@ disc=$(ls -d /Volumes/*/ 2>/dev/null | while read -r v; do
 [ -n "$ALBUM" ]  || { read -rp "album name: " ALBUM; }
 [ -n "$ARTIST" ] || { read -rp "artist: " ARTIST; }
 
-safe() { echo "$1" | tr -cd '[:alnum:] &._-' | sed 's/  */ /g;s/^ *//;s/ *$//'; }
+# Strip what a path can't hold, and nothing else. An allowlist of [:alnum:] would quietly
+# turn "Béla" into "Bla" and "Motörhead" into "Motrhead" — the accents are part of the name.
+safe() { echo "$1" | sed 's#[/\\:*?"<>|]#-#g; s/  */ /g; s/^ *//; s/ *$//'; }
 DIR="$(safe "$ARTIST") - $(safe "$ALBUM")"
 n=$(ls "$disc"*.aiff | wc -l | tr -d ' ')
 
@@ -65,7 +67,7 @@ done
 docker exec "$BRAIN" mkdir -p /music/cds
 docker cp "$stage/$DIR" "$BRAIN:/music/cds/$DIR"
 
-slug=$(echo "$ALBUM" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:] -' | tr ' ' '-' | cut -c1-30)
+slug=$(echo "$ALBUM" | tr "[:upper:]" "[:lower:]" | sed "s/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//" | cut -c1-30)
 echo
 echo "  ripped. now on the library disk as cds/$DIR"
 echo "  give it a station:"
