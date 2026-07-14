@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import random
+import re
 
 from .. import config
 
@@ -37,14 +38,28 @@ def pick_tracks(cfg: dict, count: int = 25) -> list[dict]:
     tracks = []
     for p in picks:
         base = os.path.splitext(os.path.basename(p))[0]
-        # cheap "Artist - Title" split; navidrome does real tagging for browsing
+        folder = os.path.basename(os.path.dirname(p))
+
+        # The path IS the tags. Two conventions, and a ripped CD writes the second:
+        #   "Artist - Title.mp3"                     (a loose file in a folder)
+        #   "Artist - Album/07 Title.mp3"            (what rip-cd.sh lays down)
+        # Without the second, every ripped track came out titled "04 Bonnie & Slyde" with
+        # no artist at all — a track number in the title and a blank name on the board.
         artist, _, title = base.partition(" - ")
         if not title:
             artist, title = "", base
+        album = folder
+        m = re.match(r"^(\d{1,2})[ .\-_]+(.+)$", title)   # strip a leading track number
+        if m and not artist:
+            title = m.group(2)
+            a, sep, alb = folder.partition(" - ")          # "Artist - Album"
+            if sep:
+                artist, album = a.strip(), alb.strip()
+
         tracks.append({
             "url": "/music/" + os.path.relpath(p, config.MUSIC_DIR),
             "title": title.strip(),
             "artist": artist.strip(),
-            "album": os.path.basename(os.path.dirname(p)),
+            "album": album.strip(),
         })
     return tracks
