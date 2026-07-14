@@ -61,6 +61,9 @@
   .pane + .pane { border-left:1px solid var(--line); }
   .pane.left, .pane.right { background:var(--panel); }
   .ph { padding:16px 16px 10px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+  #find { margin-left:auto; width:110px; padding:5px 8px; font-size:12px; border:1px solid var(--line);
+    border-radius:2px; background:var(--board); color:var(--ink); outline:none; }
+  #find:focus { border-color:var(--blue); }
 
   /* departures = stations */
   .dep { display:grid; grid-template-columns:14px minmax(0,1fr); gap:12px; align-items:center; width:100%;
@@ -265,7 +268,10 @@
 
   <div class="app">
     <div class="pane left">
-      <div class="ph"><span class="lbl">Departures</span></div>
+      <div class="ph"><span class="lbl">Departures</span>
+        <input id="find" type="text" placeholder="Filter" autocomplete="off"
+               aria-label="filter stations">
+      </div>
       <div id="stations"></div>
     </div>
 
@@ -331,8 +337,8 @@
   </div>
 
 <script>
-const S = { channel:null, channels:[], msgs:[], mode:"radio", status:"idle",
-            histScope:"channel", audio:new Audio(), show:null, idx:-1, np:null };
+const S = { channel:null, channels:[], msgs:[], mode:"radio", status:"idle", filter:"",
+            histScope:"channel", audio:new Audio(), show:null, idx:-1, np:null, userPaused:false };
 S.audio.preload = "none";
 S.audio.crossOrigin = "anonymous";   // archive.org sends ACAO:* — keeps the Web Audio graph untainted
 
@@ -390,6 +396,9 @@ function setStatus(kind) {
   $("play").classList.toggle("busy", kind === "buffering");
   $("play").textContent = playing ? "❚❚" : "▶";
   $("status").className = "status" + (playing ? " live" : kind === "buffering" ? " buf" : "");
+  updateMediaSession(currentTrack());
+  const t = currentTrack();
+  document.title = (playing && t && t.title) ? `${t.title} — jam-station` : "jam-station";
   $("statusTxt").textContent =
     kind === "buffering" ? "TUNING IN…"
     : playing ? (S.mode === "radio" ? "ON AIR · " + chName(S.channel).toUpperCase() : "PLAYING")
@@ -431,7 +440,11 @@ function renderStations() {
   fb.onclick = () => { if (favs.length) tuneFavs(); };
   w.appendChild(fb);
 
-  for (const ch of S.channels) {
+  const q = (S.filter || "").trim().toLowerCase();
+  const shown = q
+    ? S.channels.filter(c => (c.name + " " + (c.description || "")).toLowerCase().includes(q))
+    : S.channels;
+  for (const ch of shown) {
     const dead = ch.playable === false, on = S.channel === ch.slug;
     const b = document.createElement("button");
     b.className = "dep" + (on ? " on" : "") + (dead ? " dead" : "");
@@ -478,6 +491,7 @@ $("mOnDemand").onclick = () => setMode("ondemand");
 /* ── radio ───────────────────────────────────────────────────────────────── */
 function tune(slug) {
   S.channel = slug;
+  localStorage.setItem("jam-last", JSON.stringify({ channel: slug, mode: S.mode }));
   $("play").disabled = false; $("next").disabled = false;
   $("eqBtn").disabled = false; $("share").disabled = false;
   if (S.mode === "ondemand") { loadShow(true); return; }
@@ -545,11 +559,12 @@ $("prev").onclick = () => playIdx(S.idx - 1);
 $("play").onclick = () => {
   if (!S.channel) return;
   if (S.audio.paused) {
+    S.userPaused = false;
     setStatus("buffering");
     if (S.mode === "radio") S.audio.src = `/stream/${S.channel}`;   // rejoin the live edge
     initAudio();
     S.audio.play().catch(() => setStatus("error"));
-  } else S.audio.pause();
+  } else { S.userPaused = true; S.audio.pause(); }
 };
 $("next").onclick = async () => {
   if (!S.channel) return;
@@ -679,6 +694,88 @@ function paintLikes() {
 }
 $("likeNow").onclick = () => toggleFav(currentTrack());
 
+
+/* ── Lock screen, headphones, and the car. ───────────────────────────────────
+   He listens walking around a city with the phone in his pocket. Without this
+   the screen locks and the audio becomes a thing you cannot control without
+   pulling the phone out and unlocking it. MediaSession puts the track on the
+   lock screen and wires the headphone/AirPods buttons to the real transport. */
+let artCache = null;
+function artwork() {
+  if (artCache) return artCache;
+  const c = document.createElement("canvas"); c.width = c.height = 512;
+  const x = c.getContext("2d");
+  x.fillStyle = "#FFD200"; x.fillRect(0, 0, 512, 512);
+  x.fillStyle = "#12120C";
+  x.beginPath();                                   // the bolt from the gate mark
+  x.moveTo(300, 90); x.lineTo(190, 285); x.lineTo(262, 285);
+  x.lineTo(238, 420); x.lineTo(345, 235); x.lineTo(268, 235);
+  x.closePath(); x.fill();
+  artCache = c.toDataURL("image/png");
+  return artCache;
+}
+function updateMediaSession(t) {
+  if (!("mediaSession" in navigator)) return;
+  const ms = navigator.mediaSession;
+  if (t && t.title) {
+    ms.metadata = new MediaMetadata({
+      title: t.title, artist: t.artist || "", album: t.album || "jam-station",
+      artwork: [{ src: artwork(), sizes: "512x512", type: "image/png" }],
+    });
+  }
+  ms.playbackState = S.status === "playing" ? "playing" : "paused";
+  const set = (a, fn) => { try { ms.setActionHandler(a, fn); } catch {} };
+  set("play",  () => { S.userPaused = false; $("play").click(); });
+  set("pause", () => { S.userPaused = true;  S.audio.pause(); });
+  set("nexttrack", () => $("next").click());
+  set("previoustrack", () => { if (S.mode === "ondemand") $("prev").click(); });
+  // seeking only means something when there is something to seek in
+  set("seekbackward", S.mode === "ondemand" ? (e) => {
+    S.audio.currentTime = Math.max(0, S.audio.currentTime - (e.seekOffset || 15)); } : null);
+  set("seekforward", S.mode === "ondemand" ? (e) => {
+    S.audio.currentTime = Math.min(S.audio.duration || 0, S.audio.currentTime + (e.seekOffset || 30)); } : null);
+}
+
+/* ── The stream WILL drop. He is walking between cell towers. ────────────────
+   A live icecast stream that errors is dead — the element will not retry. So we
+   retry, with backoff, and only when the drop wasn't him hitting pause. */
+let retries = 0, reconnectTimer = null;
+function scheduleReconnect() {
+  if (S.mode !== "radio" || !S.channel || S.channel === FAVS || S.userPaused) return;
+  clearTimeout(reconnectTimer);
+  const wait = Math.min(20000, 800 * Math.pow(2, retries++));
+  setStatus("error");
+  reconnectTimer = setTimeout(() => {
+    if (S.userPaused) return;
+    S.audio.src = `/stream/${S.channel}?r=${Date.now()}`;   // bust any cached dead body
+    S.audio.play().catch(() => scheduleReconnect());
+  }, wait);
+}
+S.audio.addEventListener("error", scheduleReconnect);
+S.audio.addEventListener("playing", () => { retries = 0; clearTimeout(reconnectTimer); });
+// the browser suspends audio in a backgrounded tab; when he comes back, rejoin live
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (S.mode === "radio" && S.channel && S.channel !== FAVS && !S.userPaused && S.audio.paused) {
+    S.audio.src = `/stream/${S.channel}?r=${Date.now()}`;
+    S.audio.play().catch(() => {});
+  }
+});
+
+/* ── Keyboard, for when it's on a desk ──────────────────────────────────── */
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea")) return;
+  const k = e.key.toLowerCase();
+  if (k === " ")      { e.preventDefault(); $("play").click(); }
+  else if (k === "l") { toggleFav(currentTrack()); }
+  else if (k === "n") { $("next").click(); }
+  else if (k === "p") { if (!$("prev").disabled) $("prev").click(); }
+  else if (k === "arrowleft"  && S.mode === "ondemand") S.audio.currentTime = Math.max(0, S.audio.currentTime - 15);
+  else if (k === "arrowright" && S.mode === "ondemand") S.audio.currentTime += 30;
+  else if (k === "arrowup")   { $("vol").value = Math.min(100, +$("vol").value + 5); $("vol").oninput({target:$("vol")}); }
+  else if (k === "arrowdown") { $("vol").value = Math.max(0,   +$("vol").value - 5); $("vol").oninput({target:$("vol")}); }
+});
+
 /* ── the schedule ────────────────────────────────────────────────────────── */
 const where = (pct) => pct<=20 ? "just getting started" : pct>=85 ? "near the end"
                      : pct>=55 ? "past halfway" : "early in the show";
@@ -796,9 +893,20 @@ $("form").onsubmit = async (e) => {
 };
 
 buildFlaps(); buildEq();
+$("find").oninput = (e) => { S.filter = e.target.value; renderStations(); };
+
 loadChannels().then(() => {
   const want = new URLSearchParams(location.search).get("station");
-  if (want && S.channels.some(c => c.slug === want && c.playable !== false)) tune(want);
+  if (want && S.channels.some(c => c.slug === want && c.playable !== false)) return tune(want);
+  // otherwise put him back where he was — a radio you reopen should still be on
+  try {
+    const last = JSON.parse(localStorage.getItem("jam-last") || "null");
+    if (last && last.channel === FAVS && loadFavs().length) return tuneFavs();
+    if (last && S.channels.some(c => c.slug === last.channel && c.playable !== false)) {
+      if (last.mode === "ondemand") setMode("ondemand");
+      tune(last.channel);
+    }
+  } catch {}
 });
 </script>
 </body>
