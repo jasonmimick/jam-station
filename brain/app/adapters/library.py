@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import random
 import re
+from urllib.parse import quote
 
 from .. import config
 
@@ -57,7 +58,12 @@ def pick_tracks(cfg: dict, count: int = 25) -> list[dict]:
                 artist, album = a.strip(), alb.strip()
 
         tracks.append({
-            "url": "/music/" + os.path.relpath(p, config.MUSIC_DIR),
+            # PERCENT-ENCODE. "Béla Fleck and the Flecktones - UFO Tofu/09 Life Without
+            # Elvis.mp3" is a perfectly good FILENAME and an illegal URL — a url cannot
+            # hold a raw space. Browsers paper over it by encoding on the way out;
+            # liquidsoap does not, and it's the one that has to fetch this. quote() leaves
+            # "/" alone, so the path shape survives.
+            "url": "/music/" + quote(os.path.relpath(p, config.MUSIC_DIR)),
             "title": title.strip(),
             "artist": artist.strip(),
             "album": album.strip(),
