@@ -9,4 +9,5 @@ ICECAST_SOURCE_PASSWORD = "changeme-source"  # must match jam-radio's; override 
 ICECAST_ADMIN_PASSWORD = "changeme-admin"
 ICECAST_RELAY_PASSWORD = "changeme-relay"
 ICECAST_ADMIN_USERNAME = "admin"
-ICECAST_MAX_SOURCES = "10"
+ICECAST_MAX_SOURCES = "50"   # one source per station. 10 silently 403d the
+                             # 11th mount onward the moment the DJ made stations.
