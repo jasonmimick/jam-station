@@ -25,7 +25,7 @@ esac; done
 
 BRAIN=${BRAIN:-slab-jam-brain}
 API=${API:-http://jam-brain.localhost:8080}
-BITRATE=${BITRATE:-256k}
+BITRATE=${BITRATE:-256}          # kbps, plain number: lame wants 256, ffmpeg wants 256k
 
 disc=$(ls -d /Volumes/*/ 2>/dev/null | while read -r v; do
          compgen -G "$v*.aiff" >/dev/null && echo "$v" && break; done)
@@ -39,11 +39,29 @@ disc=$(ls -d /Volumes/*/ 2>/dev/null | while read -r v; do
 # Strip what a path can't hold, and nothing else. An allowlist of [:alnum:] would quietly
 # turn "Béla" into "Bla" and "Motörhead" into "Motrhead" — the accents are part of the name.
 safe() { echo "$1" | sed 's#[/\\:*?"<>|]#-#g; s/  */ /g; s/^ *//; s/ *$//'; }
+
+# LAME, NOT FFMPEG. The mini's ffmpeg is a broken x86 Homebrew build (a dangling
+# libunistring dylib), and reaching for `brew reinstall` would be treating a 300MB
+# dependency as load-bearing when it isn't: lame reads AIFF natively and IS the encoder
+# ffmpeg was shelling out to (libmp3lame). One less thing that can rot. ffmpeg stays as a
+# fallback for boxes that have it and not lame.
+encode() {           # in out title track total
+  if command -v lame >/dev/null; then
+    lame --quiet -b "$BITRATE" --add-id3v2 \
+      --tt "$3" --ta "$ARTIST" --tl "$ALBUM" --tn "$4/$5" "$1" "$2"
+  elif command -v ffmpeg >/dev/null; then
+    ffmpeg -loglevel error -y -i "$1" -vn -codec:a libmp3lame -b:a "${BITRATE}k" \
+      -metadata title="$3" -metadata artist="$ARTIST" -metadata album="$ALBUM" \
+      -metadata track="$4/$5" "$2"
+  else
+    echo "need lame (brew install lame) or ffmpeg" >&2; exit 1
+  fi
+}
 DIR="$(safe "$ARTIST") - $(safe "$ALBUM")"
 n=$(ls "$disc"*.aiff | wc -l | tr -d ' ')
 
 echo "  disc    $disc"
-echo "  ripping $n tracks -> music/cds/$DIR  @ $BITRATE"
+echo "  ripping $n tracks -> music/cds/$DIR  @ ${BITRATE}k"
 [ "$YES" = 1 ] || { read -rp "go? [y/N] " r; [ "$r" = y ] || exit 1; }
 
 stage=$(mktemp -d); trap 'rm -rf "$stage"' EXIT
@@ -56,10 +74,7 @@ for f in "$disc"*.aiff; do
   i=$((i+1))
   out=$(printf '%02d %s.mp3' "$num" "$(safe "$title")")
   printf '  [%2d/%2d] %s\n' "$i" "$n" "$title"
-  # -vn: some discs carry a CD-TEXT cover; we want audio only.
-  ffmpeg -loglevel error -y -i "$f" -vn -codec:a libmp3lame -b:a "$BITRATE" \
-    -metadata title="$title" -metadata artist="$ARTIST" -metadata album="$ALBUM" \
-    -metadata track="$num/$n" "$stage/$DIR/$out"
+  encode "$f" "$stage/$DIR/$out" "$title" "$num" "$n"
 done
 
 # The volume is inside Docker Desktop's VM — there is no host path to write to. docker cp is
