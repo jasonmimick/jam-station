@@ -10,11 +10,11 @@ import time
 import httpx
 
 from . import config, db
-from .adapters import archive, library, phishin
+from .adapters import archive, cc, library, phishin
 
 # Sources whose channels enqueue whole shows via adapter.pick_show()/get_show().
-SHOW_ADAPTERS = {"archive": archive, "phishin": phishin}
-STREAMABLE_SOURCES = ("archive", "phishin", "library")
+SHOW_ADAPTERS = {"archive": archive, "phishin": phishin, "cc": cc}
+STREAMABLE_SOURCES = ("archive", "phishin", "library", "cc")
 
 SEED_CHANNELS = [
     {
@@ -129,9 +129,12 @@ def _enqueue_show_channel(ch: dict, adapter) -> int:
         return 0
     album = f"{show['title']}"
     artist = str(show.get("creator") or "")
+    lic = str(show.get("licenseurl") or "")
+    comm = 1 if show.get("commercial_ok", True) else 0
     db.executemany(
-        "INSERT INTO queue(channel, url, title, artist, album, show_id) VALUES(?,?,?,?,?,?)",
-        [(ch["slug"], t["url"], t["title"], artist, album, show["identifier"])
+        "INSERT INTO queue(channel, url, title, artist, album, show_id, licenseurl, "
+        "commercial_ok) VALUES(?,?,?,?,?,?,?,?)",
+        [(ch["slug"], t["url"], t["title"], artist, album, show["identifier"], lic, comm)
          for t in show["tracks"]],
     )
     return len(show["tracks"])

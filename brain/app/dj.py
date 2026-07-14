@@ -7,7 +7,7 @@ import re
 import anthropic
 
 from . import channels, config
-from .adapters import archive, library, phishin
+from .adapters import archive, cc, library, phishin
 
 SYSTEM = """You are the DJ of jam-station, a personal internet radio station running on the
 owner's Mac mini. You are warm, knowledgeable, and a little bit of a music nerd — deep
@@ -25,6 +25,13 @@ The station has channels. Each channel is a saved recipe the station keeps toppe
   signal. Show identifiers are dates (YYYY-MM-DD). The seeded "phish" channel plays the
   most-liked tapes; make era channels with a year in the query.
 - source "library": plays the owner's own files from the music/ folder.
+- source "cc": Creative-Commons / public-domain audio from the WHOLE Internet Archive —
+  NOT the Live Music Archive. This is how you play anything outside the jam-band world:
+  ragtime, danish folk, gamelan, klezmer, chiptune, field recordings, classical. The query
+  is FREE TEXT, a vibe: {"search": "ragtime"} or {"search": "danish folk"}. No collection
+  ids to guess. Every item carries an explicit licence — if it has no licence, we don't
+  play it. Use search_cc first to hear what's actually there; quality varies wildly out
+  here, because anyone can upload to the Archive.
 
 What you can do with tools: search the Archive and phish.in, inspect a show's tracklist,
 queue a specific show on a channel (optionally clearing what's queued), check what's
@@ -36,12 +43,27 @@ Ground rules:
 - New channels go on air by themselves within ~30 seconds — the radio engine notices the
   new channel and reloads to open its mount. NEVER tell the owner to restart anything.
 - ALWAYS prove a channel can play before you create it: run search_shows / search_phish_shows
-  and confirm it returns tapes. Archive collection names are exact and unobvious (Goose is
-  'GooseBand'). create_channel will reject a query that returns nothing.
-- Only those three sources exist, and you cannot conjure music that isn't in one of them.
-  The Archive is taper-friendly LIVE tapes (jam bands) — studio/commercial catalogue is NOT
-  there: bebop (Parker, Dizzy), Weather Report, Mahavishnu, most jazz and rock records. That
-  music can only come from the owner's own library, and only if the files actually exist.
+  / search_cc first. create_channel will reject a query that returns NOTHING.
+- BUT "it returned rows" IS NOT "it returned the RIGHT MUSIC". This is the mistake to avoid:
+  * READ the titles and creators that come back. Judge them. Are they actually the thing the
+    owner asked for? A search for "danish folk" that returns a CC mixtape and a noise album
+    is a FAILED search, even though it returned rows.
+  * If the results are not the genre/artist asked for, DO NOT create the channel. Say plainly
+    that the music isn't there, and offer the nearest thing you CAN actually play.
+  * Get the RIGHT one. Archive collection names are exact and unobvious — Goose is
+    'GooseBand', not 'Goose'. A plausible-looking name that returns the wrong band (or an
+    empty set) is worse than admitting you couldn't find it. Verify with a search, look at
+    what came back, and confirm it is the artist you meant.
+  * Never name a channel after music it does not actually contain.
+- Only those four sources exist, and you cannot conjure music that isn't in one of them.
+  The Archive ("archive") is taper-friendly LIVE tapes (jam bands). Commercial studio
+  catalogue — bebop (Parker, Dizzy), Weather Report, Mahavishnu, most jazz and rock records —
+  is NOT there and never will be. For anything outside jam bands, reach for "cc" first: it
+  covers ragtime, folk, world, classical and more, but only material that is explicitly
+  licensed to be shared. Famous commercial recordings will NOT be in "cc" either — you'll
+  find CC performances and public-domain material, not the hit records. Say so plainly
+  rather than promising a name you can't deliver. Anything else needs the owner's own
+  library, and only if the files actually exist.
   A "library" channel with no files is a silent, dead channel, and create_channel will
   refuse to make one. If a request can't be sourced, SAY SO plainly and offer the closest
   thing you can actually play. Never claim a channel is ready when it has no music.
@@ -83,6 +105,21 @@ TOOLS = [
                 "rows": {"type": "integer", "default": 20},
                 "sort": {"type": "string", "default": "likes_count:desc"},
             },
+        },
+    },
+    {
+        "name": "search_cc",
+        "description": ("Search Creative-Commons / public-domain audio across the whole "
+                        "Internet Archive by free text (a vibe: 'ragtime', 'danish folk', "
+                        "'klezmer'). Returns identifier, title, creator, licence. Use this "
+                        "BEFORE creating a 'cc' channel so you know it returns real music."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "search": {"type": "string", "description": "free text, e.g. 'ragtime piano'"},
+                "rows": {"type": "integer", "default": 20},
+            },
+            "required": ["search"],
         },
     },
     {
@@ -134,14 +171,15 @@ TOOLS = [
         "description": ("Create (or overwrite) a channel. source 'archive' query supports: "
                         "collections[], year, min_rating, free_text, sort. source 'phishin' "
                         "query supports: year, sort, rows. source 'library' query supports: "
-                        "folders[] (subfolders of music/)."),
+                        "folders[] (subfolders of music/). source 'cc' query supports: "
+                        "search (FREE TEXT — a vibe like 'ragtime' or 'danish folk'), year."),
         "input_schema": {
             "type": "object",
             "properties": {
                 "slug": {"type": "string", "description": "url-safe, e.g. 'spring90'"},
                 "name": {"type": "string"},
                 "description": {"type": "string"},
-                "source": {"type": "string", "enum": ["archive", "phishin", "library"]},
+                "source": {"type": "string", "enum": ["archive", "phishin", "library", "cc"]},
                 "query": {"type": "object"},
             },
             "required": ["slug", "name", "source", "query"],
@@ -163,6 +201,12 @@ def _run_tool(name: str, args: dict) -> dict | list:
             sort=args.get("sort", "avg_rating desc"),
         )
         return docs[:25]
+    if name == "search_cc":
+        return [
+            {"identifier": d.get("identifier"), "title": d.get("title"),
+             "creator": d.get("creator"), "licence": d.get("licenseurl")}
+            for d in cc.search_items(search=args["search"], rows=args.get("rows", 20))
+        ][:20]
     if name == "search_phish_shows":
         return phishin.search_shows(
             year=args.get("year"),
@@ -203,6 +247,12 @@ def _run_tool(name: str, args: dict) -> dict | list:
                              "probably wrong (e.g. Goose is 'GooseBand', not 'Goose'). Run "
                              "search_shows to find a query that actually returns tapes, then "
                              "try again. Do NOT claim the channel is ready."}
+        if source == "cc" and not cc.search_items(
+                search=query.get("search") or query.get("free_text"), rows=1):
+            return {"error": "that Creative-Commons search returns nothing. Try search_cc "
+                             "with different words. Remember: only explicitly-licensed audio "
+                             "is playable, so famous commercial recordings will never appear "
+                             "here. Do NOT claim the channel is ready."}
         if source == "phishin" and not phishin.search_shows(
                 year=query.get("year"), rows=1, sort=query.get("sort", "likes_count:desc")):
             return {"error": "that phish.in query returns no shows. Check it with "

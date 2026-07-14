@@ -65,6 +65,11 @@ def init() -> None:
         # migrations go here — each one idempotent, each one safe to re-run.
         for stmt in (
             "ALTER TABLE nowplaying ADD COLUMN url TEXT DEFAULT ''",
+            # ~25% of Creative Commons audio is NonCommercial-only. Record the licence on
+            # every track NOW, so the day there's a paid tier, filtering it out is a WHERE
+            # clause instead of re-crawling the whole catalogue.
+            "ALTER TABLE queue ADD COLUMN licenseurl TEXT DEFAULT ''",
+            "ALTER TABLE queue ADD COLUMN commercial_ok INTEGER DEFAULT 1",
         ):
             try:
                 con.execute(stmt)
