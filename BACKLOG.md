@@ -21,6 +21,12 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
       Taken: skywave.* · relay.fm (a podcast network) · dial.fm · onair.fm · tuner.fm ·
       wavelength.fm · transmit.fm · tower.fm · static.fm
 
+      **Jason floated "uberjam" (2026-07-14, half asleep).** Recorded, with two honest
+      objections: (1) it KEEPS "jam" — which is the precise thing we said was broken, since
+      the station now plays ragtime, klezmer and gamelan; (2) *Überjam* is a John Scofield
+      album (2002) — a great record and very on-brand for the jam-jazz world, but it's
+      someone else's title and would be a permanent asterisk. Worth revisiting awake.
+
       Recommendation: **Shortwave**. The vocabulary keeps working — *on air · call sign ·
       affiliate · carriage · relay · the dial.*
 
