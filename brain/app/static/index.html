@@ -511,6 +511,8 @@ function tune(slug) {
 }
 
 function tuneFavs() {
+  if (S.channel !== FAVS) S.idx = 0;   // arriving from a station: start at the newest
+                                       // like (unshift puts it at 0), never a stale index
   S.channel = FAVS;
   $("play").disabled = false; $("eqBtn").disabled = false; $("share").disabled = true;
   if (S.mode !== "ondemand") setMode("ondemand");   // a personal list cannot be broadcast

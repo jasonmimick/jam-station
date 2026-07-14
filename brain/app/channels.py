@@ -5,6 +5,7 @@ import json
 import os
 import socket
 import threading
+import time
 
 import httpx
 
@@ -140,9 +141,14 @@ def _enqueue_library(ch: dict) -> int:
     tracks = library.pick_tracks(ch["query"])
     if not tracks:
         return 0
+    # Each top-up is its own "show" so On Demand can reconstruct it. An empty
+    # show_id is FALSY, and api_show treats falsy as "nothing loaded" — which
+    # would leave every library channel permanently empty in On Demand, the
+    # moment there are actually files to play.
+    show_id = f"library-{ch['slug']}-{int(time.time())}"
     db.executemany(
         "INSERT INTO queue(channel, url, title, artist, album, show_id) VALUES(?,?,?,?,?,?)",
-        [(ch["slug"], t["url"], t["title"], t["artist"], t["album"], "") for t in tracks],
+        [(ch["slug"], t["url"], t["title"], t["artist"], t["album"], show_id) for t in tracks],
     )
     return len(tracks)
 
