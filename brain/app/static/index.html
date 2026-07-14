@@ -269,6 +269,7 @@
     </div>
     <div class="hdr-r">
       <div class="status" id="status"><span class="dot"></span><span id="statusTxt">TUNED OUT</span></div>
+      <button class="icon" id="who" title="sign in" aria-label="sign in">☺</button>
       <button class="icon" id="theme" title="light / dark" aria-label="switch light or dark theme">☾</button>
     </div>
   </header>
@@ -341,6 +342,37 @@
         <input type="text" id="input" placeholder='"a hot ’77 Dead show"' autocomplete="off">
         <button type="submit">Send</button>
       </form>
+    </div>
+  </div>
+
+  <div id="auth" style="display:none;position:fixed;inset:0;background:#000a;z-index:99;
+       align-items:center;justify-content:center;padding:24px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:2px;
+         padding:22px;max-width:380px;width:100%">
+      <div class="lbl" style="margin-bottom:12px">Sign in</div>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">
+        You don't need an account to listen. Sign in and your <b>favourites follow you</b>
+        across devices.</p>
+      <div id="authStep1">
+        <input id="authEmail" type="email" placeholder="you@example.com"
+               style="width:100%;padding:11px;margin-bottom:10px">
+        <button id="authSend" style="width:100%;padding:12px;border:0;border-radius:2px;
+                background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
+                letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Email me a code</button>
+      </div>
+      <div id="authStep2" style="display:none">
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">
+          Check your email. Click the link, <b>or type the code here</b> — the code works on
+          <i>this</i> device even if you opened the email somewhere else.</p>
+        <input id="authCode" placeholder="8-character code" autocapitalize="characters"
+               style="width:100%;padding:11px;margin-bottom:10px;letter-spacing:.2em;text-transform:uppercase">
+        <button id="authGo" style="width:100%;padding:12px;border:0;border-radius:2px;
+                background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
+                letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Sign in</button>
+      </div>
+      <p id="authMsg" style="font-size:12.5px;margin:12px 0 0"></p>
+      <button id="authClose" style="width:100%;margin-top:10px;padding:9px;background:transparent;
+              border:1px solid var(--line);color:var(--muted);border-radius:2px;font:inherit;cursor:pointer">Close</button>
     </div>
   </div>
 
@@ -685,6 +717,15 @@ function toggleFav(t) {
                       channel: S.channel === FAVS ? (t.channel || "") : S.channel,
                       addedAt: new Date().toISOString() });
   saveFavs(favs);
+  if (S.user) {                                  // signed in: it follows you to your phone
+    const gone = i >= 0;
+    fetch(gone ? "/api/favourites/remove" : "/api/favourites/add", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(gone ? { url: t.url }
+                                : { url:t.url, title:t.title, artist:t.artist,
+                                    album:t.album, channel:S.channel }),
+    }).catch(() => {});
+  }
   paintLikes();
   renderStations();
   if (S.channel === FAVS) loadShow(false);  // list changed under us
@@ -949,7 +990,76 @@ $("form").onsubmit = async (e) => {
   } catch (err) { think.remove(); addMsg("static on the line — " + err, "dj"); }
 };
 
+
+/* ── Identity. ENHANCES, NEVER GATES — nobody signs in to listen to the radio. ──
+   Signed out: favourites live in localStorage, exactly as before.
+   Signed in : they live on the server and FOLLOW YOU across devices.
+   On first sign-in the local list is MERGED into the account, never overwritten —
+   your phone and your laptop have different lists, and losing either would mean the
+   first thing this feature ever did was delete your music. */
+S.user = null;
+
+async function loadMe() {
+  try { S.user = (await (await fetch("/api/me")).json()).user; } catch { S.user = null; }
+  $("who").textContent = S.user ? "●" : "☺";
+  $("who").title = S.user ? `Signed in as ${S.user.email} — click to sign out` : "sign in";
+  if (S.user) await pullFavs();
+  renderStations();
+}
+
+async function pullFavs() {
+  // merge whatever this browser has into the account, then adopt the account's list
+  try {
+    const r = await fetch("/api/favourites/sync", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ local: loadFavs() }),
+    });
+    if (r.ok) saveFavs((await r.json()).favourites || []);
+  } catch {}
+}
+
+$("who").onclick = async () => {
+  if (S.user) {
+    await fetch("/api/auth/signout", { method: "POST" });
+    S.user = null;
+    await loadMe();
+    return;
+  }
+  $("auth").style.display = "flex";
+  $("authStep1").style.display = ""; $("authStep2").style.display = "none";
+  $("authMsg").textContent = "";
+};
+$("authClose").onclick = () => { $("auth").style.display = "none"; };
+
+$("authSend").onclick = async () => {
+  const email = $("authEmail").value.trim();
+  if (!email) return;
+  await fetch("/api/auth/login", { method: "POST", headers: {"Content-Type":"application/json"},
+                                   body: JSON.stringify({ email }) });
+  // deliberately the same answer whether or not they're a member — this must not become a
+  // way to discover who has access
+  $("authStep1").style.display = "none";
+  $("authStep2").style.display = "";
+  $("authMsg").style.color = "var(--muted)";
+  $("authMsg").textContent = "If that address has access, an email is on its way.";
+};
+
+$("authGo").onclick = async () => {
+  const email = $("authEmail").value.trim(), code = $("authCode").value.trim();
+  const r = await fetch("/api/auth/code", { method: "POST",
+    headers: {"Content-Type":"application/json"}, body: JSON.stringify({ email, code }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    $("authMsg").style.color = "var(--red)";
+    $("authMsg").textContent = d.detail || "That didn't work.";
+    return;
+  }
+  $("auth").style.display = "none";
+  await loadMe();
+};
+
 buildFlaps(); buildEq();
+loadMe();
 $("find").oninput = (e) => { S.filter = e.target.value; renderStations(); };
 
 loadChannels().then(() => {
