@@ -283,9 +283,64 @@ def set_nowplaying(slug: str, title: str, artist: str, album: str, url: str = ""
         (slug, title, artist, album, url))
 
 
+_ICE_TTL = 2.0
+_ice_cache: dict = {"at": 0.0, "mounts": {}}
+_ice_lock = threading.Lock()
+
+
+def _icecast_on_air() -> dict[str, str]:
+    """What icecast is ACTUALLY transmitting, per mount.
+
+    This is the only honest answer to "what's playing". The queue is NOT:
+    liquidsoap PREFETCHES the next request while the current track is still on
+    air, so /api/next — and the nowplaying it writes — runs a whole track ahead
+    of the broadcast. icecast sets a mount's metadata when the track reaches the
+    encoder, which is precisely what listeners are hearing.
+
+    Cached briefly; the UI polls this every few seconds and icecast shouldn't wear it.
+    """
+    with _ice_lock:
+        if time.time() - _ice_cache["at"] < _ICE_TTL:
+            return _ice_cache["mounts"]
+    mounts: dict[str, str] = {}
+    try:
+        r = httpx.get(f"{config.ICECAST_ORIGIN}/status-json.xsl", timeout=3)
+        src = r.json().get("icestats", {}).get("source", [])
+        src = src if isinstance(src, list) else [src]
+        for s in src:
+            mount = str(s.get("listenurl", "")).rsplit("/", 1)[-1]
+            if mount:
+                mounts[mount] = str(s.get("title") or "")
+    except Exception:
+        pass                                    # icecast down: fall back to the table
+    with _ice_lock:
+        _ice_cache.update(at=time.time(), mounts=mounts)
+    return mounts
+
+
 def get_nowplaying(slug: str) -> dict:
     rows = db.query("SELECT * FROM nowplaying WHERE channel=?", (slug,))
-    return rows[0] if rows else {"channel": slug, "title": "", "artist": "", "album": "", "url": ""}
+    fallback = rows[0] if rows else {
+        "channel": slug, "title": "", "artist": "", "album": "", "url": ""}
+
+    on_air = _icecast_on_air().get(slug, "")
+    if not on_air:
+        return fallback
+
+    # icecast gives one flat string ("Artist - Title"), and titles can contain
+    # dashes — so don't split it. Match it against the tracks we recently served
+    # on this channel and take the row whose title actually appears in it. That
+    # gives back the structured record (artist, album, url) the UI needs, and the
+    # url is what makes the on-air track Likeable.
+    recent = db.query(
+        "SELECT title, artist, album, url FROM queue WHERE channel=? AND served=1 "
+        "ORDER BY id DESC LIMIT 12", (slug,))
+    for row in recent:
+        t = (row["title"] or "").strip()
+        if t and t.lower() in on_air.lower():
+            return {"channel": slug, "title": t, "artist": row["artist"],
+                    "album": row["album"], "url": row["url"] or ""}
+    return fallback
 
 
 def queue_status(slug: str) -> dict:

@@ -908,7 +908,9 @@ async function refresh() {
      <span class="st">${S.histScope==="all" ? esc(chName(t.channel)) : esc(ago(t.played_at))}</span></div>`
   ).join("") : `<div class="none">Nothing yet.</div>`;
 }
-setInterval(() => { if (S.mode === "radio") refresh(); }, 10000);
+setInterval(() => { if (S.mode === "radio") refresh(); }, 3000);  // a track change
+  // should land in seconds, not up to 10s later. the brain now reports what icecast
+  // is actually transmitting, so this is cheap and it is the truth.
 $("tabCh").onclick  = () => { S.histScope="channel"; $("tabCh").classList.add("on"); $("tabAll").classList.remove("on"); refresh(); };
 $("tabAll").onclick = () => { S.histScope="all"; $("tabAll").classList.add("on"); $("tabCh").classList.remove("on"); refresh(); };
 

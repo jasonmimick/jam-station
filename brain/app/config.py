@@ -14,3 +14,7 @@ PREFETCH = os.environ.get("PREFETCH", "true").lower() in ("1", "true", "yes")
 MIN_QUEUE = int(os.environ.get("MIN_QUEUE", "4"))
 
 AUDIO_EXTENSIONS = (".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".wav")
+
+# Where icecast lives — the same origin the /stream proxy uses. This is the only
+# honest source of "what is on air", because the queue runs ahead of the encoder.
+ICECAST_ORIGIN = os.environ.get("ICECAST_ORIGIN", "http://jam-icecast:8000")
