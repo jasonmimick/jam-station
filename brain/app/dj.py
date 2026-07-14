@@ -28,10 +28,12 @@ The station has channels. Each channel is a saved recipe the station keeps toppe
 - source "cc": Creative-Commons / public-domain audio from the WHOLE Internet Archive —
   NOT the Live Music Archive. This is how you play anything outside the jam-band world:
   ragtime, danish folk, gamelan, klezmer, chiptune, field recordings, classical. The query
-  is FREE TEXT, a vibe: {"search": "ragtime"} or {"search": "danish folk"}. No collection
-  ids to guess. Every item carries an explicit licence — if it has no licence, we don't
-  play it. Use search_cc first to hear what's actually there; quality varies wildly out
-  here, because anyone can upload to the Archive.
+  Use search_cc with a vibe ("ragtime", "danish folk", "bach") to FIND candidates — then
+  READ what came back, judge it, and create the channel with query.items = [the exact
+  identifiers you actually believe in]. create_channel REFUSES a cc channel without items,
+  and it is right to: a search for "ragtime" returns an ambient album called "Elemental
+  Ragtime", and a search for "bach" returns the piano music of Sorabji. Matching a word is
+  not matching a genre. Every item must carry an explicit licence, or we don't play it.
 
 What you can do with tools: search the Archive and phish.in, inspect a show's tracklist,
 queue a specific show on a channel (optionally clearing what's queued), check what's
@@ -188,6 +190,13 @@ TOOLS = [
 ]
 
 
+def _cc_has_tracks(identifier: str) -> bool:
+    try:
+        return bool(cc.get_show(identifier).get("tracks"))
+    except Exception:
+        return False
+
+
 def _run_tool(name: str, args: dict) -> dict | list:
     if name == "list_channels":
         return channels.list_channels()
@@ -247,12 +256,25 @@ def _run_tool(name: str, args: dict) -> dict | list:
                              "probably wrong (e.g. Goose is 'GooseBand', not 'Goose'). Run "
                              "search_shows to find a query that actually returns tapes, then "
                              "try again. Do NOT claim the channel is ready."}
-        if source == "cc" and not cc.search_items(
-                search=query.get("search") or query.get("free_text"), rows=1):
-            return {"error": "that Creative-Commons search returns nothing. Try search_cc "
-                             "with different words. Remember: only explicitly-licensed audio "
-                             "is playable, so famous commercial recordings will never appear "
-                             "here. Do NOT claim the channel is ready."}
+        if source == "cc":
+            # A free-text cc channel CANNOT be trusted, and we have the scars to prove it: a
+            # search for "ragtime" returned an ambient noise album called "Elemental Ragtime",
+            # and a search for "bach" returned the piano music of SORABJI. The query matched a
+            # word; the music was wrong. Telling the DJ to be careful did not work — so the
+            # tool now refuses. Search to FIND candidates, curate to SHIP them.
+            items = query.get("items") or []
+            if not items:
+                return {"error": "cc channels must be CURATED, not searched. Run search_cc, "
+                                 "READ the titles and creators it returns, decide which ones "
+                                 "are genuinely the music asked for, and pass those exact "
+                                 "identifiers as query.items = [...]. A free-text cc query "
+                                 "matches a WORD, not a GENRE: 'ragtime' returns an ambient "
+                                 "album called 'Elemental Ragtime', and 'bach' returns the "
+                                 "piano music of Sorabji. If nothing you find is actually the "
+                                 "music asked for, say so plainly and create nothing."}
+            if not any(_cc_has_tracks(i) for i in items[:4]):
+                return {"error": "none of those identifiers have playable audio. Check them "
+                                 "with get_show. Do NOT claim the channel is ready."}
         if source == "phishin" and not phishin.search_shows(
                 year=query.get("year"), rows=1, sort=query.get("sort", "likes_count:desc")):
             return {"error": "that phish.in query returns no shows. Check it with "
