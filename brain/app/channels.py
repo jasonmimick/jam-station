@@ -16,29 +16,39 @@ from .adapters import archive, cc, library, phishin
 SHOW_ADAPTERS = {"archive": archive, "phishin": phishin, "cc": cc}
 STREAMABLE_SOURCES = ("archive", "phishin", "library", "cc")
 
+# The stations jam-station ships with. THESE LIVE IN CODE ON PURPOSE.
+#
+# They were originally created by running python against the live container, which meant
+# they existed only in one sqlite file: not versioned, not reviewable in a diff, not
+# reproducible on another node, and gone the moment the volume was. Runtime state is a bad
+# place to keep the product.
+#
+# Collection ids are exact and unobvious (Goose is "GooseBand"), and every one here was
+# verified against the live API before it shipped. The `cc` stations carry a CURATED list of
+# identifiers rather than a free-text search, because matching a word is not matching a
+# genre — a search for "ragtime" cheerfully returns an ambient noise album called
+# "Elemental Ragtime".
+#
+# ensure_seeded() is INSERT OR IGNORE, so these never clobber a channel the DJ created.
 SEED_CHANNELS = [
     {
         "slug": "dead77",
         "name": "Dead '77",
-        "description": "Grateful Dead 1977 — the year everyone argues about, best-rated tapes first.",
+        "description": "Grateful Dead 1977 \u2014 the year everyone argues about, best-rated tapes first.",
         "source": "archive",
         "query": {"collections": ["GratefulDead"], "year": 1977, "min_rating": 4.2},
     },
     {
         "slug": "jam",
         "name": "Jam Bands Live",
-        "description": "Umphrey's, moe., Biscuits, Cheese, Panic, Goose — well-rated live tapes.",
+        "description": "Umphrey's, moe., Biscuits, Cheese, Panic, Goose \u2014 well-rated live tapes.",
         "source": "archive",
-        "query": {
-            "collections": ["UmphreysMcGee", "moe", "DiscoBiscuits",
-                            "StringCheeseIncident", "WidespreadPanic", "Goose"],
-            "min_rating": 4.0,
-        },
+        "query": {"collections": ["UmphreysMcGee", "moe", "DiscoBiscuits", "StringCheeseIncident", "WidespreadPanic", "Goose"], "min_rating": 4.0},
     },
     {
         "slug": "phish",
         "name": "Phish",
-        "description": "Phish from phish.in — the most-liked tapes across every era.",
+        "description": "Phish from phish.in \u2014 the most-liked tapes across every era.",
         "source": "phishin",
         "query": {"sort": "likes_count:desc", "rows": 100},
     },
@@ -54,10 +64,91 @@ SEED_CHANNELS = [
         "name": "Late Night Jazz",
         "description": "Jam-jazz from the Archive: MMW, Jacob Fred, Garaj Mahal.",
         "source": "archive",
-        "query": {
-            "collections": ["MedeskiMartinandWood", "JacobFredJazzOdyssey", "GarajMahal"],
-            "min_rating": 3.5,
-        },
+        "query": {"collections": ["MedeskiMartinandWood", "JacobFredJazzOdyssey", "GarajMahal"], "min_rating": 3.5},
+    },
+    {
+        "slug": "bluegrass",
+        "name": "Bluegrass",
+        "description": "",
+        "source": "archive",
+        "query": {"collections": ["BelaFleckAndTheFlecktones", "BillyStrings", "DavidGrisman"], "min_rating": 4.0, "sort": "avg_rating desc"},
+    },
+    {
+        "slug": "goose",
+        "name": "Goose",
+        "description": "Goose live tapes \u2014 best-rated.",
+        "source": "archive",
+        "query": {"collections": ["GooseBand"], "min_rating": 4.0},
+    },
+    {
+        "slug": "psych60s",
+        "name": "Psychedelia '67-'72",
+        "description": "Quicksilver, New Riders, Country Joe, early Dead. The acid-test era.",
+        "source": "archive",
+        "query": {"collections": ["QuicksilverMessengerServiceMusic", "NewRidersofthePurpleSage", "CountryJoeMcDonald"], "min_rating": 3.5},
+    },
+    {
+        "slug": "jerry",
+        "name": "Jerry",
+        "description": "Jerry Garcia Band + Bob Weir. The side doors of the Dead.",
+        "source": "archive",
+        "query": {"collections": ["JGB", "BobWeir"], "min_rating": 4.0},
+    },
+    {
+        "slug": "eighties",
+        "name": "The '80s Tapes",
+        "description": "Widespread, Max Creek, Zero, Aquarium Rescue Unit. Smoky rooms, hot boards.",
+        "source": "archive",
+        "query": {"collections": ["WidespreadPanic", "MaxCreek", "Zero", "AquariumRescueUnit"], "min_rating": 4.0},
+    },
+    {
+        "slug": "nineties",
+        "name": "The '90s",
+        "description": "moe., Cheese, Blues Traveler, Leftover Salmon, Ween. The second wave.",
+        "source": "archive",
+        "query": {"collections": ["moe", "StringCheeseIncident", "BluesTraveler", "LeftoverSalmon", "Ween"], "min_rating": 4.0},
+    },
+    {
+        "slug": "fusion-live",
+        "name": "Fusion",
+        "description": "Garaj Mahal, Snarky Puppy, TAUK, Jazz Mandolin Project, Flecktones. Jazz-rock, live.",
+        "source": "archive",
+        "query": {"collections": ["GarajMahal", "SnarkyPuppy", "TAUKband", "JazzMandolinProject", "BelaFleckandtheFlecktones", "Aqueous"], "min_rating": 3.8},
+    },
+    {
+        "slug": "soul-jazz",
+        "name": "Soul-Jazz",
+        "description": "Soulive, New Mastersounds, Greyboy Allstars, Charlie Hunter. Organ trios and grease.",
+        "source": "archive",
+        "query": {"collections": ["Soulive", "NewMastersounds", "GreyboyAllstars", "CharlieHunter", "RobertWalters20thCongress", "KarlDensonsTinyUniverse"], "min_rating": 3.8},
+    },
+    {
+        "slug": "funk",
+        "name": "Funk",
+        "description": "Lettuce, Galactic, Dumpstaphunk, The Motet, JJ Grey. New Orleans and beyond.",
+        "source": "archive",
+        "query": {"collections": ["Lettuce", "GalacticFunk", "Dumpstaphunk", "TheMotet", "JJGreyandMOFRO", "Turkuaz"], "min_rating": 3.8},
+    },
+    {
+        "slug": "newgrass",
+        "name": "Newgrass",
+        "description": "Yonder, Railroad Earth, Greensky, Stringdusters, Sam Bush, Del McCoury.",
+        "source": "archive",
+        "query": {"collections": ["YonderMountainStringBand", "RailroadEarth", "GreenskyBluegrass", "InfamousStringdusters", "SamBush", "DelMcCouryBand"], "min_rating": 4.0},
+    },
+    {
+        "slug": "littlefeat",
+        "name": "Little Feat",
+        "description": "Waiting for Columbus and everything around it. '70s-'90s.",
+        "source": "archive",
+        "query": {"collections": ["LittleFeat"], "min_rating": 4.0},
+    },
+    {
+        "slug": "ragtime",
+        "name": "Ragtime",
+        "description": "Ragtime and the ragtime era. Curated, Creative Commons and public domain.",
+        "source": "cc",
+        "query": {"items": ["kzz003", "C_1964_04_21", "AM_1973_01_04", "ragtime-cowboy-joe", "ragtimegoblinman00andr.omr", "danceofdaisies00unse_omr", "AM_1988_05_02"]},
     },
 ]
 
