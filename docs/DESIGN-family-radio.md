@@ -6,27 +6,60 @@ on air, you tune in.
 
 ---
 
-## Read this first: what I need from you
+## Decisions — status
 
-Six decisions. Everything else in this doc is reasoning you can skim or skip.
-My recommendation is in **bold**; the tradeoff is one line.
+| # | Decision | Status |
+|---|---|---|
+| **D1** | Are guest stations **listed** on the public site? | 🔴 **OPEN** — rec: **no, invisible**. One less thing that can leak, and no "why is there a station I can't play". |
+| **D2** | Who may **hear** a guest station? | ✅ **RESOLVED — the tailnet, gated by Tailscale ACLs.** My original "named people" rec was **wrong**: it implies *identity*, and jam-station has **no auth at all**. The ACL gives real, enforceable, per-device control for **zero code**. See §2.5. |
+| **D3** | Live-only default, on-demand opt-in? | ✅ **YES** (Jason, 2026-07-13) |
+| **D4** | Sell an **always-on node**, never a music locker? | ✅ **AGREED IN PRINCIPLE** (Jason) — *still pending his full read of §7 and* **A3**. Do not build any paid tier before A3. |
+| **D5** | What does dad install? | ✅ **A simple native app.** No slab in dad's app. Slab appears only on the **paid** tier (we host his node) — see §8.5. |
+| **D6** | Build slices 1 + 2 next? | ⏸ **HOLD** — Jason: *"wait until rest figured out."* **Nothing is being built.** |
 
-| # | Decision | My rec | Why it matters |
-|---|---|---|---|
-| **D1** | Are guest stations **listed** on the public site? | **No — invisible, not just unplayable** | Avoids "why is there a station I can't play," and it's one less thing that can leak. |
-| **D2** | Who may **hear** a guest station — anyone on the tailnet, or **named people**? | **Named people** | Easy now, painful to retrofit. The day a friend-of-a-friend joins the tailnet, dad's records shouldn't be a surprise gift. |
-| **D3** | Is **live-only the default**, with on-demand strictly opt-in by the broadcaster? | **Yes** | Live is outbound-only (near-zero trust surface). On-demand opens an inbound port. Off by default is the honest default. |
-| **D4** | Business shape: do we sell **an always-on node (infrastructure)** rather than **music storage (a locker)**? | **Node, never locker** | This is the difference between "Linode" and "MP3.com, which lost." See §7. **This is the most important decision in the doc.** |
-| **D5** | What does dad install — **a small native app** or a full slab node? | **Native menu-bar app** | If it's more than "pick a folder, go on air," this never happens. Slab stays on *your* side of the wire. |
-| **D6** | Do I build **slices 1 + 2** next (both need nobody but you)? | **Yes** | They are the entire architecture and are testable with a *fake* dad. See §9. |
+**Still needs you, not me:**
+- **A1** — Tailscale model: invite dad into your tailnet (simplest for him) vs. node sharing
+  (cleanest separation). **See §2.5 — ACLs make the simple option safe.**
+- **A2** — Ask dad if he's up for it, and what shape his collection is in (folders? are the
+  files tagged?). Untagged files → the setlist honestly reads "Track 3".
+- **A3** — 🔴 **Get a real professional opinion on §7 before charging anyone a dollar.**
+  Nothing in this doc is legal advice.
 
-**Also needs you, not me:**
-- **A1** — Decide the Tailscale model: invite dad into your tailnet as a user, vs. Tailscale
-  *node sharing* (he keeps his own tailnet). Node sharing is cleaner for family.
-- **A2** — Ask dad if he's actually up for this, and what shape his collection is in
-  (folder layout, are files tagged?). Untagged files → the setlist reads "Track 3".
-- **A3** — Sanity-check the money question in §7 with someone who knows music licensing
-  before you charge anyone a dollar.
+---
+
+## 2.5 Tailscale, in plain terms (and why it answers D2)
+
+**You already have a tailnet.** It's how everything worked today: `jasons-mac-mini` resolves
+to `100.91.29.30`, and euler talks to it directly across networks.
+
+A **tailnet** is a private network made of *your devices*, wherever they physically are.
+Each device that joins gets:
+
+- a **permanent private name + IP** (`dad-mac`, `100.x.x.x`) that works from anywhere
+- an **encrypted, direct** connection to your other devices (peer-to-peer)
+- **nothing exposed to the public internet**
+
+It is **not** the "route my traffic through Iceland" kind of VPN. It's a **mesh private LAN
+stretched across the internet.** Dad's Mac in Florida behaves as if it were plugged into the
+same switch as your mac-mini.
+
+**"Dad joins the tailnet"** = he installs Tailscale and authenticates **once**. That's it.
+It's what makes his home router a non-issue: **no port forwarding, no static IP, no dynamic
+DNS.**
+
+### Why this settles D2
+
+Tailscale has **ACLs** — declarative rules like:
+
+> *`dad-mac` may reach the private icecast on port 8000, and nothing else on this network.*
+
+So dad joining your tailnet does **not** hand him your rack. And the same mechanism controls
+**who can hear his station** — his mount is reachable only by devices you allow.
+
+**That is a real, enforceable ACL for zero code.** "Named people" would have required an
+identity system jam-station does not have. Refine to per-person later, when auth arrives for
+real — which is already on the backlog (syncing favourites off-browser). **One auth system,
+once, for both.**
 
 ---
 
@@ -297,6 +330,30 @@ becomes the product being sold.
 **v1 needs zero slab changes.** That's a clean staging, and it means you can't accidentally
 spend a month building slab features in service of a music demo.
 
+## 8.5 Where slab actually lives (the ISV question)
+
+To be exact about what D5 means:
+
+> **Free tier:** dad's Mac. **No slab in dad's app at all** — it's a native binary that
+> speaks icecast. Slab stays entirely on *your* side of the wire.
+>
+> **Paid tier:** *we* run his node. **That node is a slab node**, and it is invisible to
+> him. He never learns the word.
+
+So the shape of the business is:
+
+**jam-station is the thing that makes someone want an always-on node.
+The always-on node is slab. Slab is what you're actually selling.**
+
+That's the wedding — and note it only works *because* of **D4**. If you sold a music
+locker, you'd be a media company with a copyright problem. Selling a node, you're
+infrastructure: **boring, defensible, and the same product whether the customer's node
+holds music, a database, or a website.** The music is just the reason they showed up.
+
+This is also why **jam-station is a better slab demo than any infra demo would be** — nobody
+asks their dad to install a Kubernetes cluster, but they might ask him to put his records on
+the air.
+
 ---
 
 ## 9. Build order (D6)
@@ -331,13 +388,47 @@ debugging.**
 
 ---
 
-## 11. Open questions I have not resolved
+## 11. Inside dad's app (what it actually does)
 
-- **Does dad get a DJ?** He curates; the AI DJ drives *our* stations. Probably he just
-  shuffles a folder in v1, and "dad's DJ" is a later idea. Not designed.
-- **Multiple stations per person?** Dad might want "Dad's Jazz" and "Dad's Bluegrass."
-  Falls out naturally (one mount each) but doubles his UI. Deferred.
-- **Does dad's station show "up next"?** Only if his client pushes its queue to the brain.
-  A nicety, not required. Deferred.
-- **Recording / time-shift** ("I missed his set") — this is on-demand by another name, and
-  it's the same legal wall. Do not build casually.
+Small enough to hold in your head. That's the point.
+
+**Broadcast loop (the whole product):**
+
+1. **Index** the chosen folder — walk it, read ID3 tags. Untagged files fall back to
+   filename, then to `Track N`, exactly as the Archive adapter already does. (Reuse that
+   logic; we learned it the hard way.)
+2. **Order** the playlist. v1: **shuffle**. Nothing cleverer.
+3. **Encode** to MP3 (LAME) at 256kbps — matches what the rest of the station runs at.
+4. **Push** to the icecast mount: an HTTP handshake, then raw MP3 frames + ICY metadata for
+   each track. **The protocol is simple enough that this is a small program, not a
+   platform.**
+5. Report **now playing** and **listener count** — both come back *from* icecast, so there's
+   nothing to build.
+
+**Three states, and they must be honest:** `OFF AIR` · `ON AIR` · `CAN'T REACH THE STATION`
+(tailnet down). Never a spinner that lies.
+
+**Opt-in on-demand (D3: off by default)** — the *only* inbound capability:
+`GET /library` and `GET /track/{id}`, tailnet-only, token-auth, **with CORS headers** (or
+Web Audio plays silence on his music — we learned that one today too), and **Range support**
+(or you can't scrub).
+
+---
+
+## 12. Open questions — now with recommendations
+
+| question | call |
+|---|---|
+| **Does dad get a DJ?** | **Not in v1.** He shuffles a folder. An AI DJ for *his* station is a lovely idea and a whole second product. Don't smuggle it in. |
+| **Multiple stations per person?** ("Dad's Jazz", "Dad's Bluegrass") | **Not in v1.** Falls out naturally (one mount each), but it doubles his UI — and his UI being one screen is the entire reason this ships. |
+| **Does his station show "up next"?** | **No.** It would require his client to push its queue to us. A live broadcast that reveals the future isn't really a broadcast. Skip it. |
+| **Recording / time-shift** ("I missed his set") | **⚠️ Do not build casually.** This is on-demand wearing a hat, and it lands on the *exact* legal wall in §7 — except now *we* are the one holding the copy. If it ever happens, it happens on **his** node, never ours. |
+| **What about the existing `library` channels (70s Fusion, BeBop)?** | They become **private-plane** channels under §5 — which is the honest answer, and it's *also* what finally makes them work. They're the local case of the same architecture. |
+
+---
+
+## 13. The one-line summary
+
+**Dad's machine is a studio, not a disk. icecast's source auth is the trust model. The
+tailnet is the privacy boundary. Slab runs the transmitter — and slab is what you're
+actually selling.**
