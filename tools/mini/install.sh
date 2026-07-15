@@ -32,5 +32,6 @@ swap run.slab.daemon "slab-go daemon"
 swap run.slab.tunnel "cloudflared tunnel run"
 swap run.jam.cdwatch ""            # nothing was running before; just load it
 swap run.jam.backup ""             # daily postgres backup (members + access keys)
+swap run.jam.awake "caffeinate -dis"  # keep display awake so discs mount on the headless mini
 
 echo "done. launchctl list | grep -E 'slab|jam' to see them."

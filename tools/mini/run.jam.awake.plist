@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>run.jam.awake</string>
+  <!-- caffeinate -dis: keep the DISPLAY (-d), the system (-s), and idle (-i) awake forever.
+       On a headless mini the display sleeping makes the console session go dormant, and a
+       dormant session EJECTS optical discs. Keeping the display awake keeps the session live
+       so inserted CDs mount and the watcher can rip them. KeepAlive so it always runs. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-dis</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/jam-awake.log</string>
+  <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/jam-awake.log</string>
+</dict>
+</plist>
