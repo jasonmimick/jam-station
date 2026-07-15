@@ -713,7 +713,9 @@ function tune(slug) {
   if (S.mode === "ondemand") { loadShow(true); return; }
   setStatus("buffering");
   S.audio.src = `/stream/${slug}`;      // same-origin proxy → graph stays untainted
-  initAudio();
+  // NO initAudio() here on purpose: routing through Web Audio makes iOS SUSPEND playback when
+  // the phone locks. Play the raw element (survives lock + lock-screen controls); the EQ graph
+  // is built lazily only if the listener actually opens the EQ.
   S.audio.play().catch(() => setStatus("paused"));
   loadChannels(); refresh();
 }
@@ -779,8 +781,7 @@ function playIdx(i) {
   const t = S.show.tracks[i];
   setStatus("buffering");
   S.audio.src = t.url;                  // archive.org: ACAO:* + accept-ranges → seekable
-  initAudio();
-  S.audio.play().catch(() => setStatus("paused"));
+  S.audio.play().catch(() => setStatus("paused"));   // raw element — background-safe on mobile
   flapTo(t.title);
   $("byline").innerHTML = `${esc(t.artist)} <span class="sm">· ${esc(t.album)}</span>`;
   $("prev").disabled = i === 0;
@@ -802,7 +803,6 @@ $("play").onclick = () => {
     S.userPaused = false;
     setStatus("buffering");
     if (S.mode === "radio") S.audio.src = `/stream/${S.channel}`;   // rejoin the live edge
-    initAudio();
     S.audio.play().catch(() => setStatus("error"));
   } else { S.userPaused = true; S.audio.pause(); }
 };
@@ -873,7 +873,12 @@ function buildEq() {
 }
 $("eqBtn").onclick = () => {
   const p = $("eqPanel");
-  p.style.display = p.style.display === "none" ? "" : "none";
+  const opening = p.style.display === "none";
+  p.style.display = opening ? "" : "none";
+  // Build the Web Audio graph only now — opening the EQ is the opt-in. From here on this
+  // session routes through Web Audio (and may pause on lock), which is the fair trade for
+  // wanting an equalizer. Anyone who never opens it keeps rock-solid background playback.
+  if (opening) initAudio();
 };
 function drawViz() {
   const c = $("viz"), ctx = c.getContext("2d");
