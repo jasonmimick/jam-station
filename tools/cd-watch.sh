@@ -25,6 +25,8 @@ log() { printf '%s  %s\n' "$(date '+%H:%M:%S')" "$*"; }
 # any drive, no network. MUST match rip-cd.sh's computation so the ledger lines up.
 # `|| true`: a disc pulled between the glob check and here must not kill the watcher (set -e).
 disc_sig() { ls -la "$1"*.aiff 2>/dev/null | awk '{print $5, $NF}' | shasum | cut -d' ' -f1 || true; }
+# bracket-safe .aiff check (a quoted glob; compgen -G reads "[Disc 1]" as a character class).
+has_aiff() { local f; for f in "$1"*.aiff; do [ -e "$f" ] && return 0; done; return 1; }
 # The physical drive behind a volume — the lock unit. Matches rip-cd.sh's `drive`.
 drive_id() { df "$1" 2>/dev/null | awk 'NR==2{print $1}' | sed 's#^/dev/##; s/s[0-9]*$//'; }
 
@@ -33,7 +35,7 @@ while true; do
   # Every audio-CD volume mounted right now — one per loaded drive. Not just the first: a host
   # can have several drives, and each gets serviced independently.
   for v in /Volumes/*/; do
-    compgen -G "$v"'*.aiff' >/dev/null 2>&1 || continue
+    has_aiff "$v" || continue
     sig=$(disc_sig "$v"); [ -n "$sig" ] || continue
     grep -q "^$sig" "$LEDGER" 2>/dev/null && continue        # already ripped, ever
     drive=$(drive_id "$v")

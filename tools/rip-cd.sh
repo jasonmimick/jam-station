@@ -30,14 +30,19 @@ API=${API:-http://jam-brain.localhost:8080}
 BITRATE=${BITRATE:-256}          # kbps, plain number: lame wants 256, ffmpeg wants 256k
 LEDGER=${LEDGER:-$HOME/.jam-ripped}
 
+# Does this dir hold .aiff tracks? Glob a QUOTED dir so brackets in the volume name (e.g.
+# "Sampler [Disc 1]") stay literal — `compgen -G` re-globs its whole argument and reads the
+# [..] as a character class, so it never matches a bracketed disc. This idiom is bracket-safe.
+has_aiff() { local f; for f in "$1"*.aiff; do [ -e "$f" ] && return 0; done; return 1; }
+
 # Which disc: a specific drive's volume if -d given (that's how the watcher points one ripper
 # at one drive), else the first audio CD found (the convenient manual default).
 if [ -n "$DISC_ARG" ]; then
   disc=$DISC_ARG
-  compgen -G "$disc"'*.aiff' >/dev/null 2>&1 || { echo "no audio CD at $disc"; exit 1; }
+  has_aiff "$disc" || { echo "no audio CD at $disc"; exit 1; }
 else
   disc=$(ls -d /Volumes/*/ 2>/dev/null | while read -r v; do
-           compgen -G "$v*.aiff" >/dev/null && echo "$v" && break; done)
+           has_aiff "$v" && echo "$v" && break; done)
 fi
 [ -n "${disc:-}" ] || { echo "no audio CD mounted. insert one and wait for the Finder to see it."; exit 1; }
 

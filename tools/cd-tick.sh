@@ -18,6 +18,9 @@ LEDGER=${LEDGER:-$HOME/.jam-ripped}
 
 disc_sig() { ls -la "$1"*.aiff 2>/dev/null | awk '{print $5, $NF}' | shasum | cut -d' ' -f1 || true; }
 drive_id() { df "$1" 2>/dev/null | awk 'NR==2{print $1}' | sed 's#^/dev/##; s/s[0-9]*$//'; }
+# bracket-safe .aiff check — a quoted glob keeps "[Disc 1]" literal (compgen -G would read it
+# as a character class and miss the disc entirely).
+has_aiff() { local f; for f in "$1"*.aiff; do [ -e "$f" ] && return 0; done; return 1; }
 
 # 1) a rip already running? report progress and let the loop check back soon.
 if pgrep -f rip-cd.sh >/dev/null 2>&1; then
@@ -28,7 +31,7 @@ fi
 
 # 2) a new, settled disc on any drive? start it.
 for v in /Volumes/*/; do
-  compgen -G "$v"'*.aiff' >/dev/null 2>&1 || continue
+  has_aiff "$v" || continue
   sig=$(disc_sig "$v"); [ -n "$sig" ] || continue
   grep -q "^$sig" "$LEDGER" 2>/dev/null && continue          # already ripped, ever
   drive=$(drive_id "$v")
