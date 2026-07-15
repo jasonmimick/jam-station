@@ -13,35 +13,49 @@
 # and no disc-id maths here — just a transcode. If the disc is unknown, the tracks come out
 # as "1 Audio Track.aiff" and you pass -a/-A to name them yourself.
 #
-#   rip-cd.sh                                  # identify via MusicBrainz, ask before it rips
+#   rip-cd.sh                                  # first audio CD found; identify via MusicBrainz
+#   rip-cd.sh -d "/Volumes/Some CD/"           # a SPECIFIC drive's disc (the watcher uses this)
 #   rip-cd.sh -a "Strength in Numbers" -A "The Telluride Sessions"   # name it yourself
 #   rip-cd.sh -y -e                            # unattended: don't ask, eject when done
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-ARTIST=""; ALBUM=""; YES=0; EJECT=0
-while getopts "a:A:ye" o; do case $o in
-  a) ARTIST=$OPTARG;; A) ALBUM=$OPTARG;; y) YES=1;; e) EJECT=1;;
+ARTIST=""; ALBUM=""; YES=0; EJECT=0; DISC_ARG=""
+while getopts "a:A:yed:" o; do case $o in
+  a) ARTIST=$OPTARG;; A) ALBUM=$OPTARG;; y) YES=1;; e) EJECT=1;; d) DISC_ARG=$OPTARG;;
 esac; done
 
 BRAIN=${BRAIN:-slab-jam-brain}
 API=${API:-http://jam-brain.localhost:8080}
 BITRATE=${BITRATE:-256}          # kbps, plain number: lame wants 256, ffmpeg wants 256k
+LEDGER=${LEDGER:-$HOME/.jam-ripped}
 
-# ONE RIP AT A TIME, system-wide. There is a single CD drive with a single physical head:
-# two rippers reading it at once each go slower than one alone AND fight to write the same
-# cds/<album> folder. mkdir is atomic — it succeeds for exactly one caller — so it's the lock.
-# Covers the watcher racing itself, a watcher racing a manual rip, anything.
-LOCK=${LOCK_DIR:-/tmp/jam-rip.lock}
+# Which disc: a specific drive's volume if -d given (that's how the watcher points one ripper
+# at one drive), else the first audio CD found (the convenient manual default).
+if [ -n "$DISC_ARG" ]; then
+  disc=$DISC_ARG
+  compgen -G "$disc"'*.aiff' >/dev/null 2>&1 || { echo "no audio CD at $disc"; exit 1; }
+else
+  disc=$(ls -d /Volumes/*/ 2>/dev/null | while read -r v; do
+           compgen -G "$v*.aiff" >/dev/null && echo "$v" && break; done)
+fi
+[ -n "${disc:-}" ] || { echo "no audio CD mounted. insert one and wait for the Finder to see it."; exit 1; }
+
+# ONE RIPPER PER DRIVE, not per host. The constraint is physical: a drive has one head, so two
+# rippers on the SAME drive fight it and both crawl — but two DIFFERENT drives are independent
+# and should rip in parallel. So the lock is keyed on the drive device (via df), not global.
+# mkdir is atomic — exactly one caller wins the lock for a given drive. Support whatever the
+# host has: 0 drives, 1, or a stack of USB burners, each with its own ripper.
+drive=$(df "$disc" 2>/dev/null | awk 'NR==2{print $1}' | sed 's#^/dev/##; s/s[0-9]*$//')
+LOCK=${LOCK_DIR:-/tmp/jam-rip-${drive:-single}.lock}
 if ! mkdir "$LOCK" 2>/dev/null; then
-  echo "  another rip is already running (lock $LOCK) — skipping"; exit 3
+  echo "  a ripper is already on drive ${drive:-?} (lock $LOCK) — skipping"; exit 3
 fi
 stage=""
 trap 'rmdir "$LOCK" 2>/dev/null || true; [ -n "$stage" ] && rm -rf "$stage"' EXIT
 
-disc=$(ls -d /Volumes/*/ 2>/dev/null | while read -r v; do
-         compgen -G "$v*.aiff" >/dev/null && echo "$v" && break; done)
-[ -n "${disc:-}" ] || { echo "no audio CD mounted. insert one and wait for the Finder to see it."; exit 1; }
+# The disc's identity, for the ledger (so it is never re-ripped): its track list, hashed.
+sig=$(ls -la "$disc"*.aiff 2>/dev/null | awk '{print $5, $NF}' | shasum | cut -d' ' -f1)
 
 # Identify the disc from its physical TOC (MusicBrainz) — the only naming that works
 # unattended, since macOS leaves album/artist blank. -a/-A always win over the lookup.
@@ -107,6 +121,12 @@ done
 # the door. mkdir first: cp needs the parent to exist.
 docker exec "$BRAIN" mkdir -p /music/cds
 docker cp "$stage/$DIR" "$BRAIN:/music/cds/$DIR"
+
+# Ledger it now that the bytes are safely in the volume — the ripper records its OWN outcome,
+# so the watcher never has to track a background job. A partial/failed rip exits before here
+# and leaves the disc un-ledgered, so it gets retried. (Manual re-rips still work: only the
+# watcher consults the ledger.)
+[ -n "$sig" ] && echo "$sig  $(date '+%Y-%m-%d %H:%M')  $DIR" >> "$LEDGER"
 
 # No per-CD channel. Every ripped album lands in ONE place — the cds/ catalog — browsable and
 # on-demand, and the 'disc-changer' station shuffles them all. A station per disc would be a
