@@ -32,7 +32,11 @@ def health():
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(STATIC, "index.html"))
+    # no-cache = the browser MAY keep a copy but must revalidate before using it (cheap 304 if
+    # unchanged). Without this the page ships only a Last-Modified, and mobile Safari happily
+    # serves a stale index for hours — which is why a fresh deploy kept showing the old UI.
+    return FileResponse(os.path.join(STATIC, "index.html"),
+                        headers={"Cache-Control": "no-cache"})
 
 
 # Installable on a phone: a home-screen icon and a full-screen player instead of
