@@ -60,6 +60,26 @@
     display:inline-flex; align-items:center; justify-content:center; }
   .icon:hover { background:var(--on-yellow); color:var(--yellow); }
 
+  /* the accent picker — a little popover of signage colours hanging off the masthead */
+  .hdr-r { position:relative; }
+  .palpop { position:absolute; top:44px; right:0; z-index:40; display:none;
+    background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:12px;
+    box-shadow:0 12px 30px #0007; width:196px; }
+  .palpop.open { display:block; }
+  .palpop .lbl { font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 8px; }
+  .swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .sw { width:100%; aspect-ratio:1; border-radius:50%; border:2px solid transparent; cursor:pointer;
+    padding:0; position:relative; }
+  .sw.on { border-color:var(--ink); }
+  .sw.on::after { content:"✓"; position:absolute; inset:0; display:grid; place-items:center;
+    font-size:13px; font-weight:900; color:#000; mix-blend-mode:overlay; }
+  .palpop .custom { display:flex; align-items:center; gap:8px; margin-top:12px;
+    border-top:1px solid var(--line); padding-top:10px; }
+  .palpop .custom input[type=color] { width:28px; height:28px; padding:0; border:1px solid var(--line);
+    border-radius:4px; background:none; cursor:pointer; }
+  .palpop .custom label { font-size:11px; color:var(--muted); }
+
   .app { flex:1; display:grid; grid-template-columns:270px 1fr 320px; min-height:0; }
   .pane { min-height:0; min-width:0; overflow-y:auto; }   /* grid items default to
      min-width:auto and will NOT shrink below their content — the whole pane grows
@@ -278,7 +298,16 @@
     <div class="hdr-r">
       <div class="status" id="status"><span class="dot"></span><span id="statusTxt">TUNED OUT</span></div>
       <button class="icon" id="who" title="sign in" aria-label="sign in">☺</button>
+      <button class="icon" id="palette" title="accent colour" aria-label="choose accent colour">◗</button>
       <button class="icon" id="theme" title="light / dark" aria-label="switch light or dark theme">☾</button>
+      <div class="palpop" id="palPop">
+        <p class="lbl">Accent</p>
+        <div class="swatches" id="swatches"></div>
+        <div class="custom">
+          <input type="color" id="palCustom" value="#FFD200" aria-label="custom accent colour">
+          <label for="palCustom">Custom</label>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -406,6 +435,50 @@ const setTheme = (t) => {
 const qTheme = new URLSearchParams(location.search).get("theme");
 setTheme(qTheme === "light" || qTheme === "dark" ? qTheme : (localStorage.getItem("jam-theme") || "dark"));
 $("theme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+
+/* accent — the signage colour. Yellow is the default because that's the split-flap board's
+   own amber, but it's the one thing on the page that's purely taste, so it's yours to set.
+   We override --yellow and the flap ink, then COMPUTE the text colour that rides on top of it
+   (--on-yellow) from luminance — pick a dark accent and the masthead text flips to white on
+   its own, so nothing you choose can turn the header unreadable. */
+const ACCENTS = [
+  ["Amber","#FFD200"], ["Sodium","#FF8C1A"], ["Crimson","#FF3B3B"], ["Magenta","#FF4FA3"],
+  ["Teal","#12D6B6"], ["Cyan","#38BDF8"], ["Lime","#86E01E"], ["Violet","#A98BFF"],
+];
+const DEFAULT_ACCENT = "#FFD200";
+function _lum(hex) {
+  const v = [1,3,5].map(i => parseInt(hex.slice(i,i+2),16)/255)
+                   .map(c => c <= .03928 ? c/12.92 : ((c+.055)/1.055)**2.4);
+  return .2126*v[0] + .7152*v[1] + .0722*v[2];
+}
+function setAccent(hex, save = true) {
+  const r = document.documentElement;
+  r.style.setProperty("--yellow", hex);
+  r.style.setProperty("--flap-ink", hex);
+  r.style.setProperty("--on-yellow", _lum(hex) > 0.45 ? "#12120C" : "#FFFFFF");
+  if (save) localStorage.setItem("jam-accent", hex);
+  const cur = (hex || "").toUpperCase();
+  document.querySelectorAll(".sw").forEach(s => s.classList.toggle("on", s.dataset.hex.toUpperCase() === cur));
+  const c = $("palCustom"); if (c) c.value = /^#[0-9a-f]{6}$/i.test(hex) ? hex : DEFAULT_ACCENT;
+}
+(function buildSwatches() {
+  const w = $("swatches");
+  for (const [name, hex] of ACCENTS) {
+    const b = document.createElement("button");
+    b.className = "sw"; b.dataset.hex = hex; b.style.background = hex;
+    b.title = name; b.setAttribute("aria-label", name);
+    b.onclick = () => setAccent(hex);
+    w.appendChild(b);
+  }
+})();
+$("palette").onclick = (e) => { e.stopPropagation(); $("palPop").classList.toggle("open"); };
+$("palCustom").oninput = (e) => setAccent(e.target.value);
+document.addEventListener("click", (e) => {
+  if (!$("palPop").contains(e.target) && e.target !== $("palette")) $("palPop").classList.remove("open");
+});
+const qAccent = new URLSearchParams(location.search).get("accent");
+setAccent((qAccent && /^#?[0-9a-f]{6}$/i.test(qAccent) ? (qAccent[0]==="#"?qAccent:"#"+qAccent)
+           : localStorage.getItem("jam-accent")) || DEFAULT_ACCENT, false);
 
 /* ── split-flap. A now-playing genuinely changes like a departure board. ─── */
 const CHARS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'’-.,>&/!?()\"";
