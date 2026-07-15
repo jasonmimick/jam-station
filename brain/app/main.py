@@ -174,6 +174,32 @@ def api_skip(ref: ChannelRef):
     return {"skipped": channels.skip(ref.channel)}
 
 
+# ---------------------------------------------------------------- catalog (your records)
+
+@app.get("/api/library/albums")
+def api_library_albums(request: Request):
+    """Browse the record crate: one entry per ripped album. Members only — these are Jason's
+    actual CDs. Returns [] (not 403) for anonymous, so the UI just shows no catalog rather
+    than erroring; the audio itself is still gated at /music and /stream."""
+    from .adapters import library
+    if not _is_member(request):
+        return []
+    return library.list_albums()
+
+
+@app.get("/api/library/album")
+def api_library_album(request: Request, dir: str):
+    """One album as a playable, ordered tracklist — the on-demand counterpart to a station."""
+    from .adapters import library
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    tracks = library.album_tracks(dir)
+    if not tracks:
+        raise HTTPException(404, "no such album")
+    return {"dir": dir, "album": tracks[0]["album"], "artist": tracks[0]["artist"],
+            "tracks": tracks, "playing": -1}
+
+
 # ---------------------------------------------------------------- on demand
 
 @app.get("/api/show")

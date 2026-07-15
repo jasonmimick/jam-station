@@ -86,6 +86,11 @@
   .dep.on .nm, .dep.on .mk { color:var(--blue); }
   .dep.dead { cursor:not-allowed; }
   .dep.dead .nm, .dep.dead .sub { color:var(--faint); }
+  /* the catalog: a section divider, then album rows. The ♫ mark and the track-count chip
+     mark these as records on the shelf, distinct from stations on the dial. */
+  .cathead { font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--yellow); padding:14px 0 6px 26px; margin-top:6px; border-top:1px solid var(--line); }
+  .dep.album .mk { color:var(--yellow); }
   .chip { font-size:9px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
     border:1px solid var(--line); border-radius:2px; padding:1px 5px; color:var(--faint); margin-left:6px; }
   /* yellow is the board's signage colour: a private station is one the board knows about
@@ -380,8 +385,9 @@
   </div>
 
 <script>
-const S = { channel:null, channels:[], msgs:[], mode:"radio", status:"idle", filter:"",
+const S = { channel:null, channels:[], albums:[], msgs:[], mode:"radio", status:"idle", filter:"",
             histScope:"channel", audio:new Audio(), show:null, idx:-1, np:null, userPaused:false };
+const ALBUM = "album:";                       // virtual-station prefix for a catalog album
 S.audio.preload = "none";
 S.audio.crossOrigin = "anonymous";   // archive.org sends ACAO:* — keeps the Web Audio graph untainted
 
@@ -468,6 +474,11 @@ async function loadChannels() {
   try { S.channels = await (await fetch("/api/channels")).json(); } catch { return; }
   renderStations();
 }
+async function loadCatalog() {
+  // Members only server-side; anonymous gets [] and the catalog simply doesn't appear.
+  try { S.albums = await (await fetch("/api/library/albums")).json(); } catch { S.albums = []; }
+  renderStations();
+}
 function renderStations() {
   const w = $("stations"); w.innerHTML = "";
 
@@ -504,6 +515,30 @@ function renderStations() {
     b.onclick = () => { if (!dead) tune(ch.slug); };
     w.appendChild(b);
   }
+
+  // ── the catalog: your ripped records, one row per album, on demand ──────────
+  // Not a station each (that would be a dial full of one-album channels) — a shelf.
+  const albums = q
+    ? S.albums.filter(a => (a.album + " " + a.artist).toLowerCase().includes(q))
+    : S.albums;
+  if (albums.length) {
+    const head = document.createElement("div");
+    head.className = "cathead";
+    head.textContent = "The Catalog · your records";
+    w.appendChild(head);
+    for (const al of albums) {
+      const id = ALBUM + al.dir, on = S.channel === id;
+      const b = document.createElement("button");
+      b.className = "dep album" + (on ? " on" : "");
+      b.innerHTML =
+        `<span class="mk">${on && S.status === "playing" ? "▶" : "♫"}</span>` +
+        `<span><span class="nm">${esc(al.album || "Untitled")}</span>` +
+        `<span class="chip priv">${al.tracks} track${al.tracks === 1 ? "" : "s"}</span>` +
+        `<div class="sub">${esc(al.artist || "Unknown artist")} · on demand</div></span>`;
+      b.onclick = () => tuneAlbum(al.dir);
+      w.appendChild(b);
+    }
+  }
 }
 
 /* ── modes ───────────────────────────────────────────────────────────────────
@@ -523,14 +558,15 @@ function setMode(m) {
   $("back").disabled = live || !S.channel;
   $("next").title = live ? "skip — moves the station for everyone" : "next track";
   if (!S.channel) return;
-  if (S.channel === FAVS) {
-    if (live) { S.mode = "ondemand";                 // there is no broadcast of your own list
+  if (isVirtual(S.channel)) {          // favourites and catalog albums have no broadcast
+    if (live) { S.mode = "ondemand";
       $("mRadio").classList.remove("on"); $("mOnDemand").classList.add("on");
       $("scrubWrap").style.display = ""; }
     return loadShow(true);
   }
   if (live) tune(S.channel); else loadShow(true);
 }
+const isVirtual = (c) => c === FAVS || (typeof c === "string" && c.startsWith(ALBUM));
 $("mRadio").onclick    = () => setMode("radio");
 $("mOnDemand").onclick = () => setMode("ondemand");
 
@@ -558,9 +594,31 @@ function tuneFavs() {
   renderStations();
 }
 
+/* ── catalog album (on demand, like favourites but server-backed) ─────────── */
+function tuneAlbum(dir) {
+  const id = ALBUM + dir;
+  if (S.channel !== id) S.idx = 0;
+  S.channel = id;
+  localStorage.setItem("jam-last", JSON.stringify({ channel: id, mode: "ondemand" }));
+  $("play").disabled = false; $("eqBtn").disabled = false; $("share").disabled = true;
+  if (S.mode !== "ondemand") setMode("ondemand");   // a record plays on demand, never broadcast
+  else loadShow(true);
+  renderStations();
+}
+
 /* ── on demand ───────────────────────────────────────────────────────────── */
 async function loadShow(autoplay) {
   if (!S.channel) return;
+  if (S.channel.startsWith(ALBUM)) {
+    const dir = S.channel.slice(ALBUM.length);
+    try { S.show = await (await fetch(`/api/library/album?dir=${encodeURIComponent(dir)}`)).json(); }
+    catch { return; }
+    if (!S.show.tracks || !S.show.tracks.length) { $("showWrap").style.display = "none"; return; }
+    S.idx = Math.min(Math.max(0, S.idx), S.show.tracks.length - 1);
+    renderSetlist();
+    if (autoplay) playIdx(S.idx);
+    return;
+  }
   if (S.channel === FAVS) {
     const favs = loadFavs();
     S.show = { channel: FAVS, album: `Favourites \u00B7 ${favs.length} track${favs.length===1?"":"s"}`,
@@ -1009,7 +1067,7 @@ async function loadMe() {
   try { S.user = (await (await fetch("/api/me")).json()).user; } catch { S.user = null; }
   $("who").textContent = S.user ? "●" : "☺";
   $("who").title = S.user ? `Signed in as ${S.user.email} — click to sign out` : "sign in";
-  if (S.user) await pullFavs();
+  if (S.user) { await pullFavs(); await loadCatalog(); } else { S.albums = []; }
   renderStations();
 }
 
@@ -1083,6 +1141,8 @@ loadChannels().then(() => {
   try {
     const last = JSON.parse(localStorage.getItem("jam-last") || "null");
     if (last && last.channel === FAVS && loadFavs().length) return tuneFavs();
+    if (last && typeof last.channel === "string" && last.channel.startsWith(ALBUM))
+      return tuneAlbum(last.channel.slice(ALBUM.length));
     if (last && S.channels.some(c => c.slug === last.channel && c.playable !== false)) {
       if (last.mode === "ondemand") setMode("ondemand");
       tune(last.channel);
