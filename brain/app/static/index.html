@@ -1087,6 +1087,9 @@ async function refresh() {
   ).join("") : `<div class="none">Nothing yet.</div>`;
 }
 setInterval(() => { if (S.mode === "radio") refresh(); }, 3000);  // a track change
+// Drop a CD in the mini's drive and it rips itself into the catalog — so poll for it, and a
+// new record just appears on the shelf without a reload. Members only (anonymous gets []).
+setInterval(() => { if (S.user) loadCatalog(); }, 30000);
   // should land in seconds, not up to 10s later. the brain now reports what icecast
   // is actually transmitting, so this is cheap and it is the truth.
 $("tabCh").onclick  = () => { S.histScope="channel"; $("tabCh").classList.add("on"); $("tabAll").classList.remove("on"); refresh(); };
