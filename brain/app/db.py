@@ -157,6 +157,10 @@ MIGRATIONS = (
     "ALTER TABLE queue ADD COLUMN IF NOT EXISTS commercial_ok INTEGER DEFAULT 1",
     # a key-link member has no email — 'contact' is the owner's own note on how to reach them
     "ALTER TABLE members ADD COLUMN IF NOT EXISTS contact TEXT DEFAULT ''",
+    # a passphrase anyone can set to sign in with (email + passphrase). PBKDF2, salted per-user
+    # — a real password hash, not the light token hash. Empty = no passphrase set.
+    "ALTER TABLE members ADD COLUMN IF NOT EXISTS pass_hash TEXT DEFAULT ''",
+    "ALTER TABLE members ADD COLUMN IF NOT EXISTS pass_salt TEXT DEFAULT ''",
 )
 
 _pool: ConnectionPool | None = None

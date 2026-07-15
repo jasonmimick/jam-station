@@ -404,39 +404,68 @@
       <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">
         You don't need an account to listen. Signing in just carries your <b>favourites</b>
         across your devices and shows your name when you're on air.</p>
-      <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:1.5">
-        <b>Tap the personal link</b> you were sent and you're in. If the link won't open,
-        type the <b>code</b> from the same message here:</p>
-      <input id="authCode" placeholder="your code" autocapitalize="characters"
-             style="width:100%;padding:11px;margin-bottom:10px;letter-spacing:.2em;text-transform:uppercase">
-      <button id="authGo" style="width:100%;padding:12px;border:0;border-radius:2px;
+      <input id="authEmail" type="email" placeholder="email"
+             style="width:100%;padding:11px;margin-bottom:8px">
+      <input id="authPass" type="password" placeholder="passphrase"
+             style="width:100%;padding:11px;margin-bottom:10px">
+      <button id="authPassGo" style="width:100%;padding:12px;border:0;border-radius:2px;
               background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
               letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Sign in</button>
+      <p style="font-size:12px;color:var(--muted);margin:14px 0 8px;line-height:1.5;
+         border-top:1px solid var(--line);padding-top:12px">
+        New here? <b>Tap the personal link</b> you were texted. If it won't open, enter the
+        <b>code</b> from that message:</p>
+      <div style="display:flex;gap:6px">
+        <input id="authCode" placeholder="code" autocapitalize="characters"
+               style="flex:1;padding:10px;letter-spacing:.2em;text-transform:uppercase">
+        <button id="authGo" style="padding:10px 14px;border:1px solid var(--line);border-radius:2px;
+                background:transparent;color:var(--ink);font:inherit;font-weight:700;cursor:pointer">Use code</button>
+      </div>
       <p id="authMsg" style="font-size:12.5px;margin:12px 0 0"></p>
       <button id="authClose" style="width:100%;margin-top:10px;padding:9px;background:transparent;
               border:1px solid var(--line);color:var(--muted);border-radius:2px;font:inherit;cursor:pointer">Close</button>
     </div>
   </div>
 
-  <!-- owner panel: add people, hand out links, recover (rotate), revoke. Owner only. -->
+  <!-- account panel: everyone can set a passphrase; owner also manages people. -->
   <div id="owner" style="display:none;position:fixed;inset:0;background:#000a;z-index:99;
        align-items:center;justify-content:center;padding:24px">
     <div style="background:var(--panel);border:1px solid var(--line);border-radius:2px;
          padding:22px;max-width:440px;width:100%;max-height:88vh;overflow:auto">
-      <div class="lbl" style="margin-bottom:6px">People</div>
-      <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.5">
-        Add someone, then text them their link. If a link ever fails or a code gets lost,
-        hit <b>New link</b> to send a fresh pair — the old one stops working.</p>
-      <input id="ownName" placeholder="Name (e.g. Dad)"
-             style="width:100%;padding:10px;margin-bottom:8px">
-      <input id="ownContact" placeholder="Their phone or email — just your note (optional)"
-             style="width:100%;padding:10px;margin-bottom:8px">
-      <button id="ownAdd" style="width:100%;padding:11px;border:0;border-radius:2px;
-              background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
-              letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Add person</button>
-      <div id="ownResult" style="margin-top:12px"></div>
-      <div id="ownList" style="margin-top:8px"></div>
-      <div style="display:flex;gap:8px;margin-top:14px">
+      <div class="lbl" style="margin-bottom:6px">Your account</div>
+      <p id="acctWho" style="font-size:12.5px;color:var(--muted);margin:0 0 12px"></p>
+
+      <!-- passphrase: everyone. set it once, sign in with email + passphrase forever. -->
+      <div class="lbl" style="font-size:10px;margin:4px 0 6px">Passphrase</div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 8px;line-height:1.5">
+        Set a passphrase and you can sign in with your email + passphrase from any device —
+        nothing to lose, no link needed.</p>
+      <div style="display:flex;gap:6px">
+        <input id="setPass" type="password" placeholder="new passphrase (6+ chars)"
+               style="flex:1;padding:10px">
+        <button id="setPassGo" style="padding:10px 14px;border:1px solid var(--line);border-radius:2px;
+                background:transparent;color:var(--ink);font:inherit;font-weight:700;cursor:pointer">Save</button>
+      </div>
+      <p id="setPassMsg" style="font-size:12px;margin:8px 0 0"></p>
+
+      <!-- people: owner only -->
+      <div id="ownerPeople" style="display:none;margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
+        <div class="lbl" style="margin-bottom:6px">People</div>
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.5">
+          Add someone with their email, then text them their link. Lost link or code?
+          <b>New link</b> sends a fresh pair — the old one stops working.</p>
+        <input id="ownName" placeholder="Name (e.g. Dad)"
+               style="width:100%;padding:10px;margin-bottom:8px">
+        <input id="ownContact" type="email" placeholder="Their email (they'll sign in with it)"
+               style="width:100%;padding:10px;margin-bottom:8px">
+        <button id="ownAdd" style="width:100%;padding:11px;border:0;border-radius:2px;
+                background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
+                letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Add person</button>
+        <div id="ownResult" style="margin-top:12px"></div>
+        <div id="ownList" style="margin-top:8px"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:16px">
         <button id="ownSignout" style="flex:1;padding:9px;background:transparent;
                 border:1px solid var(--line);color:var(--muted);border-radius:2px;font:inherit;cursor:pointer">Sign out</button>
         <button id="ownClose" style="flex:1;padding:9px;background:transparent;
@@ -1190,15 +1219,27 @@ async function pullFavs() {
   } catch {}
 }
 
-// The ☺/● icon: signed out -> sign-in; owner -> the People panel; member -> sign out.
+// The ☺/● icon: signed out -> sign-in; signed in -> your account (passphrase + people if owner).
 $("who").onclick = () => {
-  if (!S.user) { $("auth").style.display = "flex"; $("authMsg").textContent = ""; $("authCode").value = ""; $("authCode").focus(); return; }
-  if (S.user.role === "owner") return openOwner();
-  signOut();
+  if (!S.user) { $("auth").style.display = "flex"; $("authMsg").textContent = ""; $("authEmail").focus(); return; }
+  openOwner();
 };
 $("authClose").onclick = () => { $("auth").style.display = "none"; };
 async function signOut() { await fetch("/api/auth/signout", { method: "POST" }); S.user = null; await loadMe(); }
 
+// email + passphrase — the durable sign-in
+$("authPassGo").onclick = async () => {
+  const email = $("authEmail").value.trim(), passphrase = $("authPass").value;
+  if (!email || !passphrase) return;
+  const r = await fetch("/api/auth/passphrase", { method: "POST",
+    headers: {"Content-Type":"application/json"}, body: JSON.stringify({ email, passphrase }) });
+  if (!r.ok) { $("authMsg").style.color = "var(--red)"; $("authMsg").textContent = "Wrong email or passphrase."; return; }
+  $("auth").style.display = "none"; $("authPass").value = "";
+  await loadMe();
+};
+$("authPass").onkeydown = (e) => { if (e.key === "Enter") $("authPassGo").click(); };
+
+// code — the link-failed fallback
 $("authGo").onclick = async () => {
   const code = $("authCode").value.trim();
   if (!code) return;
@@ -1210,8 +1251,25 @@ $("authGo").onclick = async () => {
 };
 $("authCode").onkeydown = (e) => { if (e.key === "Enter") $("authGo").click(); };
 
-// ── owner: add people, hand out links, recover, revoke ──────────────────────────
-function openOwner() { $("owner").style.display = "flex"; $("ownResult").innerHTML = ""; renderOwnerList(); }
+// ── account: set a passphrase (everyone); manage people (owner) ──────────────────
+function openOwner() {
+  $("owner").style.display = "flex";
+  $("acctWho").textContent = S.user ? `Signed in as ${S.user.email}` : "";
+  $("setPass").value = ""; $("setPassMsg").textContent = "";
+  const owner = S.user && S.user.role === "owner";
+  $("ownerPeople").style.display = owner ? "" : "none";
+  if (owner) { $("ownResult").innerHTML = ""; renderOwnerList(); }
+}
+$("setPassGo").onclick = async () => {
+  const passphrase = $("setPass").value;
+  if (!passphrase) return;
+  const r = await fetch("/api/auth/set-passphrase", { method: "POST",
+    headers: {"Content-Type":"application/json"}, body: JSON.stringify({ passphrase }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { $("setPassMsg").style.color = "var(--red)"; $("setPassMsg").textContent = d.detail || "Couldn't save."; return; }
+  $("setPassMsg").style.color = "var(--live)"; $("setPassMsg").textContent = "Saved — sign in with your email + passphrase from now on.";
+  $("setPass").value = "";
+};
 $("ownClose").onclick = () => { $("owner").style.display = "none"; };
 $("ownSignout").onclick = async () => { $("owner").style.display = "none"; await signOut(); };
 
@@ -1230,7 +1288,7 @@ function wireCopies(root) {
 $("ownAdd").onclick = async () => {
   const name = $("ownName").value.trim(); if (!name) return;
   const r = await fetch("/api/owner/add", { method: "POST", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ name, contact: $("ownContact").value.trim() }) });
+    body: JSON.stringify({ name, email: $("ownContact").value.trim() }) });
   if (!r.ok) return;
   const d = await r.json();
   $("ownName").value = ""; $("ownContact").value = "";

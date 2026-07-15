@@ -335,6 +335,50 @@ def code_login(code: str) -> dict | None:
     return {"email": m["email"], "name": m["name"]}
 
 
+# ── passphrase: what YOU set once and never lose (email + passphrase) ───────────
+#
+# Key links are the zero-effort on-ramp; a passphrase is the thing that never expires and can't
+# be lost in a text. Anyone signed in can set one, then sign in with email + passphrase forever.
+# The owner sets one so he's never locked out again. Hashed with PBKDF2 (200k rounds, per-user
+# salt) — a real password hash, not the light token hash used for links.
+
+_PBKDF_ROUNDS = 200_000
+
+
+def _pass_hash(passphrase: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha256", passphrase.encode(), (config.AUTH_SECRET + salt).encode(), _PBKDF_ROUNDS
+    ).hex()
+
+
+def set_passphrase(email: str, passphrase: str) -> dict:
+    passphrase = (passphrase or "").strip()
+    if len(passphrase) < 6:
+        return {"error": "Use at least 6 characters."}
+    email = norm(email)
+    if not member(email):
+        return {"error": "no such member"}
+    salt = secrets.token_hex(16)
+    db.execute("UPDATE members SET pass_hash=?, pass_salt=? WHERE email=?",
+               (_pass_hash(passphrase, salt), salt, email))
+    return {"ok": True}
+
+
+def passphrase_login(email: str, passphrase: str) -> dict | None:
+    email = norm(email)
+    m = member(email)
+    if not m or m["status"] != "approved" or not m.get("pass_hash"):
+        return None
+    if not hmac.compare_digest(m["pass_hash"], _pass_hash(passphrase or "", m["pass_salt"])):
+        return None
+    return {"email": m["email"], "name": m["name"]}
+
+
+def has_passphrase(email: str) -> bool:
+    m = member(email)
+    return bool(m and m.get("pass_hash"))
+
+
 # ── sessions (server-side, so they can be revoked) ─────────────────────────────
 
 def new_session(email: str, user_agent: str = "") -> str:

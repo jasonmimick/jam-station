@@ -464,6 +464,39 @@ def api_key_code(body: KeyCodeReq, request: Request, response: Response):
     return {"ok": True, "name": who["name"]}
 
 
+class PassLoginReq(BaseModel):
+    email: str
+    passphrase: str
+
+
+@app.post("/api/auth/passphrase")
+def api_passphrase(body: PassLoginReq, request: Request, response: Response):
+    """Sign in with email + passphrase — the durable path you set yourself and never lose."""
+    who = auth.passphrase_login(body.email, body.passphrase)
+    if not who:
+        raise HTTPException(400, "Wrong email or passphrase.")
+    _set_session(response, who["email"], request.headers.get("user-agent", ""), request)
+    return {"ok": True, "name": who["name"]}
+
+
+class SetPassReq(BaseModel):
+    passphrase: str
+
+
+@app.post("/api/auth/set-passphrase")
+def api_set_passphrase(body: SetPassReq, request: Request):
+    """Set (or change) your own passphrase. Must already be signed in — via link, code, or an
+    existing passphrase. That's the bootstrap: tap your link once, then set this and you're
+    never dependent on the link again."""
+    me = _me(request)
+    if not me:
+        raise HTTPException(401, "not signed in")
+    r = auth.set_passphrase(me["email"], body.passphrase)
+    if r.get("error"):
+        raise HTTPException(400, r["error"])
+    return {"ok": True}
+
+
 @app.post("/api/auth/signout")
 def api_signout(request: Request, response: Response):
     auth.end_session(request.cookies.get(config.SESSION_COOKIE))
@@ -547,19 +580,20 @@ def api_invite(body: InviteReq, request: Request):
 
 class AddPersonReq(BaseModel):
     name: str
-    contact: str = ""
+    email: str = ""
 
 
 @app.post("/api/owner/add")
 def api_owner_add(body: AddPersonReq, request: Request):
-    """The dead-simple invite: owner adds a person by name and gets a link + code to text them.
+    """The dead-simple invite: owner adds a person (name + their email) and gets a link + code
+    to text them. The email is their identity — it's what they'll use if they set a passphrase.
     No email round-trip, no approval step — the owner adding you IS the approval."""
     me = _me(request)
     if not me or me["role"] != "owner":
         raise HTTPException(403, "owner only")
     if not body.name.strip():
         raise HTTPException(400, "give them a name")
-    return auth.create_key_member(body.name, body.contact)
+    return auth.create_key_member(body.name, contact=body.email, email=body.email)
 
 
 @app.post("/api/owner/rotate")
