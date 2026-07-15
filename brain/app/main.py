@@ -9,7 +9,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, StreamingResponse)
 from pydantic import BaseModel
 
-from . import auth, channels, config, db, dj
+from . import auth, channels, config, covers, db, dj
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
@@ -21,6 +21,7 @@ async def lifespan(_app: FastAPI):
     db.init()
     channels.ensure_seeded()
     auth.ensure_owner()      # the owner is config, not a signup — he never approves himself
+    covers.kick()            # backfill album art + year in the background
     yield
 
 
@@ -90,7 +91,10 @@ def music(path: str, request: Request, k: str = ""):
         raise HTTPException(403, "no")          # ../../etc/passwd
     if not os.path.isfile(full):
         raise HTTPException(404, "no such track")
-    return FileResponse(full, media_type="audio/mpeg")   # FileResponse honours Range
+    # music AND cover art come through here — serve a .jpg as an image, mp3 as seekable audio.
+    mt = "image/jpeg" if full.lower().endswith((".jpg", ".jpeg")) else \
+         "image/png" if full.lower().endswith(".png") else "audio/mpeg"
+    return FileResponse(full, media_type=mt)             # FileResponse honours Range
 
 
 @app.get("/stream/{slug}")
@@ -208,6 +212,7 @@ def api_library_albums(request: Request):
     from .adapters import library
     if not _is_member(request):
         return []
+    covers.kick()            # a new album may have landed; enrich art/year in the background
     return library.list_albums()
 
 

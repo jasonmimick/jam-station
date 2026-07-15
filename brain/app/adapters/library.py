@@ -6,10 +6,31 @@ urls under /music/, NOT file paths — see config.INTERNAL_URL for why.
 """
 from __future__ import annotations
 
+import json
 import os
 import random
 import re
 from urllib.parse import quote
+
+
+def _folder_extra(folder_abs: str, rel_dir: str) -> dict:
+    """Enrichment covers.py cached beside the tracks: year, a MusicBrainz link, and the real
+    front cover if it fetched one. Absent = the UI falls back to the generated tile."""
+    extra = {}
+    try:
+        mp = os.path.join(folder_abs, "_album.json")
+        if os.path.exists(mp):
+            with open(mp) as f:
+                m = json.load(f)
+            if m.get("year"):
+                extra["year"] = m["year"]
+            if m.get("mbid"):
+                extra["learn_url"] = "https://musicbrainz.org/release/" + m["mbid"]
+    except Exception:
+        pass
+    if os.path.exists(os.path.join(folder_abs, "_cover.jpg")):
+        extra["cover_url"] = "/music/" + quote(rel_dir + "/_cover.jpg")
+    return extra
 
 from .. import config
 
@@ -82,11 +103,13 @@ def list_albums(root: str = "cds") -> list[dict]:
         if not audio:
             continue
         first = _meta(os.path.join(dirpath, audio[0]))
+        rel = os.path.relpath(dirpath, config.MUSIC_DIR)
         out.append({
-            "dir": os.path.relpath(dirpath, config.MUSIC_DIR),   # e.g. "cds/Béla… - UFO Tofu"
+            "dir": rel,                                          # e.g. "cds/Béla… - UFO Tofu"
             "artist": first["artist"],
             "album": first["album"],
             "tracks": len(audio),
+            **_folder_extra(dirpath, rel),                       # year / cover_url / learn_url
         })
     out.sort(key=lambda a: (a["artist"].lower(), a["album"].lower()))
     return out
@@ -103,4 +126,5 @@ def album_tracks(rel_dir: str) -> list[dict]:
     if not os.path.isdir(full):
         return []
     files = sorted(f for f in os.listdir(full) if f.lower().endswith(config.AUDIO_EXTENSIONS))
-    return [_meta(os.path.join(full, f)) for f in files]
+    extra = _folder_extra(full, os.path.relpath(full, base))     # year/cover/learn on every track
+    return [{**_meta(os.path.join(full, f)), **extra} for f in files]

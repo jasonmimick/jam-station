@@ -165,6 +165,9 @@
     box-shadow:0 16px 36px -12px rgba(0,0,0,.65), inset 0 1px 0 #ffffff26, inset 0 0 0 1px #ffffff0f; }
   .npart::after { content:""; position:absolute; inset:0;
     background:radial-gradient(115% 75% at 28% 12%, #ffffff26, transparent 58%); }
+  .npart.hasart { background-size:cover; background-position:center; }
+  .npart.hasart::after { display:none; }              /* real art needs no fake sheen */
+  .npart.hasart #npMono { display:none; }
   .npart #npMono { position:relative; font-size:60px; font-weight:200; line-height:1; color:#fff;
     opacity:.94; font-family:"Helvetica Neue",Arial,sans-serif; }
   .npinfo { min-width:0; flex:1; padding-top:2px; }
@@ -1438,6 +1441,13 @@ buildFlaps(); buildEq();
    Muted saturation + a dark gradient reads like a pressed sleeve, not a swatch. */
 function renderNpArt(t) {
   const art = $("npArt"), mono = $("npMono"); if (!art) return;
+  if (t && t.cover_url) {                         // the real sleeve, from the Cover Art Archive
+    art.style.backgroundImage = `url("${t.cover_url}")`;
+    art.classList.add("hasart");
+    return;
+  }
+  art.style.backgroundImage = "";
+  art.classList.remove("hasart");
   const name = (t && (t.album || t.title)) || "";
   if (!name) { art.style.setProperty("--art1", "#34353b"); art.style.setProperty("--art2", "#161719"); mono.textContent = "♪"; return; }
   let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
