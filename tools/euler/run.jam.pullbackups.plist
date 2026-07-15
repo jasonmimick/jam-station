@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>run.jam.pullbackups</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/jason/projects/jam-station/tools/pull-backups.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- 05:30 daily — after the mini's 04:12 dump, so we pull the freshest one. RunAtLoad too.
+       If euler is off/asleep, launchd runs it on next wake; a missed day just means the next
+       pull grabs several dumps at once. -->
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>5</integer><key>Minute</key><integer>30</integer></dict>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/jam-pullbackups.log</string>
+  <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/jam-pullbackups.log</string>
+</dict>
+</plist>
