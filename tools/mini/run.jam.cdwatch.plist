@@ -3,20 +3,24 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>run.jam.cdwatch</string>
+  <!-- ONE tick every 15s as a FRESH process, not a long-running loop. The loop version kept
+       wedging — a live process would stop noticing new discs for reasons that never reproduced
+       under a hand-trace. A fresh cd-tick each interval can't wedge: it checks once, starts a
+       rip if there's a new disc (detached, so it outlives this run), and exits. -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/jason/business/jam-station/tools/cd-watch.sh</string>
+    <string>/Users/jason/business/jam-station/tools/cd-tick.sh</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
     <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
+  <key>StartInterval</key><integer>15</integer>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>10</integer>
-  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/jam-cdwatch.log</string>
+  <key>AbandonProcessGroup</key><true/>
+  <key>StandardOutPath</key><string>/dev/null</string>
   <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/jam-cdwatch.log</string>
 </dict>
 </plist>
