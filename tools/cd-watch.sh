@@ -37,6 +37,15 @@ while true; do
   if [ -n "${d:-}" ]; then
     sig=$(disc_sig "$d")
     if [ -n "$sig" ] && ! grep -q "^$sig" "$LEDGER" 2>/dev/null; then
+      # A JUST-INSERTED disc is still settling — macOS mounts it, then Gracenote renames the
+      # tracks and the files appear progressively. Rip mid-enumeration and you capture a
+      # partial disc AND ledger its partial signature forever, so it never gets re-ripped.
+      # Require the signature to hold still across a few seconds before committing to a rip.
+      sleep 4
+      if [ "$sig" != "$(disc_sig "$d")" ]; then
+        log "disc still settling — will pick it up once it stops changing"
+        continue
+      fi
       log "new disc — ripping"
       # -y unattended, -e eject when done. rip-cd identifies via MusicBrainz on its own.
       if bash "$HERE/rip-cd.sh" -y -e 2>&1 | sed 's/^/    /'; then

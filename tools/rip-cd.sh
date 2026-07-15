@@ -28,6 +28,17 @@ BRAIN=${BRAIN:-slab-jam-brain}
 API=${API:-http://jam-brain.localhost:8080}
 BITRATE=${BITRATE:-256}          # kbps, plain number: lame wants 256, ffmpeg wants 256k
 
+# ONE RIP AT A TIME, system-wide. There is a single CD drive with a single physical head:
+# two rippers reading it at once each go slower than one alone AND fight to write the same
+# cds/<album> folder. mkdir is atomic — it succeeds for exactly one caller — so it's the lock.
+# Covers the watcher racing itself, a watcher racing a manual rip, anything.
+LOCK=${LOCK_DIR:-/tmp/jam-rip.lock}
+if ! mkdir "$LOCK" 2>/dev/null; then
+  echo "  another rip is already running (lock $LOCK) — skipping"; exit 3
+fi
+stage=""
+trap 'rmdir "$LOCK" 2>/dev/null || true; [ -n "$stage" ] && rm -rf "$stage"' EXIT
+
 disc=$(ls -d /Volumes/*/ 2>/dev/null | while read -r v; do
          compgen -G "$v*.aiff" >/dev/null && echo "$v" && break; done)
 [ -n "${disc:-}" ] || { echo "no audio CD mounted. insert one and wait for the Finder to see it."; exit 1; }
@@ -79,7 +90,7 @@ echo "  disc    $disc"
 echo "  ripping $n tracks -> music/cds/$DIR  @ ${BITRATE}k"
 [ "$YES" = 1 ] || { read -rp "go? [y/N] " r; [ "$r" = y ] || exit 1; }
 
-stage=$(mktemp -d); trap 'rm -rf "$stage"' EXIT
+stage=$(mktemp -d)          # cleaned up by the EXIT trap set with the lock, above
 mkdir -p "$stage/$DIR"
 i=0
 for f in "$disc"*.aiff; do
