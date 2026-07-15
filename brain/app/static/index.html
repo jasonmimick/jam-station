@@ -150,32 +150,42 @@
   .mbtns { display:flex; gap:6px; flex:0 0 auto; }
   .mbtns button.danger:hover { border-color:var(--red); color:var(--red); }
 
-  /* now-playing — a clean audiophile panel (Rams / B&O), not an airport board */
-  .board { padding:26px 26px 22px; border-bottom:1px solid var(--line); }
-  .nphead { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-  .eyebrow { font-size:10px; font-weight:700; letter-spacing:.24em; text-transform:uppercase; color:var(--faint); }
-  .onair { display:none; align-items:center; gap:6px; font-size:10px; font-weight:700;
+  /* now-playing — an album tile + refined type; depth from light, not borders */
+  .board { padding:30px 28px 22px; border-bottom:1px solid var(--line); }
+  .np { display:flex; gap:24px; align-items:flex-start; }
+  .npart { width:138px; height:138px; flex:0 0 auto; border-radius:5px; position:relative;
+    display:grid; place-items:center; overflow:hidden;
+    background:linear-gradient(150deg, var(--art1,#34353b) 0%, var(--art2,#161719) 100%);
+    box-shadow:0 16px 36px -12px rgba(0,0,0,.65), inset 0 1px 0 #ffffff26, inset 0 0 0 1px #ffffff0f; }
+  .npart::after { content:""; position:absolute; inset:0;
+    background:radial-gradient(115% 75% at 28% 12%, #ffffff26, transparent 58%); }
+  .npart #npMono { position:relative; font-size:60px; font-weight:200; line-height:1; color:#fff;
+    opacity:.94; font-family:"Helvetica Neue",Arial,sans-serif; }
+  .npinfo { min-width:0; flex:1; padding-top:2px; }
+  .nphead { display:flex; align-items:center; gap:12px; }
+  .eyebrow { font-size:10px; font-weight:700; letter-spacing:.26em; text-transform:uppercase; color:var(--faint); }
+  .onair { display:none; align-items:center; gap:6px; margin-left:auto; font-size:10px; font-weight:700;
     letter-spacing:.2em; text-transform:uppercase; color:var(--red); }
   .onair.on { display:inline-flex; }
   .onair .oad { width:7px; height:7px; border-radius:50%; background:var(--red); }
   .onair.on .oad { animation:blink 1.5s ease-in-out infinite; }
-  .npframe { margin-top:14px; padding:20px; border:1px solid var(--line); border-radius:10px;
-    background:var(--sunk); }
-  .nptitle { font-size:31px; line-height:1.07; font-weight:700; letter-spacing:-.015em;
-    margin:0; color:var(--ink); overflow-wrap:anywhere; transition:opacity .28s ease; }
+  .nptitle { font-size:33px; line-height:1.05; font-weight:600; letter-spacing:-.022em;
+    margin:15px 0 0; color:var(--ink); overflow-wrap:anywhere; transition:opacity .26s ease; }
   .nptitle.swap { opacity:0; }
-  .npmeta { margin-top:14px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:12.5px; }
+  .byline { margin-top:9px; font-size:15px; font-weight:500; color:var(--ink); }
+  .byline .sm { color:var(--muted); font-weight:400; }
+  .byline .empty, .empty { font-size:15px; color:var(--muted); font-weight:400; }
+  .npmeta { margin-top:15px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:12.5px; }
   .npmeta:empty { display:none; }
   .npmeta .yr { font-family:ui-monospace,"SF Mono",Menlo,monospace; color:var(--muted);
     font-variant-numeric:tabular-nums; letter-spacing:.05em; }
   .npmeta a { color:var(--blue); text-decoration:none; font-weight:600; }
   .npmeta a:hover { text-decoration:underline; }
-  .byline { margin-top:11px; font-size:15px; font-weight:600; color:var(--ink); }
-  .byline .sm { color:var(--muted); font-weight:400; }
-  .byline .empty, .empty { font-size:15px; color:var(--muted); font-weight:400; }
-  .npspec { margin-top:13px; height:12px; font-family:ui-monospace,"SF Mono",Menlo,monospace;
+  .npspec { margin-top:15px; height:12px; font-family:ui-monospace,"SF Mono",Menlo,monospace;
     font-size:11px; letter-spacing:.04em; color:var(--faint); font-variant-numeric:tabular-nums; }
-  @media (max-width:900px) { .nptitle { font-size:26px; } }
+  @media (max-width:900px) { .nptitle { font-size:27px; } }
+  @media (max-width:520px) { .np { gap:16px; } .npart { width:92px; height:92px; }
+    .npart #npMono { font-size:40px; } .nptitle { font-size:23px; } }
 
   /* transport */
   .tx { display:flex; align-items:center; gap:10px; margin-top:20px; flex-wrap:wrap; }
@@ -375,16 +385,19 @@
 
     <div class="pane">
       <div class="board">
-        <div class="nphead">
-          <span class="eyebrow" id="boardLbl">Now playing</span>
-          <span class="onair" id="onair"><span class="oad"></span>On air</span>
+        <div class="np">
+          <div class="npart" id="npArt"><span id="npMono">♪</span></div>
+          <div class="npinfo">
+            <div class="nphead">
+              <span class="eyebrow" id="boardLbl">Now playing</span>
+              <span class="onair" id="onair"><span class="oad"></span>On air</span>
+            </div>
+            <h2 class="nptitle" id="npTitle">Tune in</h2>
+            <div class="byline" id="byline" aria-live="polite"><span class="empty">Select a station</span></div>
+            <div class="npmeta" id="npMeta"></div>
+            <div class="npspec" id="npSpec"></div>
+          </div>
         </div>
-        <div class="npframe">
-          <h2 class="nptitle" id="npTitle">Tune in</h2>
-          <div class="byline" id="byline" aria-live="polite"><span class="empty">Select a station</span></div>
-          <div class="npmeta" id="npMeta"></div>
-        </div>
-        <div class="npspec" id="npSpec"></div>
 
         <div class="tx">
           <button class="go" id="play" disabled aria-label="play or pause">▶</button>
@@ -610,6 +623,7 @@ function setStatus(kind) {
   $("onair").classList.toggle("on", playing && S.mode === "radio");
   $("npSpec").textContent = !playing ? "" : (S.mode === "radio" ? "256 kbps · mp3 · live" : "on demand");
   renderNpMeta(currentTrack());
+  renderNpArt(currentTrack());
   updateMediaSession(currentTrack());
   const t = currentTrack();
   document.title = (playing && t && t.title) ? `${t.title} — jam-station` : "jam-station";
@@ -1407,6 +1421,20 @@ buildFlaps(); buildEq();
   wire("rez0", "--c1", +1, 180, 520, 270);   // left handle sizes the Tunes column
   wire("rez1", "--c2", -1, 200, 560, 320);   // right handle sizes the DJ column
 })();
+
+/* the album tile — a tonal cover derived from the album name (until real cover art lands).
+   Muted saturation + a dark gradient reads like a pressed sleeve, not a swatch. */
+function renderNpArt(t) {
+  const art = $("npArt"), mono = $("npMono"); if (!art) return;
+  const name = (t && (t.album || t.title)) || "";
+  if (!name) { art.style.setProperty("--art1", "#34353b"); art.style.setProperty("--art2", "#161719"); mono.textContent = "♪"; return; }
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const hue = h % 360;
+  art.style.setProperty("--art1", `hsl(${hue}, 30%, 33%)`);
+  art.style.setProperty("--art2", `hsl(${(hue + 34) % 360}, 34%, 13%)`);
+  const m = name.match(/[A-Za-z0-9]/);
+  mono.textContent = m ? m[0].toUpperCase() : "♪";
+}
 
 /* now-playing metadata — year (when we have it) + a Learn more link */
 function renderNpMeta(t) {
