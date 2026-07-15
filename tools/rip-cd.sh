@@ -73,6 +73,13 @@ if [ "$YES" = 0 ]; then
   [ -n "$ALBUM" ]  || { read -rp "album name: " ALBUM; }
   [ -n "$ARTIST" ] || { read -rp "artist: " ARTIST; }
 fi
+# MusicBrainz didn't know it? macOS often still named the VOLUME after the album (that's how
+# "A Generation Ago Today" mounts). Use that before falling back to a meaningless dated folder
+# — a real title beats "Unknown Album 2026-...". Only skip the generic mount names.
+if [ -z "$ALBUM" ]; then
+  vol=$(basename "$disc")
+  case "$vol" in "Audio CD"|"Untitled"|"Untitled CD"|"") ;; *) ALBUM=$vol;; esac
+fi
 [ -n "$ALBUM" ]  || ALBUM="Unknown Album $(date +%Y-%m-%d-%H%M)"
 [ -n "$ARTIST" ] || ARTIST="Unknown Artist"
 
