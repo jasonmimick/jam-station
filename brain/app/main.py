@@ -1,4 +1,6 @@
+import json
 import os
+import time
 from contextlib import asynccontextmanager
 
 import httpx
@@ -176,6 +178,24 @@ class ChannelRef(BaseModel):
 @app.post("/api/skip")
 def api_skip(ref: ChannelRef):
     return {"skipped": channels.skip(ref.channel)}
+
+
+# ---------------------------------------------------------------- rip status
+
+@app.get("/api/rip")
+def api_rip():
+    """What the CD ripper is doing, for the UI. The ripper runs on the HOST and can't call in,
+    but it CAN drop a status file into the music volume (which the brain owns) via docker — so
+    it writes /music/.rip-status per track and we just read it. Stale (>90s untouched) = the
+    ripper died or finished without a clean 'done', so report idle rather than a frozen bar."""
+    p = os.path.join(config.MUSIC_DIR, ".rip-status")
+    try:
+        if time.time() - os.stat(p).st_mtime > 90:
+            return {"state": "idle"}
+        with open(p) as f:
+            return json.load(f)
+    except Exception:
+        return {"state": "idle"}
 
 
 # ---------------------------------------------------------------- catalog (your records)

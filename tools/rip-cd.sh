@@ -109,6 +109,16 @@ encode() {           # in out title track total
     echo "need lame (brew install lame) or ffmpeg" >&2; exit 1
   fi
 }
+# Tell the UI what's ripping. The ripper's on the host and can't call the brain's API, but it
+# CAN drop a status file into the brain's music volume via docker. The UI reads /api/rip.
+# python does the JSON escaping so brackets/quotes/accents in a title can't break it.
+jstr() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1" 2>/dev/null || echo '""'; }
+report() {   # state track total title
+  printf '{"state":"%s","album":%s,"track":%s,"total":%s,"title":%s}' \
+    "$1" "$(jstr "$ALBUM")" "${2:-0}" "${3:-0}" "$(jstr "${4:-}")" \
+    | docker exec -i "$BRAIN" sh -c 'cat > /music/.rip-status' 2>/dev/null || true
+}
+
 DIR="$(safe "$ARTIST") - $(safe "$ALBUM")"
 n=$(ls "$disc"*.aiff | wc -l | tr -d ' ')
 
@@ -126,6 +136,7 @@ for f in "$disc"*.aiff; do
   i=$((i+1))
   out=$(printf '%02d %s.mp3' "$num" "$(safe "$title")")
   printf '  [%2d/%2d] %s\n' "$i" "$n" "$title"
+  report ripping "$i" "$n" "$title"
   encode "$f" "$stage/$DIR/$out" "$title" "$num" "$n"
 done
 
@@ -133,6 +144,7 @@ done
 # the door. mkdir first: cp needs the parent to exist.
 docker exec "$BRAIN" mkdir -p /music/cds
 docker cp "$stage/$DIR" "$BRAIN:/music/cds/$DIR"
+report done "$n" "$n" ""       # UI shows "added <album>", then goes idle when this goes stale
 
 # Ledger it now that the bytes are safely in the volume — the ripper records its OWN outcome,
 # so the watcher never has to track a background job. A partial/failed rip exits before here
