@@ -250,6 +250,91 @@ def redeem_code(email: str, code: str) -> dict:
     return {"ok": True, "email": email}
 
 
+# ── access keys: the dead-simple path (owner hands out a link + code) ───────────
+#
+# The owner creates a person and gets a LINK and a CODE to relay however they like (text,
+# in person). Both are REUSABLE — tap the link or type the code, anytime, and you're in.
+# No email round-trip, no signup. Losing one is fine (the other still works); losing both is
+# fine (the owner rotates). This is the recovery story Jason asked for, built in.
+
+def _member_slug(name: str) -> str:
+    base = "".join(c if c.isalnum() else "-" for c in (name or "").lower()).strip("-") or "guest"
+    base = base[:20]
+    # internal identity for someone with no email — kept in the same `email` column so sessions
+    # and favourites need no schema change. The '@key.jam' host marks it as not a real address.
+    cand = f"{base}@key.jam"
+    n = 2
+    while member(cand):
+        cand = f"{base}-{n}@key.jam"
+        n += 1
+    return cand
+
+
+def create_key_member(name: str, contact: str = "", email: str = "") -> dict:
+    """Owner adds a person. Approved on the spot (the owner adding you IS the approval), with a
+    fresh reusable link + code. Returns the raw link and code ONCE — they're stored hashed and
+    can't be shown again; to re-send, rotate."""
+    name = (name or "").strip()[:60]
+    ident = norm(email) if email and "@" in email else _member_slug(name)
+    db.execute(
+        "INSERT INTO members(email, name, role, status, contact, created_at, approved_at) "
+        "VALUES(?,?,'member','approved',?,?,?) "
+        "ON CONFLICT (email) DO UPDATE SET name=excluded.name, status='approved', "
+        "contact=excluded.contact",
+        (ident, name, contact.strip()[:120], _stamp(_now()), _stamp(_now())),
+    )
+    link, code = _issue_key(ident)
+    return {"email": ident, "name": name, "link": link, "code": code}
+
+
+def _issue_key(email: str) -> tuple[str, str]:
+    """Mint a reusable token+code for a member; returns the raw pair (caller relays them)."""
+    raw_token, code = secrets.token_urlsafe(18), _code()
+    db.execute("INSERT INTO access_keys(token_hash, code_hash, email, created_at) VALUES(?,?,?,?)",
+               (_hash(raw_token), _hash(code), norm(email), _stamp(_now())))
+    return f"{config.PUBLIC_URL}/k/{raw_token}", code
+
+
+def rotate_key(email: str) -> dict | None:
+    """Recovery: kill this member's old keys and issue a fresh link + code. What the owner
+    hits when someone's lost their link and their code both."""
+    email = norm(email)
+    m = member(email)
+    if not m:
+        return None
+    db.execute("UPDATE access_keys SET revoked_at=? WHERE email=? AND revoked_at=''",
+               (_stamp(_now()), email))
+    link, code = _issue_key(email)
+    return {"email": email, "name": m["name"], "link": link, "code": code}
+
+
+def key_login(raw_token: str) -> dict | None:
+    """Tap the link. Reusable — succeeds every time until revoked."""
+    rows = db.query("SELECT email FROM access_keys WHERE token_hash=? AND revoked_at=''",
+                    (_hash(raw_token or ""),))
+    if not rows:
+        return None
+    m = member(rows[0]["email"])
+    if not m or m["status"] != "approved":
+        return None
+    return {"email": m["email"], "name": m["name"]}
+
+
+def code_login(code: str) -> dict | None:
+    """Type the code — the fallback when a link mangles in a text or won't open. Reusable."""
+    code = (code or "").strip().upper().replace("-", "").replace(" ", "")
+    if len(code) < 6:
+        return None
+    rows = db.query("SELECT email FROM access_keys WHERE code_hash=? AND revoked_at=''",
+                    (_hash(code),))
+    if not rows:
+        return None
+    m = member(rows[0]["email"])
+    if not m or m["status"] != "approved":
+        return None
+    return {"email": m["email"], "name": m["name"]}
+
+
 # ── sessions (server-side, so they can be revoked) ─────────────────────────────
 
 def new_session(email: str, user_agent: str = "") -> str:
@@ -275,7 +360,13 @@ def whoami(raw: str | None) -> dict | None:
     m = member(rows[0]["email"])
     if not m or m["status"] != "approved":     # revoked mid-session: the door shuts now
         return None
-    db.execute("UPDATE sessions SET last_seen=? WHERE id_hash=?", (_stamp(_now()), _hash(raw)))
+    # SLIDING SESSION: every visit pushes expiry back out to the full window. So anyone who
+    # listens even once a month never gets logged out — "tap once, listen forever." Expiry
+    # only culls the genuinely dormant. (There's no security reason a radio expires an active
+    # session; revocation is server-side and immediate regardless.)
+    now = _now()
+    db.execute("UPDATE sessions SET last_seen=?, expires_at=? WHERE id_hash=?",
+               (_stamp(now), _stamp(now + timedelta(days=config.SESSION_DAYS)), _hash(raw)))
     return {"email": m["email"], "name": m["name"], "role": m["role"]}
 
 
@@ -285,10 +376,13 @@ def end_session(raw: str | None) -> None:
 
 
 def revoke(email: str) -> None:
-    """Owner slams the door. Status AND every live session, immediately."""
+    """Owner slams the door. Status, every live session, AND every access key — so a revoked
+    person's link and code stop working too, not just their current session."""
     email = norm(email)
     db.execute("UPDATE members SET status='revoked' WHERE email=?", (email,))
     db.execute("DELETE FROM sessions WHERE email=?", (email,))
+    db.execute("UPDATE access_keys SET revoked_at=? WHERE email=? AND revoked_at=''",
+               (_stamp(_now()), email))
 
 
 # ── favourites ────────────────────────────────────────────────────────────────

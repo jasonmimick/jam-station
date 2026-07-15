@@ -133,5 +133,6 @@ docker cp "$stage/$DIR" "$BRAIN:/music/cds/$DIR"
 # dial full of one-album channels; the catalog is the shelf.
 echo
 echo "  ripped -> catalog as cds/$DIR"
-[ "$EJECT" = 1 ] && { drutil eject >/dev/null 2>&1 || true; echo "  ejected — next disc when you're ready"; }
+# diskutil ejects a MOUNTED volume (unmount + eject); drutil alone left the disc mounted.
+[ "$EJECT" = 1 ] && { { diskutil eject "$disc" || drutil eject; } >/dev/null 2>&1 || true; echo "  ejected — next disc when you're ready"; }
 echo "  it's in the catalog now (members-only) and on The Disc Changer."

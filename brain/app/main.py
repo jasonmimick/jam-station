@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
-                               StreamingResponse)
+                               RedirectResponse, StreamingResponse)
 from pydantic import BaseModel
 
 from . import auth, channels, config, db, dj
@@ -431,6 +431,39 @@ def api_code(body: CodeReq, request: Request, response: Response):
     return {"ok": True, "email": r["email"]}
 
 
+# ---------------------------------------------------------------- access keys (the simple path)
+
+@app.get("/k/{token}")
+def key_link(token: str, request: Request):
+    """Tap a personal link -> you're in. A GET that DOES act — deliberately, and safely: unlike
+    an emailed magic link these are texted, and they're REUSABLE, so a link-preview bot that
+    prefetches the URL just gets a throwaway cookie it discards; the real person taps and gets
+    their own session, and the key still works. That reusability is exactly what makes 'tap
+    once, listen forever' safe without a confirm page."""
+    who = auth.key_login(token)
+    if not who:
+        return _page("Link not valid",
+                     "<h1 class=err>That link isn't valid anymore</h1>"
+                     "<p>Ask whoever invited you for a fresh one.</p>")
+    resp = RedirectResponse("/", status_code=303)
+    _set_session(resp, who["email"], request.headers.get("user-agent", ""), request)
+    return resp
+
+
+class KeyCodeReq(BaseModel):
+    code: str
+
+
+@app.post("/api/auth/key")
+def api_key_code(body: KeyCodeReq, request: Request, response: Response):
+    """Type your code — the fallback when a link won't open. Same reusable grant as the link."""
+    who = auth.code_login(body.code)
+    if not who:
+        raise HTTPException(400, "That code isn't valid.")
+    _set_session(response, who["email"], request.headers.get("user-agent", ""), request)
+    return {"ok": True, "name": who["name"]}
+
+
 @app.post("/api/auth/signout")
 def api_signout(request: Request, response: Response):
     auth.end_session(request.cookies.get(config.SESSION_COOKIE))
@@ -512,14 +545,45 @@ def api_invite(body: InviteReq, request: Request):
     return {"invite": raw, "url": f"{config.PUBLIC_URL}/join?i={raw}"}
 
 
+class AddPersonReq(BaseModel):
+    name: str
+    contact: str = ""
+
+
+@app.post("/api/owner/add")
+def api_owner_add(body: AddPersonReq, request: Request):
+    """The dead-simple invite: owner adds a person by name and gets a link + code to text them.
+    No email round-trip, no approval step — the owner adding you IS the approval."""
+    me = _me(request)
+    if not me or me["role"] != "owner":
+        raise HTTPException(403, "owner only")
+    if not body.name.strip():
+        raise HTTPException(400, "give them a name")
+    return auth.create_key_member(body.name, body.contact)
+
+
+@app.post("/api/owner/rotate")
+def api_owner_rotate(body: EmailReq, request: Request):
+    """Recovery: someone lost their link AND code. Issue a fresh pair; the old ones die."""
+    me = _me(request)
+    if not me or me["role"] != "owner":
+        raise HTTPException(403, "owner only")
+    r = auth.rotate_key(body.email)
+    if not r:
+        raise HTTPException(404, "no such person")
+    return r
+
+
 @app.get("/api/owner/members")
 def api_members(request: Request):
     me = _me(request)
     if not me or me["role"] != "owner":
         raise HTTPException(403, "owner only")
-    return {"members": db.query(
-        "SELECT email, name, role, status, note, created_at, approved_at FROM members "
-        "ORDER BY created_at DESC")}
+    rows = db.query(
+        "SELECT m.email, m.name, m.role, m.status, m.contact, m.created_at, "
+        "  (SELECT COUNT(*) FROM access_keys k WHERE k.email=m.email AND k.revoked_at='') AS keys "
+        "FROM members m ORDER BY m.created_at DESC")
+    return {"members": rows}
 
 
 @app.post("/api/owner/revoke")

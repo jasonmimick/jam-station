@@ -124,6 +124,19 @@ CREATE TABLE IF NOT EXISTS sessions(
   user_agent TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email);
+-- ── access keys. The DEAD-SIMPLE path (2026-07-14): the owner hands a person a personal
+-- link AND a code (same credential, two forms). Tap the link or type the code -> you're in,
+-- forever (the session slides). REUSABLE, not single-use like login_attempts: a family member
+-- taps their link whenever they get a new phone. Recovery = the owner rotates (new pair) or
+-- revokes. Stored hashed, like everything else. No email required to hold one.
+CREATE TABLE IF NOT EXISTS access_keys(
+  token_hash TEXT PRIMARY KEY,       -- the /k/<token> link
+  code_hash TEXT NOT NULL,           -- the typeable code, same grant
+  email TEXT NOT NULL,               -- the member (internal id) it authenticates
+  created_at TEXT DEFAULT ({_NOW}),
+  revoked_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_access_email ON access_keys(email);
 CREATE TABLE IF NOT EXISTS favourites(
   email TEXT NOT NULL,
   url TEXT NOT NULL,                  -- a favourite is worthless if you can't play it back
@@ -142,6 +155,8 @@ MIGRATIONS = (
     "ALTER TABLE nowplaying ADD COLUMN IF NOT EXISTS url TEXT DEFAULT ''",
     "ALTER TABLE queue ADD COLUMN IF NOT EXISTS licenseurl TEXT DEFAULT ''",
     "ALTER TABLE queue ADD COLUMN IF NOT EXISTS commercial_ok INTEGER DEFAULT 1",
+    # a key-link member has no email — 'contact' is the owner's own note on how to reach them
+    "ALTER TABLE members ADD COLUMN IF NOT EXISTS contact TEXT DEFAULT ''",
 )
 
 _pool: ConnectionPool | None = None

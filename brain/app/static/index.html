@@ -116,6 +116,20 @@
   /* yellow is the board's signage colour: a private station is one the board knows about
      and the public dial doesn't. Not a warning — a piece of station furniture. */
   .chip.priv { color:var(--yellow); border-color:var(--yellow); opacity:.75; }
+  /* owner panel: the link+code card and the people list */
+  .keycard { border:1px solid var(--yellow); border-radius:3px; padding:10px; background:var(--sunk); }
+  .kc-h { font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--yellow); margin-bottom:8px; }
+  .kc-row { display:flex; gap:6px; margin-top:6px; }
+  .kc-row input { flex:1; min-width:0; padding:7px; font-size:12px; }
+  .kc-row button, .mbtns button { border:1px solid var(--line); background:transparent; color:var(--ink);
+    font:inherit; font-size:11px; font-weight:700; padding:6px 9px; border-radius:2px; cursor:pointer; white-space:nowrap; }
+  .kc-row button:hover, .mbtns button:hover { border-color:var(--blue); color:var(--blue); }
+  .mrow { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 2px; border-bottom:1px solid var(--line); }
+  .mname { font-size:13.5px; font-weight:700; }
+  .msub { display:block; font-size:11px; color:var(--muted); margin-top:1px; }
+  .mbtns { display:flex; gap:6px; flex:0 0 auto; }
+  .mbtns button.danger:hover { border-color:var(--red); color:var(--red); }
 
   /* the split-flap board — the signature */
   .board { padding:24px 24px 20px; border-bottom:1px solid var(--line); }
@@ -388,28 +402,46 @@
          padding:22px;max-width:380px;width:100%">
       <div class="lbl" style="margin-bottom:12px">Sign in</div>
       <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">
-        You don't need an account to listen. Sign in and your <b>favourites follow you</b>
-        across devices.</p>
-      <div id="authStep1">
-        <input id="authEmail" type="email" placeholder="you@example.com"
-               style="width:100%;padding:11px;margin-bottom:10px">
-        <button id="authSend" style="width:100%;padding:12px;border:0;border-radius:2px;
-                background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
-                letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Email me a code</button>
-      </div>
-      <div id="authStep2" style="display:none">
-        <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">
-          Check your email. Click the link, <b>or type the code here</b> — the code works on
-          <i>this</i> device even if you opened the email somewhere else.</p>
-        <input id="authCode" placeholder="8-character code" autocapitalize="characters"
-               style="width:100%;padding:11px;margin-bottom:10px;letter-spacing:.2em;text-transform:uppercase">
-        <button id="authGo" style="width:100%;padding:12px;border:0;border-radius:2px;
-                background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
-                letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Sign in</button>
-      </div>
+        You don't need an account to listen. Signing in just carries your <b>favourites</b>
+        across your devices and shows your name when you're on air.</p>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:1.5">
+        <b>Tap the personal link</b> you were sent and you're in. If the link won't open,
+        type the <b>code</b> from the same message here:</p>
+      <input id="authCode" placeholder="your code" autocapitalize="characters"
+             style="width:100%;padding:11px;margin-bottom:10px;letter-spacing:.2em;text-transform:uppercase">
+      <button id="authGo" style="width:100%;padding:12px;border:0;border-radius:2px;
+              background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
+              letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Sign in</button>
       <p id="authMsg" style="font-size:12.5px;margin:12px 0 0"></p>
       <button id="authClose" style="width:100%;margin-top:10px;padding:9px;background:transparent;
               border:1px solid var(--line);color:var(--muted);border-radius:2px;font:inherit;cursor:pointer">Close</button>
+    </div>
+  </div>
+
+  <!-- owner panel: add people, hand out links, recover (rotate), revoke. Owner only. -->
+  <div id="owner" style="display:none;position:fixed;inset:0;background:#000a;z-index:99;
+       align-items:center;justify-content:center;padding:24px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:2px;
+         padding:22px;max-width:440px;width:100%;max-height:88vh;overflow:auto">
+      <div class="lbl" style="margin-bottom:6px">People</div>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.5">
+        Add someone, then text them their link. If a link ever fails or a code gets lost,
+        hit <b>New link</b> to send a fresh pair — the old one stops working.</p>
+      <input id="ownName" placeholder="Name (e.g. Dad)"
+             style="width:100%;padding:10px;margin-bottom:8px">
+      <input id="ownContact" placeholder="Their phone or email — just your note (optional)"
+             style="width:100%;padding:10px;margin-bottom:8px">
+      <button id="ownAdd" style="width:100%;padding:11px;border:0;border-radius:2px;
+              background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
+              letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Add person</button>
+      <div id="ownResult" style="margin-top:12px"></div>
+      <div id="ownList" style="margin-top:8px"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button id="ownSignout" style="flex:1;padding:9px;background:transparent;
+                border:1px solid var(--line);color:var(--muted);border-radius:2px;font:inherit;cursor:pointer">Sign out</button>
+        <button id="ownClose" style="flex:1;padding:9px;background:transparent;
+                border:1px solid var(--line);color:var(--muted);border-radius:2px;font:inherit;cursor:pointer">Close</button>
+      </div>
     </div>
   </div>
 
@@ -1158,45 +1190,77 @@ async function pullFavs() {
   } catch {}
 }
 
-$("who").onclick = async () => {
-  if (S.user) {
-    await fetch("/api/auth/signout", { method: "POST" });
-    S.user = null;
-    await loadMe();
-    return;
-  }
-  $("auth").style.display = "flex";
-  $("authStep1").style.display = ""; $("authStep2").style.display = "none";
-  $("authMsg").textContent = "";
+// The ☺/● icon: signed out -> sign-in; owner -> the People panel; member -> sign out.
+$("who").onclick = () => {
+  if (!S.user) { $("auth").style.display = "flex"; $("authMsg").textContent = ""; $("authCode").value = ""; $("authCode").focus(); return; }
+  if (S.user.role === "owner") return openOwner();
+  signOut();
 };
 $("authClose").onclick = () => { $("auth").style.display = "none"; };
-
-$("authSend").onclick = async () => {
-  const email = $("authEmail").value.trim();
-  if (!email) return;
-  await fetch("/api/auth/login", { method: "POST", headers: {"Content-Type":"application/json"},
-                                   body: JSON.stringify({ email }) });
-  // deliberately the same answer whether or not they're a member — this must not become a
-  // way to discover who has access
-  $("authStep1").style.display = "none";
-  $("authStep2").style.display = "";
-  $("authMsg").style.color = "var(--muted)";
-  $("authMsg").textContent = "If that address has access, an email is on its way.";
-};
+async function signOut() { await fetch("/api/auth/signout", { method: "POST" }); S.user = null; await loadMe(); }
 
 $("authGo").onclick = async () => {
-  const email = $("authEmail").value.trim(), code = $("authCode").value.trim();
-  const r = await fetch("/api/auth/code", { method: "POST",
-    headers: {"Content-Type":"application/json"}, body: JSON.stringify({ email, code }) });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    $("authMsg").style.color = "var(--red)";
-    $("authMsg").textContent = d.detail || "That didn't work.";
-    return;
-  }
+  const code = $("authCode").value.trim();
+  if (!code) return;
+  const r = await fetch("/api/auth/key", { method: "POST",
+    headers: {"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
+  if (!r.ok) { $("authMsg").style.color = "var(--red)"; $("authMsg").textContent = "That code isn't valid — check it, or ask for a new one."; return; }
   $("auth").style.display = "none";
   await loadMe();
 };
+$("authCode").onkeydown = (e) => { if (e.key === "Enter") $("authGo").click(); };
+
+// ── owner: add people, hand out links, recover, revoke ──────────────────────────
+function openOwner() { $("owner").style.display = "flex"; $("ownResult").innerHTML = ""; renderOwnerList(); }
+$("ownClose").onclick = () => { $("owner").style.display = "none"; };
+$("ownSignout").onclick = async () => { $("owner").style.display = "none"; await signOut(); };
+
+function keyCard(r) {   // {name, link, code} — the pair to relay, shown once
+  return `<div class="keycard"><div class="kc-h">${esc(r.name)} — text them either one</div>` +
+    `<div class="kc-row"><input readonly value="${esc(r.link)}"><button data-copy="${esc(r.link)}">Copy link</button></div>` +
+    `<div class="kc-row"><input readonly value="${esc(r.code)}"><button data-copy="${esc(r.code)}">Copy code</button></div></div>`;
+}
+function wireCopies(root) {
+  root.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => {
+    navigator.clipboard.writeText(b.dataset.copy).then(() => {
+      const t = b.textContent; b.textContent = "Copied ✓"; setTimeout(() => b.textContent = t, 1200);
+    });
+  });
+}
+$("ownAdd").onclick = async () => {
+  const name = $("ownName").value.trim(); if (!name) return;
+  const r = await fetch("/api/owner/add", { method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ name, contact: $("ownContact").value.trim() }) });
+  if (!r.ok) return;
+  const d = await r.json();
+  $("ownName").value = ""; $("ownContact").value = "";
+  $("ownResult").innerHTML = keyCard(d); wireCopies($("ownResult"));
+  renderOwnerList();
+};
+async function renderOwnerList() {
+  let members = [];
+  try { members = (await (await fetch("/api/owner/members")).json()).members || []; } catch {}
+  const rows = members.filter(m => m.role !== "owner").map(m => {
+    const meta = [m.status !== "approved" ? m.status : "", m.contact].filter(Boolean).join(" · ");
+    return `<div class="mrow"><div><span class="mname">${esc(m.name || m.email)}</span>` +
+      (meta ? `<span class="msub">${esc(meta)}</span>` : "") + `</div><div class="mbtns">` +
+      `<button data-rotate="${esc(m.email)}">New link</button>` +
+      `<button data-revoke="${esc(m.email)}" class="danger">Remove</button></div></div>`;
+  }).join("");
+  const w = $("ownList");
+  w.innerHTML = rows || `<p class="msub" style="padding:8px 2px">No one added yet.</p>`;
+  w.querySelectorAll("[data-rotate]").forEach(b => b.onclick = async () => {
+    const r = await fetch("/api/owner/rotate", { method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ email: b.dataset.rotate }) });
+    if (r.ok) { $("ownResult").innerHTML = keyCard(await r.json()); wireCopies($("ownResult")); }
+  });
+  w.querySelectorAll("[data-revoke]").forEach(b => b.onclick = async () => {
+    if (!confirm("Remove this person? Their link and code stop working.")) return;
+    await fetch("/api/owner/revoke", { method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ email: b.dataset.revoke }) });
+    renderOwnerList();
+  });
+}
 
 buildFlaps(); buildEq();
 loadMe();
