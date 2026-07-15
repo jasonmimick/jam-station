@@ -133,6 +133,12 @@ docker cp "$stage/$DIR" "$BRAIN:/music/cds/$DIR"
 # dial full of one-album channels; the catalog is the shelf.
 echo
 echo "  ripped -> catalog as cds/$DIR"
-# diskutil ejects a MOUNTED volume (unmount + eject); drutil alone left the disc mounted.
-[ "$EJECT" = 1 ] && { { diskutil eject "$disc" || drutil eject; } >/dev/null 2>&1 || true; echo "  ejected — next disc when you're ready"; }
+# Eject needs FORCE: the GUI login session (loginwindow) holds optical volumes, so a plain
+# unmount over SSH gets dissented and the disc stays put. Force overrides it. Eject the device
+# node, not the mount point, to sidestep any spaces-in-the-name quirks.
+if [ "$EJECT" = 1 ]; then
+  dev=$(diskutil info "$disc" 2>/dev/null | awk -F: '/Device Node/{gsub(/ /,"",$2);print $2}')
+  diskutil eject force "${dev:-$disc}" >/dev/null 2>&1 || drutil eject >/dev/null 2>&1 || true
+  echo "  ejected — next disc when you're ready"
+fi
 echo "  it's in the catalog now (members-only) and on The Disc Changer."
