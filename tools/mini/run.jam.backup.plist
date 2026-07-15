@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>run.jam.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/jason/business/jam-station/tools/mini/backup-db.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- daily at 04:12. RunAtLoad too, so installing it takes a first backup immediately.
+       If the mac is asleep at 04:12, launchd runs it on the next wake — a missed night is
+       fine, a silently-never-running backup is not. -->
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>12</integer></dict>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/jam-backup.log</string>
+  <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/jam-backup.log</string>
+</dict>
+</plist>
