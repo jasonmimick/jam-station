@@ -141,18 +141,24 @@
   .mbtns { display:flex; gap:6px; flex:0 0 auto; }
   .mbtns button.danger:hover { border-color:var(--red); color:var(--red); }
 
-  /* the split-flap board — the signature */
-  .board { padding:24px 24px 20px; border-bottom:1px solid var(--line); }
-  .flaps { display:flex; flex-wrap:wrap; gap:3px; margin-top:12px; }
-  .flap { width:26px; height:38px; background:var(--flap); color:var(--flap-ink); border-radius:2px;
-    display:flex; align-items:center; justify-content:center; font-size:21px; font-weight:800;
-    position:relative; overflow:hidden; }
-  .flap::after { content:""; position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(0,0,0,.55); }
-  .flap.turn { animation:turn .11s linear; }
-  @keyframes turn { 0%{transform:rotateX(0)} 50%{transform:rotateX(-70deg)} 100%{transform:rotateX(0)} }
-  .byline { margin-top:14px; font-size:17px; font-weight:700; }
+  /* now-playing — a clean audiophile panel (Rams / B&O), not an airport board */
+  .board { padding:26px 26px 22px; border-bottom:1px solid var(--line); }
+  .nphead { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .eyebrow { font-size:10px; font-weight:700; letter-spacing:.24em; text-transform:uppercase; color:var(--faint); }
+  .onair { display:none; align-items:center; gap:6px; font-size:10px; font-weight:700;
+    letter-spacing:.2em; text-transform:uppercase; color:var(--red); }
+  .onair.on { display:inline-flex; }
+  .onair .oad { width:7px; height:7px; border-radius:50%; background:var(--red); }
+  .onair.on .oad { animation:blink 1.5s ease-in-out infinite; }
+  .nptitle { font-size:31px; line-height:1.07; font-weight:700; letter-spacing:-.015em;
+    margin:18px 0 0; color:var(--ink); overflow-wrap:anywhere; transition:opacity .28s ease; }
+  .nptitle.swap { opacity:0; }
+  .byline { margin-top:11px; font-size:15px; font-weight:600; color:var(--ink); }
   .byline .sm { color:var(--muted); font-weight:400; }
-  .empty { font-size:16px; color:var(--muted); font-weight:400; }
+  .byline .empty, .empty { font-size:15px; color:var(--muted); font-weight:400; }
+  .npspec { margin-top:13px; height:12px; font-family:ui-monospace,"SF Mono",Menlo,monospace;
+    font-size:11px; letter-spacing:.04em; color:var(--faint); font-variant-numeric:tabular-nums; }
+  @media (max-width:900px) { .nptitle { font-size:26px; } }
 
   /* transport */
   .tx { display:flex; align-items:center; gap:10px; margin-top:20px; flex-wrap:wrap; }
@@ -348,9 +354,13 @@
 
     <div class="pane">
       <div class="board">
-        <div class="lbl" id="boardLbl">Now playing</div>
-        <div class="flaps" id="flaps"></div>
-        <div class="byline" id="byline" aria-live="polite"><span class="empty">Select a station →</span></div>
+        <div class="nphead">
+          <span class="eyebrow" id="boardLbl">Now playing</span>
+          <span class="onair" id="onair"><span class="oad"></span>On air</span>
+        </div>
+        <h2 class="nptitle" id="npTitle">Tune in</h2>
+        <div class="byline" id="byline" aria-live="polite"><span class="empty">Select a station</span></div>
+        <div class="npspec" id="npSpec"></div>
 
         <div class="tx">
           <button class="go" id="play" disabled aria-label="play or pause">▶</button>
@@ -553,36 +563,17 @@ const qAccent = new URLSearchParams(location.search).get("accent");
 setAccent((qAccent && /^#?[0-9a-f]{6}$/i.test(qAccent) ? (qAccent[0]==="#"?qAccent:"#"+qAccent)
            : localStorage.getItem("jam-accent")) || DEFAULT_ACCENT, false);
 
-/* ── split-flap. A now-playing genuinely changes like a departure board. ─── */
-const CHARS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'’-.,>&/!?()\"";
-const CELLS = window.matchMedia("(max-width:520px)").matches ? 11
-            : window.matchMedia("(max-width:900px)").matches ? 15 : 20;
-let cells = [], timers = [];
-function buildFlaps() {
-  $("flaps").innerHTML = Array.from({length:CELLS}, () => `<div class="flap"> </div>`).join("");
-  cells = [...document.querySelectorAll(".flap")];
-}
-let lastFlap = "";
+/* ── now-playing title — a clean swap, not airport flaps ─────────────────── */
+let lastTitle = "";
 function flapTo(text) {
-  const t = (text || "").toUpperCase().slice(0, CELLS).padEnd(CELLS, " ");
-  if (t === lastFlap) return;
-  lastFlap = t;
-  timers.forEach(clearInterval); timers = [];
-  cells.forEach((cell, i) => {
-    const target = CHARS.includes(t[i]) ? t[i] : " ";
-    if (cell.textContent === target) return;
-    let n = 0;
-    const steps = 5 + i * 2;                       // stagger left→right like the real board
-    const tm = setInterval(() => {
-      n++;
-      cell.textContent = n >= steps ? target : CHARS[Math.floor(Math.random()*CHARS.length)];
-      cell.classList.add("turn");
-      setTimeout(() => cell.classList.remove("turn"), 100);
-      if (n >= steps) clearInterval(tm);
-    }, 45);
-    timers.push(tm);
-  });
+  const t = text || "";
+  if (t === lastTitle) return;
+  lastTitle = t;
+  const el = $("npTitle");
+  el.classList.add("swap");
+  setTimeout(() => { el.textContent = t || "—"; el.classList.remove("swap"); }, 170);
 }
+function buildFlaps() {}     // no-op: kept so the init call stays harmless
 
 /* ── status, driven by the audio element's real events ───────────────────── */
 function setStatus(kind) {
@@ -591,6 +582,8 @@ function setStatus(kind) {
   $("play").classList.toggle("busy", kind === "buffering");
   $("play").textContent = playing ? "❚❚" : "▶";
   $("status").className = "status" + (playing ? " live" : kind === "buffering" ? " buf" : "");
+  $("onair").classList.toggle("on", playing && S.mode === "radio");
+  $("npSpec").textContent = !playing ? "" : (S.mode === "radio" ? "256 kbps · mp3 · live" : "on demand");
   updateMediaSession(currentTrack());
   const t = currentTrack();
   document.title = (playing && t && t.title) ? `${t.title} — jam-station` : "jam-station";
