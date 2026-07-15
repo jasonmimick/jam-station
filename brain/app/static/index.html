@@ -80,19 +80,25 @@
     border-radius:4px; background:none; cursor:pointer; }
   .palpop .custom label { font-size:11px; color:var(--muted); }
 
-  /* rip status — a bold bar under the header while a disc is ingesting */
-  #ripBar { display:none; position:relative; align-items:center; gap:11px;
-    padding:12px 18px; background:var(--yellow); color:var(--on-yellow);
-    box-shadow:inset 4px 0 0 var(--red); overflow:hidden; }
-  #ripBar.on { display:flex; }
-  #ripBar .ripdot { width:9px; height:9px; border-radius:50%; background:var(--red); flex:0 0 auto;
-    animation:blink 1.2s ease-in-out infinite; }
-  #ripText { font-size:13.5px; font-weight:800; letter-spacing:.02em;
+  /* rip status — a persistent strip under the header; subdued when idle, loud while ripping */
+  #ripBar { display:flex; position:relative; align-items:center; gap:11px; padding:9px 18px;
+    background:var(--sunk); color:var(--muted); border-bottom:1px solid var(--line); overflow:hidden; }
+  #ripBar .ripdot { width:8px; height:8px; border-radius:50%; background:var(--faint); flex:0 0 auto; }
+  #ripText { font-size:12.5px; font-weight:600; letter-spacing:.02em;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #ripPct { margin-left:auto; font-size:12px; font-weight:800; font-variant-numeric:tabular-nums;
     flex:0 0 auto; opacity:.8; }
-  #ripFill { position:absolute; left:0; bottom:0; height:3px; background:var(--on-yellow);
-    width:0; opacity:.5; transition:width .4s ease; }
+  #ripFill { display:none; }
+  /* ripping: turn the whole strip into the loud accent bar with a live red tally */
+  #ripBar.ripping { background:var(--yellow); color:var(--on-yellow); border-bottom:0;
+    box-shadow:inset 4px 0 0 var(--red); padding:12px 18px; }
+  #ripBar.ripping .ripdot { background:var(--red); animation:blink 1.2s ease-in-out infinite; }
+  #ripBar.ripping #ripText { font-size:13.5px; font-weight:800; }
+  #ripBar.ripping #ripFill { display:block; position:absolute; left:0; bottom:0; height:6px;
+    background:var(--on-yellow); width:0; opacity:.4; transition:width .45s ease; }
+  /* a marker triangle riding the leading edge, so the position reads at a glance */
+  #ripBar.ripping #ripFill::after { content:""; position:absolute; right:-6px; bottom:0;
+    border-style:solid; border-width:0 6px 9px 6px; border-color:transparent transparent var(--red) transparent; }
 
   /* three resizable columns — drag the hairline handles between them */
   .app { flex:1; display:grid;
@@ -1207,8 +1213,14 @@ let ripLast = "idle";
 async function pollRip() {
   let r; try { r = await (await fetch("/api/rip")).json(); } catch { return; }
   const bar = $("ripBar");
-  if (!r || r.state === "idle") { bar.classList.remove("on"); ripLast = "idle"; return; }
-  bar.classList.add("on");
+  if (!r || r.state === "idle") {
+    bar.classList.remove("ripping");
+    $("ripText").textContent = "Not ripping — pop a CD in the mini to add it";
+    $("ripPct").textContent = ""; $("ripFill").style.width = "0";
+    ripLast = "idle";
+    return;
+  }
+  bar.classList.add("ripping");
   if (r.state === "done") {
     $("ripText").textContent = "Added " + (r.album || "new album");
     $("ripPct").textContent = ""; $("ripFill").style.width = "100%";
