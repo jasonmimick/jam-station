@@ -80,17 +80,26 @@
     border-radius:4px; background:none; cursor:pointer; }
   .palpop .custom label { font-size:11px; color:var(--muted); }
 
-  /* rip status — a slim bar under the header, only while a disc is ingesting */
-  #ripBar { display:none; position:relative; align-items:center; gap:10px;
-    padding:7px 16px; background:var(--sunk); border-bottom:1px solid var(--line);
-    font-size:11.5px; letter-spacing:.04em; color:var(--muted); overflow:hidden; }
+  /* rip status — a bold bar under the header while a disc is ingesting */
+  #ripBar { display:none; position:relative; align-items:center; gap:11px;
+    padding:12px 18px; background:var(--yellow); color:var(--on-yellow);
+    box-shadow:inset 4px 0 0 var(--red); overflow:hidden; }
   #ripBar.on { display:flex; }
-  #ripText { color:var(--ink); font-weight:600; }
-  #ripPct { margin-left:auto; font-variant-numeric:tabular-nums; color:var(--muted); }
-  #ripFill { position:absolute; left:0; bottom:0; height:2px; background:var(--yellow);
-    width:0; transition:width .4s ease; }
+  #ripBar .ripdot { width:9px; height:9px; border-radius:50%; background:var(--red); flex:0 0 auto;
+    animation:blink 1.2s ease-in-out infinite; }
+  #ripText { font-size:13.5px; font-weight:800; letter-spacing:.02em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #ripPct { margin-left:auto; font-size:12px; font-weight:800; font-variant-numeric:tabular-nums;
+    flex:0 0 auto; opacity:.8; }
+  #ripFill { position:absolute; left:0; bottom:0; height:3px; background:var(--on-yellow);
+    width:0; opacity:.5; transition:width .4s ease; }
 
-  .app { flex:1; display:grid; grid-template-columns:270px 1fr 320px; min-height:0; }
+  /* three resizable columns — drag the hairline handles between them */
+  .app { flex:1; display:grid;
+    grid-template-columns:var(--c1,270px) 7px minmax(0,1fr) 7px var(--c2,320px); min-height:0; }
+  .rez { cursor:col-resize; background:transparent; position:relative; touch-action:none; }
+  .rez::before { content:""; position:absolute; top:0; bottom:0; left:3px; width:1px; background:var(--line); transition:background .15s, box-shadow .15s; }
+  .rez:hover::before, .rez.drag::before { background:var(--yellow); box-shadow:0 0 0 1px var(--yellow); }
   .pane { min-height:0; min-width:0; overflow-y:auto; }   /* grid items default to
      min-width:auto and will NOT shrink below their content — the whole pane grows
      wider than the phone and everything inside it overflows with it. */
@@ -150,9 +159,17 @@
   .onair.on { display:inline-flex; }
   .onair .oad { width:7px; height:7px; border-radius:50%; background:var(--red); }
   .onair.on .oad { animation:blink 1.5s ease-in-out infinite; }
+  .npframe { margin-top:14px; padding:20px; border:1px solid var(--line); border-radius:10px;
+    background:var(--sunk); }
   .nptitle { font-size:31px; line-height:1.07; font-weight:700; letter-spacing:-.015em;
-    margin:18px 0 0; color:var(--ink); overflow-wrap:anywhere; transition:opacity .28s ease; }
+    margin:0; color:var(--ink); overflow-wrap:anywhere; transition:opacity .28s ease; }
   .nptitle.swap { opacity:0; }
+  .npmeta { margin-top:14px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:12.5px; }
+  .npmeta:empty { display:none; }
+  .npmeta .yr { font-family:ui-monospace,"SF Mono",Menlo,monospace; color:var(--muted);
+    font-variant-numeric:tabular-nums; letter-spacing:.05em; }
+  .npmeta a { color:var(--blue); text-decoration:none; font-weight:600; }
+  .npmeta a:hover { text-decoration:underline; }
   .byline { margin-top:11px; font-size:15px; font-weight:600; color:var(--ink); }
   .byline .sm { color:var(--muted); font-weight:400; }
   .byline .empty, .empty { font-size:15px; color:var(--muted); font-weight:400; }
@@ -193,10 +210,12 @@
     padding:4px 9px; font:inherit; font-size:11px; font-weight:700; cursor:pointer; }
   .pre button:hover { border-color:var(--blue); color:var(--blue); }
   .pre button.on { background:var(--blue); color:#fff; border-color:var(--blue); }
-  .bands { display:flex; gap:16px; margin-top:14px; }
-  .band { flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; }
-  .band input { width:100%; }
-  .band span { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  /* a real graphic EQ — vertical faders you drag up/down to draw the curve */
+  .bands { display:flex; gap:8px; margin-top:16px; align-items:end; }
+  .band { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .band input { writing-mode:vertical-lr; direction:rtl; width:22px; height:104px;
+    -webkit-appearance:slider-vertical; accent-color:var(--blue); }
+  .band span { font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; text-align:center; }
 
   /* the schedule */
   .showname { padding:12px 24px 0; font-size:14px; font-weight:700; overflow-wrap:anywhere; }
@@ -256,6 +275,7 @@
   @media (max-width:1100px) {
     body { overflow-x:hidden; overflow-y:auto; height:auto; min-height:100dvh; }
     .app { grid-template-columns:1fr; }
+    .rez { display:none; }
     .pane { overflow:visible; }
     .pane + .pane { border-left:0; border-top:1px solid var(--line); }
     .pane.right { height:auto; min-height:60vh; }
@@ -341,16 +361,17 @@
     </div>
   </header>
 
-  <div id="ripBar"><span id="ripText"></span><span id="ripPct"></span><i id="ripFill"></i></div>
+  <div id="ripBar"><span class="ripdot"></span><span id="ripText"></span><span id="ripPct"></span><i id="ripFill"></i></div>
 
   <div class="app">
     <div class="pane left">
-      <div class="ph"><span class="lbl">Departures</span>
+      <div class="ph"><span class="lbl">Tunes</span>
         <input id="find" type="text" placeholder="Filter" autocomplete="off"
                aria-label="filter stations">
       </div>
       <div id="stations"></div>
     </div>
+    <div class="rez" id="rez0" title="drag to resize"></div>
 
     <div class="pane">
       <div class="board">
@@ -358,8 +379,11 @@
           <span class="eyebrow" id="boardLbl">Now playing</span>
           <span class="onair" id="onair"><span class="oad"></span>On air</span>
         </div>
-        <h2 class="nptitle" id="npTitle">Tune in</h2>
-        <div class="byline" id="byline" aria-live="polite"><span class="empty">Select a station</span></div>
+        <div class="npframe">
+          <h2 class="nptitle" id="npTitle">Tune in</h2>
+          <div class="byline" id="byline" aria-live="polite"><span class="empty">Select a station</span></div>
+          <div class="npmeta" id="npMeta"></div>
+        </div>
         <div class="npspec" id="npSpec"></div>
 
         <div class="tx">
@@ -405,11 +429,12 @@
       </div>
       <div class="rows" id="history"><div class="none">Tune in to see the log.</div></div>
     </div>
+    <div class="rez" id="rez1" title="drag to resize"></div>
 
     <div class="pane right">
       <div class="ph"><span class="lbl">The DJ</span></div>
       <div id="chat">
-        <div class="msg dj"><b>DJ</b>Board's up. Pick a departure on the left, or tell me what you're in the mood for — I'll dig up a tape.</div>
+        <div class="msg dj"><b>DJ</b>Tuned in. Pick a station on the left, or tell me what you're in the mood for — I'll dig up a tape.</div>
       </div>
       <form id="form">
         <input type="text" id="input" placeholder='"a hot ’77 Dead show"' autocomplete="off">
@@ -584,6 +609,7 @@ function setStatus(kind) {
   $("status").className = "status" + (playing ? " live" : kind === "buffering" ? " buf" : "");
   $("onair").classList.toggle("on", playing && S.mode === "radio");
   $("npSpec").textContent = !playing ? "" : (S.mode === "radio" ? "256 kbps · mp3 · live" : "on demand");
+  renderNpMeta(currentTrack());
   updateMediaSession(currentTrack());
   const t = currentTrack();
   document.title = (playing && t && t.title) ? `${t.title} — jam-station` : "jam-station";
@@ -1352,6 +1378,47 @@ async function renderOwnerList() {
 }
 
 buildFlaps(); buildEq();
+
+/* resizable columns — drag the hairline handles between Tunes | now-playing | DJ */
+(function initResizers() {
+  const root = document.documentElement;
+  try {
+    const s = JSON.parse(localStorage.getItem("jam-cols") || "null");
+    if (s) { if (s.c1) root.style.setProperty("--c1", s.c1); if (s.c2) root.style.setProperty("--c2", s.c2); }
+  } catch {}
+  const px = (v) => (getComputedStyle(root).getPropertyValue(v).trim() || "");
+  function wire(id, varName, sign, min, max, def) {
+    const h = $(id); if (!h) return;
+    h.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); h.classList.add("drag"); h.setPointerCapture?.(e.pointerId);
+      const x0 = e.clientX, cur = parseInt(px(varName)) || def;
+      const move = (ev) => root.style.setProperty(varName,
+        Math.max(min, Math.min(max, cur + sign * (ev.clientX - x0))) + "px");
+      const up = () => {
+        h.classList.remove("drag");
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+        localStorage.setItem("jam-cols", JSON.stringify({ c1: px("--c1") || "270px", c2: px("--c2") || "320px" }));
+      };
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+    });
+  }
+  wire("rez0", "--c1", +1, 180, 520, 270);   // left handle sizes the Tunes column
+  wire("rez1", "--c2", -1, 200, 560, 320);   // right handle sizes the DJ column
+})();
+
+/* now-playing metadata — year (when we have it) + a Learn more link */
+function renderNpMeta(t) {
+  const m = $("npMeta"); if (!m) return;
+  if (!t || (!t.artist && !t.album && !t.title)) { m.innerHTML = ""; return; }
+  let h = "";
+  if (t.year) h += `<span class="yr">${esc(String(t.year))}</span>`;
+  const q = encodeURIComponent(`${t.artist || ""} ${t.album || t.title || ""}`.trim());
+  const url = t.learn_url || `https://www.discogs.com/search?q=${q}&type=release`;
+  h += `<a href="${url}" target="_blank" rel="noopener">Learn more ↗</a>`;
+  m.innerHTML = h;
+}
 loadMe();
 $("find").oninput = (e) => { S.filter = e.target.value; renderStations(); };
 
