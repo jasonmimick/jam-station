@@ -511,23 +511,15 @@
       <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">
         You don't need an account to listen. Signing in just carries your <b>favourites</b>
         across your devices and shows your name when you're on air.</p>
-      <input id="authEmail" type="email" placeholder="email"
-             style="width:100%;padding:11px;margin-bottom:8px">
-      <input id="authPass" type="password" placeholder="passphrase"
-             style="width:100%;padding:11px;margin-bottom:10px">
-      <button id="authPassGo" style="width:100%;padding:12px;border:0;border-radius:2px;
+      <input id="authCode" placeholder="Passphrase" autocapitalize="off" autocomplete="off"
+             style="width:100%;padding:12px;margin-bottom:10px;font-size:15px">
+      <button id="authGo" style="width:100%;padding:12px;border:0;border-radius:2px;
               background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
               letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Sign in</button>
-      <p style="font-size:12px;color:var(--muted);margin:14px 0 8px;line-height:1.5;
+      <p style="font-size:12px;color:var(--muted);margin:14px 0 0;line-height:1.5;
          border-top:1px solid var(--line);padding-top:12px">
-        New here? <b>Tap the personal link</b> you were texted. If it won't open, enter the
-        <b>code</b> from that message:</p>
-      <div style="display:flex;gap:6px">
-        <input id="authCode" placeholder="code" autocapitalize="characters"
-               style="flex:1;padding:10px;letter-spacing:.2em;text-transform:uppercase">
-        <button id="authGo" style="padding:10px 14px;border:1px solid var(--line);border-radius:2px;
-                background:transparent;color:var(--ink);font:inherit;font-weight:700;cursor:pointer">Use code</button>
-      </div>
+        First time? Tap the personal <b>link</b> you were sent — or type its <b>code</b> above.
+        No email needed.</p>
       <p id="authMsg" style="font-size:12.5px;margin:12px 0 0"></p>
       <button id="authClose" style="width:100%;margin-top:10px;padding:9px;background:transparent;
               border:1px solid var(--line);color:var(--muted);border-radius:2px;font:inherit;cursor:pointer">Close</button>
@@ -1363,31 +1355,19 @@ async function pullFavs() {
 
 // The ☺/● icon: signed out -> sign-in; signed in -> your account (passphrase + people if owner).
 $("who").onclick = () => {
-  if (!S.user) { $("auth").style.display = "flex"; $("authMsg").textContent = ""; $("authEmail").focus(); return; }
+  if (!S.user) { $("auth").style.display = "flex"; $("authMsg").textContent = ""; $("authCode").value = ""; $("authCode").focus(); return; }
   openOwner();
 };
 $("authClose").onclick = () => { $("auth").style.display = "none"; };
 async function signOut() { await fetch("/api/auth/signout", { method: "POST" }); S.user = null; await loadMe(); }
 
-// email + passphrase — the durable sign-in
-$("authPassGo").onclick = async () => {
-  const email = $("authEmail").value.trim(), passphrase = $("authPass").value;
-  if (!email || !passphrase) return;
-  const r = await fetch("/api/auth/passphrase", { method: "POST",
-    headers: {"Content-Type":"application/json"}, body: JSON.stringify({ email, passphrase }) });
-  if (!r.ok) { $("authMsg").style.color = "var(--red)"; $("authMsg").textContent = "Wrong email or passphrase."; return; }
-  $("auth").style.display = "none"; $("authPass").value = "";
-  await loadMe();
-};
-$("authPass").onkeydown = (e) => { if (e.key === "Enter") $("authPassGo").click(); };
-
-// code — the link-failed fallback
+// one field — whatever you type is tried as a passphrase, then a code. No email.
 $("authGo").onclick = async () => {
   const code = $("authCode").value.trim();
   if (!code) return;
   const r = await fetch("/api/auth/key", { method: "POST",
     headers: {"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
-  if (!r.ok) { $("authMsg").style.color = "var(--red)"; $("authMsg").textContent = "That code isn't valid — check it, or ask for a new one."; return; }
+  if (!r.ok) { $("authMsg").style.color = "var(--red)"; $("authMsg").textContent = "That passphrase or code isn't right."; return; }
   $("auth").style.display = "none";
   await loadMe();
 };

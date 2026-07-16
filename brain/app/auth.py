@@ -379,6 +379,21 @@ def has_passphrase(email: str) -> bool:
     return bool(m and m.get("pass_hash"))
 
 
+def passphrase_login_any(passphrase: str) -> dict | None:
+    """Sign in with JUST a passphrase — no email. Find the approved member whose passphrase
+    matches. This is the 'just type your word' convenience for a small trusted circle; the cost
+    is that a known/shared passphrase logs in as that person, which is fine at family scale
+    (and passphrases are never displayed and stored hashed). O(members) PBKDF2, tiny N."""
+    passphrase = (passphrase or "").strip()
+    if len(passphrase) < 6:
+        return None
+    for m in db.query("SELECT email, name, pass_hash, pass_salt FROM members "
+                      "WHERE status='approved' AND pass_hash<>''"):
+        if hmac.compare_digest(m["pass_hash"], _pass_hash(passphrase, m["pass_salt"])):
+            return {"email": m["email"], "name": m["name"]}
+    return None
+
+
 # ── sessions (server-side, so they can be revoked) ─────────────────────────────
 
 def new_session(email: str, user_agent: str = "") -> str:

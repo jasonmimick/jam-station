@@ -485,10 +485,11 @@ class KeyCodeReq(BaseModel):
 
 @app.post("/api/auth/key")
 def api_key_code(body: KeyCodeReq, request: Request, response: Response):
-    """Type your code — the fallback when a link won't open. Same reusable grant as the link."""
-    who = auth.code_login(body.code)
+    """One box, no email: whatever you type is tried as an access CODE first, then as a
+    PASSPHRASE. So "jimmypage" (a passphrase) and "AD5PRVDE" (a code) both just sign you in."""
+    who = auth.code_login(body.code) or auth.passphrase_login_any(body.code)
     if not who:
-        raise HTTPException(400, "That code isn't valid.")
+        raise HTTPException(400, "That code or passphrase isn't valid.")
     _set_session(response, who["email"], request.headers.get("user-agent", ""), request)
     return {"ok": True, "name": who["name"]}
 
