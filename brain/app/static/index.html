@@ -1587,6 +1587,25 @@ $("collFind").oninput = renderCollection;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCollection(); });
 
 /* ── spot: photograph music in the wild, station identifies it ─────────────── */
+
+// Phone photos are HEIC, which the vision API rejects — that's why a spot 502'd. Re-encode to
+// JPEG in the browser first (Safari decodes HEIC, so the canvas draw works), and downscale while
+// we're at it so a 4000px photo isn't shipped whole over cell data. from-image = respect EXIF
+// rotation so a portrait shot doesn't arrive sideways. If we can't decode it (rare — e.g. HEIC
+// on a desktop browser), send the original and let the server say what's wrong.
+async function toJpeg(file, maxEdge = 1600, quality = 0.85) {
+  if (file.type === "image/jpeg" && file.size < 1_500_000) return file;   // already fine
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+  catch { return file; }
+  const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", quality));
+  return blob ? new File([blob], "spot.jpg", { type: "image/jpeg" }) : file;
+}
+
 $("spotFile").onchange = async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = "";                           // let the same photo be re-picked later
@@ -1595,7 +1614,8 @@ $("spotFile").onchange = async (e) => {
   $("spotWaitTitle").textContent = "Reading your photo…";
   $("spotWait").classList.add("on");
   try {
-    const fd = new FormData(); fd.append("photo", file);
+    const up = await toJpeg(file);
+    const fd = new FormData(); fd.append("photo", up);
     const r = await fetch("/api/spot", { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "couldn't identify");
     const spot = await r.json();
@@ -1603,8 +1623,8 @@ $("spotFile").onchange = async (e) => {
     $("spotWait").classList.remove("on");
     openSpotted(spot.id);                         // open the shelf and flash the new catch
   } catch (err) {
-    $("spotWaitTitle").textContent = "Couldn't read that one";
-    setTimeout(() => $("spotWait").classList.remove("on"), 1600);
+    $("spotWaitTitle").textContent = "Couldn't read that one — " + (err.message || "try again");
+    setTimeout(() => $("spotWait").classList.remove("on"), 2600);
   }
 };
 function spotShotBg(sp) {
