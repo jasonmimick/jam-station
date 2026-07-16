@@ -3,23 +3,17 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>run.jam.cdwatch</string>
-  <!-- ONE tick every 15s as a FRESH process, not a long-running loop. The loop version kept
-       wedging — a live process would stop noticing new discs for reasons that never reproduced
-       under a hand-trace. A fresh cd-tick each interval can't wedge: it checks once, starts a
-       rip if there's a new disc (detached, so it outlives this run), and exits. -->
+  <!-- Program is the jam-cdd helper (compiled from tools/mini/jam-cdd.c). It's the job's
+       responsible process, so granting THIS binary Full Disk Access lets the whole watcher —
+       cd-tick, rip-cd, lame — read the CD drive on a headless Mac. jam-cdd runs its own 12s
+       loop and runs the rip in-job, so KeepAlive (long-running), not StartInterval. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/bash</string>
-    <string>/Users/jason/business/jam-station/tools/cd-tick.sh</string>
+    <string>/Users/jason/bin/jam-cdd</string>
   </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-  </dict>
-  <key>StartInterval</key><integer>15</integer>
   <key>RunAtLoad</key><true/>
-  <key>AbandonProcessGroup</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
   <key>StandardOutPath</key><string>/dev/null</string>
   <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/jam-cdwatch.log</string>
 </dict>

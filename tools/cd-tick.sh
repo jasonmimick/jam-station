@@ -39,9 +39,15 @@ for v in /Volumes/*/; do
   # settle: a just-inserted disc is still being enumerated; don't rip a partial one
   sleep 3
   [ "$sig" = "$(disc_sig "$v")" ] || { echo "STATE=SETTLING $v"; exit 0; }
-  nohup bash "$RIPCD" -y -e -d "$v" > "/tmp/rip-${drive:-x}.log" 2>&1 &
-  disown
   echo "STATE=STARTED drive=${drive:-?} vol=${v}"
+  if [ -n "${CD_TICK_FOREGROUND:-}" ]; then
+    # driven by the jam-cdd helper: run the rip IN-JOB (not detached) so it keeps the helper's
+    # Full Disk Access for the whole rip — a detached rip would leave the job and lose it.
+    bash "$RIPCD" -y -e -d "$v" > "/tmp/rip-${drive:-x}.log" 2>&1
+  else
+    nohup bash "$RIPCD" -y -e -d "$v" > "/tmp/rip-${drive:-x}.log" 2>&1 &
+    disown
+  fi
   exit 0
 done
 

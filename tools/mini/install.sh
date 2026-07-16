@@ -28,6 +28,9 @@ swap() {   # label  -- retire the nohup orphan, then hand the job to launchd
   echo "  loaded $label"
 }
 
+# the CD-watch helper that holds Full Disk Access (see jam-cdd.c) — build it before its agent
+clang -O2 -o ~/bin/jam-cdd "$HERE/jam-cdd.c" && echo "  built ~/bin/jam-cdd"
+
 swap run.slab.daemon "slab-go daemon"
 swap run.slab.tunnel "cloudflared tunnel run"
 swap run.jam.cdwatch ""            # nothing was running before; just load it
