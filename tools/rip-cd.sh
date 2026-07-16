@@ -51,8 +51,12 @@ fi
 # indexes it, QuickLook generates previews, Music imports — each reads the same tracks lame
 # does. declutter() shoos them off; we call it before ripping AND every track (they relaunch).
 declutter() {
-  pkill -x Music 2>/dev/null
-  pkill -f quicklookd 2>/dev/null; pkill -f QuickLookUIService 2>/dev/null; pkill -f qlmanage 2>/dev/null
+  # each pkill returns non-zero when there's nothing to kill (the usual case), which under
+  # `set -e` would kill the RIP — so every one must swallow its failure.
+  pkill -x Music 2>/dev/null || true
+  pkill -f quicklookd 2>/dev/null || true
+  pkill -f QuickLookUIService 2>/dev/null || true
+  pkill -f qlmanage 2>/dev/null || true
   return 0
 }
 mdutil -i off "$disc" >/dev/null 2>&1 || true   # Spotlight: skip this volume (best-effort; may need root)
