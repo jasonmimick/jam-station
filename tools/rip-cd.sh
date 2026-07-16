@@ -47,11 +47,16 @@ fi
 [ -n "${disc:-}" ] || { echo "no audio CD mounted. insert one and wait for the Finder to see it."; exit 1; }
 
 # Clear the drive of everything else that reads it — the CD has ONE head, and a rival reader
-# turns lame's read into a stall. Spotlight indexes an inserted disc (mds reading the same
-# tracks we do); Music grabs it to import. Tell Spotlight to skip this volume and kill Music
-# before we start. Best-effort (mdutil may want root; harmless if it can't).
-mdutil -i off "$disc" >/dev/null 2>&1 || true
-pkill -x Music 2>/dev/null || true
+# turns lame's read into a stall (the buzzing). macOS piles on when a disc mounts: Spotlight
+# indexes it, QuickLook generates previews, Music imports — each reads the same tracks lame
+# does. declutter() shoos them off; we call it before ripping AND every track (they relaunch).
+declutter() {
+  pkill -x Music 2>/dev/null
+  pkill -f quicklookd 2>/dev/null; pkill -f QuickLookUIService 2>/dev/null; pkill -f qlmanage 2>/dev/null
+  return 0
+}
+mdutil -i off "$disc" >/dev/null 2>&1 || true   # Spotlight: skip this volume (best-effort; may need root)
+declutter
 
 # ONE RIPPER PER DRIVE, not per host. The constraint is physical: a drive has one head, so two
 # rippers on the SAME drive fight it and both crawl — but two DIFFERENT drives are independent
@@ -144,6 +149,7 @@ for f in "$disc"*.aiff; do
   out=$(printf '%02d %s.mp3' "$num" "$(safe "$title")")
   printf '  [%2d/%2d] %s\n' "$i" "$n" "$title"
   report ripping "$i" "$n" "$title"
+  declutter                          # QuickLook/Spotlight/Music relaunch — shoo them off again
   encode "$f" "$stage/$DIR/$out" "$title" "$num" "$n"
 done
 

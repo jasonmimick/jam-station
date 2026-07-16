@@ -194,7 +194,9 @@ def api_rip():
     ripper died or finished without a clean 'done', so report idle rather than a frozen bar."""
     p = os.path.join(config.MUSIC_DIR, ".rip-status")
     try:
-        if time.time() - os.stat(p).st_mtime > 90:
+        # per-track heartbeat; this slow drive can take >2min on one track, so don't call it
+        # idle until well past that or the bar flickers to "not ripping" mid-rip.
+        if time.time() - os.stat(p).st_mtime > 300:
             return {"state": "idle"}
         with open(p) as f:
             return json.load(f)
