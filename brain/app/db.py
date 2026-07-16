@@ -147,6 +147,27 @@ CREATE TABLE IF NOT EXISTS favourites(
   added_at TEXT DEFAULT ({_NOW}),
   PRIMARY KEY (email, url)
 );
+-- ── spots. A photo of music you heard in the wild -> Claude reads it -> matched to your crate
+-- or saved to a wishlist. The photo lives in the music volume (.spots/), served members-only.
+CREATE TABLE IF NOT EXISTS spots(
+  id SERIAL PRIMARY KEY,
+  email TEXT DEFAULT '',              -- who spotted it
+  image_path TEXT DEFAULT '',        -- /music/.spots/<id>.jpg (the snapshot)
+  status TEXT DEFAULT 'unknown',     -- matched | wishlist | unknown
+  artist TEXT DEFAULT '',
+  title TEXT DEFAULT '',
+  album TEXT DEFAULT '',
+  year TEXT DEFAULT '',
+  confidence TEXT DEFAULT '',        -- high | medium | low
+  saw TEXT DEFAULT '',               -- what the AI saw ("car stereo display")
+  mbid TEXT DEFAULT '',
+  cover_url TEXT DEFAULT '',         -- real sleeve fetched for a wishlist hit
+  matched_dir TEXT DEFAULT '',       -- catalog folder, if you own it
+  matched_url TEXT DEFAULT '',       -- playable track url, if pinned
+  links TEXT DEFAULT '{{}}',         -- json: youtube / discogs / musicbrainz
+  created_at TEXT DEFAULT ({_NOW})
+);
+CREATE INDEX IF NOT EXISTS idx_spots_id ON spots(id DESC);
 """
 
 # Additive, idempotent, safe to re-run. Postgres does ADD COLUMN IF NOT EXISTS natively, so

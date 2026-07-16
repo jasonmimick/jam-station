@@ -4,12 +4,12 @@ import time
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, StreamingResponse)
 from pydantic import BaseModel
 
-from . import auth, channels, config, covers, db, dj
+from . import auth, channels, config, covers, db, dj, spot
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
@@ -229,6 +229,47 @@ def api_library_album(request: Request, dir: str):
         raise HTTPException(404, "no such album")
     return {"dir": dir, "album": tracks[0]["album"], "artist": tracks[0]["artist"],
             "tracks": tracks, "playing": -1}
+
+
+# ---------------------------------------------------------------- spot (photo -> music)
+
+@app.post("/api/spot")
+def api_spot(request: Request, photo: UploadFile = File(...)):
+    """Snap a photo of music in the wild; Claude reads it and we match it to your crate or save
+    it to the Spotted shelf. Sync def on purpose — the vision call blocks, so FastAPI runs it in
+    a threadpool instead of stalling the event loop. Members only (it writes to your library)."""
+    me = _me(request)
+    if not me:
+        raise HTTPException(403, "members only")
+    data = photo.file.read()
+    if not data:
+        raise HTTPException(400, "empty photo")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(413, "photo too large")
+    media_type = photo.content_type if (photo.content_type or "").startswith("image/") else "image/jpeg"
+    try:
+        return spot.create_spot(data, media_type, me["email"])
+    except Exception as e:
+        raise HTTPException(502, f"couldn't identify: {e}")
+
+
+@app.get("/api/spots")
+def api_spots(request: Request):
+    if not _is_member(request):
+        return []
+    return spot.list_spots()
+
+
+class SpotRef(BaseModel):
+    id: int
+
+
+@app.post("/api/spot/delete")
+def api_spot_delete(body: SpotRef, request: Request):
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    spot.delete_spot(body.id)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- on demand
