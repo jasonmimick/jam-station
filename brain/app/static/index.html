@@ -151,6 +151,21 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .albsub { display:block; font-size:11.5px; color:var(--muted); margin-top:2px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* ── desktop center-pane tabs: Playing / Stations / CDs / Spots ── */
+  .dtabs { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:6; background:var(--board); }
+  .dtabs button { border:1px solid var(--line); background:transparent; color:var(--muted);
+    border-radius:999px; padding:7px 15px; font:inherit; font-size:12px; font-weight:700;
+    letter-spacing:.02em; cursor:pointer; white-space:nowrap; }
+  .dtabs button.on { background:var(--yellow); color:var(--on-yellow); border-color:var(--yellow); }
+  .dtabs .dnp { margin-left:auto; font-size:12px; color:var(--muted); max-width:38%;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dtabs .dnp b { color:var(--ink); font-weight:600; }
+  #galleryView .collgrid { padding:22px 16px 40px; }
+  /* a spot expanded in place spans the whole gallery row */
+  .spotcard.open { grid-column:1 / -1; display:grid; grid-template-columns:220px 1fr; gap:20px; align-items:start; }
+  .spotcard.open .spotshot { aspect-ratio:auto; }
+  @media (max-width:640px){ .spotcard.open { grid-template-columns:1fr; } }
 
   /* three resizable columns — drag the hairline handles between them */
   .app { flex:1; display:grid;
@@ -434,29 +449,8 @@
 
   <div id="ripBar"><span class="ripdot"></span><span id="ripText"></span><span id="ripPct"></span><i id="ripFill"></i></div>
 
-  <!-- your collection: a full cover grid, opened from the sidebar -->
-  <div id="collection">
-    <div class="collinner">
-      <div class="collhead">
-        <span class="lbl">Your collection</span>
-        <input id="collFind" type="text" placeholder="Filter albums" autocomplete="off" aria-label="filter albums">
-        <button class="icon" id="collClose" title="close" aria-label="close collection">✕</button>
-      </div>
-      <div class="collgrid" id="collGrid"></div>
-    </div>
-  </div>
-
-  <!-- spotted: music caught in the wild, snapped and identified -->
-  <div id="spotted">
-    <div class="collinner">
-      <div class="collhead">
-        <span class="lbl">Spotted</span>
-        <input id="spotFind" type="text" placeholder="Filter" autocomplete="off" aria-label="filter spots">
-        <button class="icon" id="spotClose" title="close" aria-label="close spotted">✕</button>
-      </div>
-      <div class="collgrid" id="spotGrid"></div>
-    </div>
-  </div>
+  <!-- The CD + Spot galleries now live INLINE in the center pane (see #galleryView), reached by
+       the Stations/CDs/Spots tabs — no more overlay modals. -->
 
   <!-- NO capture= on purpose: with it, mobile forces the live camera and hides the photo
        library. Without it the phone shows the chooser (Photo Library / Take Photo / Choose
@@ -480,6 +474,14 @@
     <div class="rez" id="rez0" title="drag to resize"></div>
 
     <div class="pane">
+      <div class="dtabs" id="dtabs">
+        <button data-dt="playing" class="on">▶ Playing</button>
+        <button data-dt="stations">Stations</button>
+        <button data-dt="cds">CDs</button>
+        <button data-dt="spots">Spots</button>
+        <span class="dnp" id="dnp"></span>
+      </div>
+      <div id="playingView">
       <div class="board">
         <div class="np">
           <div class="npart" id="npArt"><span id="npMono">♪</span></div>
@@ -537,6 +539,14 @@
         </span>
       </div>
       <div class="rows" id="history"><div class="none">Tune in to see the log.</div></div>
+      </div><!-- /playingView -->
+
+      <div id="galleryView" style="display:none">
+        <div class="ph"><span class="lbl" id="galLbl">Gallery</span>
+          <input id="galFind" type="text" placeholder="Filter" autocomplete="off" aria-label="filter gallery">
+        </div>
+        <div class="collgrid" id="dgallery"></div>
+      </div>
     </div>
     <div class="rez" id="rez1" title="drag to resize"></div>
 
@@ -712,6 +722,7 @@ function setStatus(kind) {
   $("npSpec").textContent = !playing ? "" : (S.mode === "radio" ? "256 kbps · mp3 · live" : "on demand");
   renderNpMeta(currentTrack());
   renderNpArt(currentTrack());
+  paintDnp();
   updateMediaSession(currentTrack());
   const t = currentTrack();
   document.title = (playing && t && t.title) ? `${t.title} — jam-station` : "jam-station";
@@ -740,16 +751,18 @@ S.audio.addEventListener("timeupdate", () => {
 async function loadChannels() {
   try { S.channels = await (await fetch("/api/channels")).json(); } catch { return; }
   renderStations();
+  refreshDeskGallery();
 }
 async function loadCatalog() {
   // Members only server-side; anonymous gets [] and the catalog simply doesn't appear.
   try { S.albums = await (await fetch("/api/library/albums")).json(); } catch { S.albums = []; }
   renderStations();
+  refreshDeskGallery();
 }
 async function loadSpots() {
   try { S.spots = await (await fetch("/api/spots")).json(); } catch { S.spots = []; }
   renderStations();
-  if ($("spotted").classList.contains("open")) renderSpotted();
+  refreshDeskGallery();
 }
 function renderStations() {
   const w = $("stations"); w.innerHTML = "";
@@ -800,7 +813,7 @@ function renderStations() {
       `<span class="mk">▦</span>` +
       `<span><span class="nm">Browse ${S.albums.length} album${S.albums.length === 1 ? "" : "s"}</span>` +
       `<div class="sub">Your ripped CDs, with covers →</div></span>`;
-    b.onclick = () => openCollection();
+    b.onclick = () => setDtab("cds");
     w.appendChild(b);
   }
 
@@ -824,7 +837,7 @@ function renderStations() {
       `<span class="mk">◎</span>` +
       `<span><span class="nm">Spotted (${S.spots.length})</span>` +
       `<div class="sub">Everything you've caught →</div></span>`;
-    sb.onclick = () => openSpotted();
+    sb.onclick = () => setDtab("spots");
     w.appendChild(sb);
   }
 }
@@ -1561,30 +1574,71 @@ function albBg(al) {   // {bg, mono} for a cover — real art if we have it, els
   return { bg: `linear-gradient(150deg, hsl(${hue},30%,33%), hsl(${(hue + 34) % 360},34%,13%))`,
            mono: m ? m[0].toUpperCase() : "♪" };
 }
-function renderCollection() {
-  const q = ($("collFind").value || "").toLowerCase().trim();
-  const albums = q ? S.albums.filter(a => (a.album + " " + a.artist).toLowerCase().includes(q)) : S.albums;
-  const g = $("collGrid");
-  g.innerHTML = albums.map(al => {
-    const a = albBg(al);
-    return `<button class="albcard" data-dir="${esc(al.dir)}">` +
+/* ── desktop center-pane gallery: Playing / Stations / CDs / Spots ──────────
+   "Playing" keeps the full board (EQ, scrubber, setlist, history — untouched); the other three
+   render one generic cover grid in the SAME panel, no overlay modal. Spots expand in place. */
+let dtab = localStorage.getItem("jam-dtab") || "playing";
+let dOpenSpot = null;
+document.querySelectorAll("#dtabs [data-dt]").forEach(b => b.onclick = () => setDtab(b.dataset.dt));
+
+function setDtab(t, flashSpot) {
+  dtab = t; localStorage.setItem("jam-dtab", t);
+  document.querySelectorAll("#dtabs [data-dt]").forEach(b => b.classList.toggle("on", b.dataset.dt === t));
+  const playing = t === "playing";
+  $("playingView").style.display = playing ? "" : "none";
+  $("galleryView").style.display = playing ? "none" : "";
+  if (!playing) {
+    if (t === "cds") loadCatalog();            // freshest covers/years before the grid draws
+    if (t === "spots") loadSpots();
+    $("galFind").value = ""; renderDeskGallery(flashSpot);
+  }
+}
+function deskItems() {
+  if (dtab === "stations") return (S.channels || []).filter(c => c.playable !== false)
+    .map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio", cover: "" }));
+  return (S.albums || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
+    sub: (al.artist || "—") + (al.year ? " · " + al.year : ""), cover: al.cover_url || "" }));
+}
+function renderDeskGallery(flashSpot) {
+  const g = $("dgallery"); if (!g) return;
+  const q = ($("galFind").value || "").toLowerCase().trim();
+  $("galLbl").textContent = dtab === "stations" ? "Stations" : dtab === "cds" ? "Your collection" : "Spotted";
+  if (dtab === "spots") {
+    if (!S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to keep spots.</p>`; return; }
+    let list = q ? S.spots.filter(s => (s.artist + " " + s.title + " " + s.album + " " + (s.saw || "")).toLowerCase().includes(q)) : S.spots;
+    g.innerHTML = list.map(deskSpotCard).join("") ||
+      `<p class="msub" style="padding:20px">Nothing spotted yet — hit “Spot a song” in the sidebar.</p>`;
+    wireDeskSpots(); if (flashSpot) flashCard(flashSpot);
+    return;
+  }
+  if (dtab === "cds" && !S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to see your CDs.</p>`; return; }
+  let list = deskItems();
+  if (q) list = list.filter(it => (it.name + " " + it.sub).toLowerCase().includes(q));
+  g.innerHTML = list.map(it => {
+    const a = albBg({ album: it.name, cover_url: it.cover });
+    return `<button class="albcard" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
       `<div class="albcover" style="background-image:${a.bg}">${a.mono}</div>` +
-      `<div class="albcap"><span class="albname">${esc(al.album || "Untitled")}</span>` +
-      `<span class="albsub">${esc(al.artist || "—")}${al.year ? " · " + esc(String(al.year)) : ""}</span>` +
-      `</div></button>`;
-  }).join("") || `<p class="msub" style="padding:20px">No albums yet — rip a CD in the mini.</p>`;
-  g.querySelectorAll(".albcard").forEach(b => b.onclick = () => { closeCollection(); tuneAlbum(b.dataset.dir); });
+      `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span></div></button>`;
+  }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match." : "No albums yet — rip a CD."}</p>`;
+  g.querySelectorAll(".albcard").forEach(b => b.onclick = () => {
+    if (b.dataset.kind === "station") tune(b.dataset.id); else tuneAlbum(b.dataset.id);
+    setDtab("playing");
+  });
 }
-async function openCollection() {
-  await loadCatalog();                         // freshest covers/years before we show the grid
-  $("collFind").value = ""; renderCollection();
-  $("collection").classList.add("open");
+function flashCard(id) {
+  const el = $("dgallery").querySelector(`.spotcard[data-spot="${id}"]`);
+  if (el) { el.scrollIntoView({ block: "center" }); el.style.outline = "2px solid var(--yellow)";
+            setTimeout(() => el.style.outline = "", 1400); }
 }
-function closeCollection() { $("collection").classList.remove("open"); }
-$("collClose").onclick = closeCollection;
-$("collection").onclick = (e) => { if (e.target === $("collection")) closeCollection(); };  // click backdrop
-$("collFind").oninput = renderCollection;
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCollection(); });
+// keep the current gallery fresh when its data reloads
+function refreshDeskGallery() { if (dtab !== "playing") renderDeskGallery(); }
+// a compact "what's on" line in the tab bar, so you see it while browsing a gallery tab
+function paintDnp() {
+  const el = $("dnp"); if (!el) return;
+  const t = (typeof currentTrack === "function") ? currentTrack() : null;
+  el.innerHTML = (S.status === "playing" && t && (t.title || t.artist))
+    ? `▶ <b>${esc(t.title || "")}</b>${t.artist ? " — " + esc(t.artist) : ""}` : "";
+}
 
 /* ── spot: photograph music in the wild, station identifies it ─────────────── */
 
@@ -1621,7 +1675,7 @@ $("spotFile").onchange = async (e) => {
     const spot = await r.json();
     await loadSpots();
     $("spotWait").classList.remove("on");
-    openSpotted(spot.id);                         // open the shelf and flash the new catch
+    setDtab("spots", spot.id);                    // jump to the Spots tab and flash the new catch
   } catch (err) {
     $("spotWaitTitle").textContent = "Couldn't read that one — " + (err.message || "try again");
     setTimeout(() => $("spotWait").classList.remove("on"), 2600);
@@ -1631,61 +1685,54 @@ function spotShotBg(sp) {
   if (sp.image_path) return `url('${sp.image_path}')`;
   return "linear-gradient(150deg,#2a2a30,#141418)";
 }
-function renderSpotted(flashId) {
-  const q = ($("spotFind").value || "").toLowerCase().trim();
-  const list = q ? S.spots.filter(s => (s.artist + " " + s.title + " " + s.album + " " + s.saw)
-                                        .toLowerCase().includes(q)) : S.spots;
-  const g = $("spotGrid");
-  g.innerHTML = list.map(sp => {
-    const name = sp.title || sp.album || "Unidentified";
-    const sub = sp.title ? esc(sp.artist || "—") + (sp.album ? " · " + esc(sp.album) : "")
-                         : esc(sp.artist || sp.saw || "");
-    const yr = sp.year ? ` · ${esc(String(sp.year))}` : "";
-    let action = "";
-    if (sp.status === "matched") {
-      action = `<button class="spotplay" data-play="${esc(sp.matched_dir)}">▶ In your collection</button>`;
-    } else if (sp.status === "wishlist") {
-      const L = sp.links || {};
-      action = `<div class="spotlinks">` +
-        (L.youtube  ? `<a href="${esc(L.youtube)}" target="_blank" rel="noopener">YouTube ↗</a>` : "") +
-        (L.discogs  ? `<a href="${esc(L.discogs)}" target="_blank" rel="noopener">Discogs ↗</a>` : "") +
-        (L.musicbrainz ? `<a href="${esc(L.musicbrainz)}" target="_blank" rel="noopener">MusicBrainz ↗</a>` : "") +
-        `</div>`;
-    } else {
-      action = `<div class="spotlinks"><span class="msub">Couldn't identify — try a clearer shot</span></div>`;
-    }
-    return `<div class="spotcard" data-id="${sp.id}">` +
+// one spot card — collapsed = cover tile; tapped = expands in place (spans the row) with the big
+// photo, what the AI saw, and play/links + delete. dOpenSpot holds the currently-expanded id.
+function deskSpotCard(sp) {
+  const name = sp.title || sp.album || "Unidentified";
+  const sub = sp.title ? esc(sp.artist || "—") + (sp.album ? " · " + esc(sp.album) : "") : esc(sp.artist || sp.saw || "");
+  const yr = sp.year ? ` · ${esc(String(sp.year))}` : "";
+  const badge = sp.status === "matched" ? "Have it" : sp.status === "wishlist" ? "Find it" : "?";
+  if (dOpenSpot !== sp.id) {
+    return `<button class="spotcard" data-spot="${sp.id}">` +
       `<div class="spotshot" style="background-image:${spotShotBg(sp)}">` +
-        `<span class="spotbadge ${sp.status}">${sp.status === "matched" ? "Have it"
-            : sp.status === "wishlist" ? "Find it" : "?"}</span>` +
-        `<button class="spotdel" data-del="${sp.id}" title="delete">✕</button>` +
-      `</div>` +
-      `<div class="spotcap"><span class="albname">${esc(name)}</span>` +
-      `<span class="albsub">${sub}${yr}</span>${action}</div></div>`;
-  }).join("") || `<p class="msub" style="padding:20px">Nothing spotted yet — tap “Spot a song” and photograph what you're hearing.</p>`;
-  g.querySelectorAll("[data-play]").forEach(b => b.onclick = () => { closeSpotted(); tuneAlbum(b.dataset.play); });
+        `<span class="spotbadge ${sp.status}">${badge}</span></div>` +
+      `<div class="spotcap"><span class="albname">${esc(name)}</span><span class="albsub">${sub}</span></div></button>`;
+  }
+  const L = sp.links || {};
+  let action = "";
+  if (sp.status === "matched") action = `<button class="spotplay" data-play="${esc(sp.matched_dir)}">▶ In your collection</button>`;
+  else if (sp.status === "wishlist") action = `<div class="spotlinks">` +
+    (L.youtube ? `<a href="${esc(L.youtube)}" target="_blank" rel="noopener">YouTube ↗</a>` : "") +
+    (L.discogs ? `<a href="${esc(L.discogs)}" target="_blank" rel="noopener">Discogs ↗</a>` : "") +
+    (L.musicbrainz ? `<a href="${esc(L.musicbrainz)}" target="_blank" rel="noopener">MusicBrainz ↗</a>` : "") + `</div>`;
+  else action = `<span class="msub">Couldn't identify — try a clearer photo.</span>`;
+  return `<div class="spotcard open" data-spot="${sp.id}">` +
+    `<div class="spotshot" style="background:var(--sunk)">` +
+      (sp.image_path ? `<img src="${esc(sp.image_path)}" alt="" style="width:100%;display:block;border-radius:6px">` : "") +
+      `<span class="spotbadge ${sp.status}">${badge}</span></div>` +
+    `<div class="spotcap"><span class="albname">${esc(name)}${yr}</span><span class="albsub">${sub}</span>` +
+      `<div class="spotdetail" style="font-size:12px;color:var(--faint);margin:4px 0 10px">${sp.saw ? "seen as: " + esc(sp.saw) : ""}</div>` +
+      `<div class="spotlinks" style="align-items:center">${action}` +
+        `<button class="spotdel" data-del="${sp.id}" style="position:static;opacity:1;margin-left:auto;width:auto;height:auto;border-radius:8px;padding:8px 12px;background:transparent;border:1px solid var(--line);color:var(--muted)">Delete</button>` +
+      `</div></div></div>`;
+}
+function wireDeskSpots() {
+  const g = $("dgallery");
+  g.querySelectorAll("[data-spot]").forEach(b => b.onclick = (e) => {
+    if (e.target.closest("a,[data-play],[data-del]")) return;
+    const id = Number(b.dataset.spot);
+    dOpenSpot = (dOpenSpot === id) ? null : id;
+    renderDeskGallery();
+  });
+  g.querySelectorAll("[data-play]").forEach(b => b.onclick = () => { tuneAlbum(b.dataset.play); setDtab("playing"); });
   g.querySelectorAll("[data-del]").forEach(b => b.onclick = async (e) => {
     e.stopPropagation();
     await fetch("/api/spot/delete", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: Number(b.dataset.del) }) });
-    await loadSpots();
+    dOpenSpot = null; await loadSpots(); renderDeskGallery();
   });
-  if (flashId) {
-    const el = g.querySelector(`.spotcard[data-id="${flashId}"]`);
-    if (el) { el.scrollIntoView({ block: "center" }); el.style.outline = "2px solid var(--yellow)";
-              setTimeout(() => el.style.outline = "", 1400); }
-  }
 }
-async function openSpotted(flashId) {
-  await loadSpots();
-  $("spotFind").value = ""; renderSpotted(flashId);
-  $("spotted").classList.add("open");
-}
-function closeSpotted() { $("spotted").classList.remove("open"); }
-$("spotClose").onclick = closeSpotted;
-$("spotted").onclick = (e) => { if (e.target === $("spotted")) closeSpotted(); };
-$("spotFind").oninput = () => renderSpotted();
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSpotted(); });
+setDtab(dtab);   // restore the last tab (Playing by default)
 
 /* the album tile — a tonal cover derived from the album name (until real cover art lands).
    Muted saturation + a dark gradient reads like a pressed sleeve, not a swatch. */
