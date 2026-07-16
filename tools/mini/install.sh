@@ -31,6 +31,16 @@ swap() {   # label  -- retire the nohup orphan, then hand the job to launchd
 # the CD-watch helper that holds Full Disk Access (see jam-cdd.c) — build it before its agent
 clang -O2 -o ~/bin/jam-cdd "$HERE/jam-cdd.c" && echo "  built ~/bin/jam-cdd"
 
+# ── keep the GUI session fully live for ripping ──────────────────────────────
+# caffeinate (run.jam.awake) stops SLEEP but NOT the screensaver — and the screensaver engaging
+# is what makes a rip "get funky when the screen locks." Disable it outright (idleTime 0), never
+# ask for a password on this headless rig, and keep the optical drive from spinning down mid-rip.
+defaults -currentHost write com.apple.screensaver idleTime -int 0
+defaults -currentHost write com.apple.screensaver askForPassword -int 0
+pmset -a disksleep 0 2>/dev/null || sudo pmset -a disksleep 0 2>/dev/null || true
+killall cfprefsd 2>/dev/null || true
+echo "  session hardened: screensaver off, no lock, disk stays awake"
+
 swap run.slab.daemon "slab-go daemon"
 swap run.slab.tunnel "cloudflared tunnel run"
 swap run.jam.cdwatch ""            # nothing was running before; just load it
