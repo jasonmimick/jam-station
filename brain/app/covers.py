@@ -33,7 +33,15 @@ def _get(url: str, timeout: int = 20):
         urllib.request.Request(url, headers={"User-Agent": UA}), timeout=timeout)
 
 
+def _clean_album(album: str) -> str:
+    """Drop disc-number tails a rip picks up from the disc's volume name — '[Disc 1]', '(disc 2)',
+    'Disc 1' — so the title matches what MusicBrainz actually indexes."""
+    a = re.sub(r"\s*[\[(]?\bdisc\s*\d+\b[\])]?\s*$", "", album, flags=re.I)
+    return a.strip(" -") or album
+
+
 def _search_release(artist: str, album: str) -> dict | None:
+    album = _clean_album(album)
     q = f'release:"{album}"'
     if artist and "unknown" not in artist.lower():
         q += f' AND artist:"{artist}"'
