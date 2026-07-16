@@ -458,8 +458,11 @@
     </div>
   </div>
 
-  <!-- the camera. capture=environment opens the back camera straight to a photo on mobile. -->
-  <input id="spotFile" type="file" accept="image/*" capture="environment" style="display:none">
+  <!-- NO capture= on purpose: with it, mobile forces the live camera and hides the photo
+       library. Without it the phone shows the chooser (Photo Library / Take Photo / Choose
+       File) — you usually spot a song when you're NOT at the radio, so picking an existing
+       photo is the common case. -->
+  <input id="spotFile" type="file" accept="image/*" style="display:none">
   <div class="spotwait" id="spotWait">
     <div class="ring"></div>
     <div><b id="spotWaitTitle">Reading your photo…</b><br>
@@ -811,7 +814,7 @@ function renderStations() {
   snap.innerHTML =
     `<span class="mk">📷</span>` +
     `<span><span class="nm">Spot a song</span>` +
-    `<div class="sub">Snap what you're hearing → we find it</div></span>`;
+    `<div class="sub">Pick a photo or snap one → we find it</div></span>`;
   snap.onclick = () => $("spotFile").click();
   w.appendChild(snap);
   if (S.spots && S.spots.length) {
