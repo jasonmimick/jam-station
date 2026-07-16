@@ -101,12 +101,38 @@
     border-style:solid; border-width:0 6px 9px 6px; border-color:transparent transparent var(--red) transparent; }
 
   /* the collection — a centered modal of album covers (dimmed app behind, not a takeover) */
-  #collection { display:none; position:fixed; inset:0; z-index:80; background:#000a;
+  #collection, #spotted { display:none; position:fixed; inset:0; z-index:80; background:#000a;
     align-items:center; justify-content:center; padding:28px; }
-  #collection.open { display:flex; }
+  #collection.open, #spotted.open { display:flex; }
   .collinner { background:var(--board); border:1px solid var(--line); border-radius:8px;
     width:100%; max-width:940px; max-height:84vh; display:flex; flex-direction:column;
     overflow:hidden; box-shadow:0 30px 80px -20px #000c; }
+  /* ── spot: the wild-caught music shelf ── */
+  .spotcard { border:0; background:transparent; padding:0; text-align:left; min-width:0;
+    display:flex; flex-direction:column; }
+  .spotshot { aspect-ratio:1; border-radius:6px; overflow:hidden; background-size:cover;
+    background-position:center; box-shadow:0 14px 32px -12px rgba(0,0,0,.6), inset 0 0 0 1px #ffffff10;
+    position:relative; }
+  .spotbadge { position:absolute; top:8px; left:8px; font-size:9.5px; font-weight:800;
+    letter-spacing:.1em; text-transform:uppercase; padding:3px 7px; border-radius:2px; color:#12120c; }
+  .spotbadge.matched { background:#2FD16A; }
+  .spotbadge.wishlist { background:var(--yellow); }
+  .spotbadge.unknown  { background:#8C8C94; }
+  .spotdel { position:absolute; top:6px; right:6px; width:22px; height:22px; border:0; cursor:pointer;
+    border-radius:50%; background:#000a; color:#fff; font-size:12px; line-height:22px; opacity:0; transition:opacity .15s; }
+  .spotcard:hover .spotdel { opacity:1; }
+  .spotcap { margin-top:10px; min-width:0; }
+  .spotplay { display:inline-block; margin-top:8px; font-size:11.5px; font-weight:700; cursor:pointer;
+    color:#12120c; background:#2FD16A; border:0; border-radius:2px; padding:6px 11px; }
+  .spotlinks { margin-top:8px; display:flex; gap:12px; flex-wrap:wrap; }
+  .spotlinks a { font-size:11.5px; color:var(--yellow); text-decoration:none; }
+  .spotlinks a:hover { text-decoration:underline; }
+  .spotwait { position:fixed; inset:0; z-index:90; display:none; align-items:center; justify-content:center;
+    background:#000b; flex-direction:column; gap:18px; color:var(--ink); text-align:center; padding:24px; }
+  .spotwait.on { display:flex; }
+  .spotwait .ring { width:46px; height:46px; border:3px solid #ffffff22; border-top-color:var(--yellow);
+    border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
   .collhead { display:flex; align-items:center; gap:14px; padding:16px 22px; border-bottom:1px solid var(--line); }
   .collhead .lbl { font-size:11px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
   .collhead input { flex:1; max-width:300px; padding:9px 12px; border:1px solid var(--line);
@@ -420,6 +446,26 @@
     </div>
   </div>
 
+  <!-- spotted: music caught in the wild, snapped and identified -->
+  <div id="spotted">
+    <div class="collinner">
+      <div class="collhead">
+        <span class="lbl">Spotted</span>
+        <input id="spotFind" type="text" placeholder="Filter" autocomplete="off" aria-label="filter spots">
+        <button class="icon" id="spotClose" title="close" aria-label="close spotted">✕</button>
+      </div>
+      <div class="collgrid" id="spotGrid"></div>
+    </div>
+  </div>
+
+  <!-- the camera. capture=environment opens the back camera straight to a photo on mobile. -->
+  <input id="spotFile" type="file" accept="image/*" capture="environment" style="display:none">
+  <div class="spotwait" id="spotWait">
+    <div class="ring"></div>
+    <div><b id="spotWaitTitle">Reading your photo…</b><br>
+      <span class="msub">identifying the music</span></div>
+  </div>
+
   <div class="app">
     <div class="pane left">
       <div class="ph"><span class="lbl">Tunes</span>
@@ -574,7 +620,7 @@
   </div>
 
 <script>
-const S = { channel:null, channels:[], albums:[], msgs:[], mode:"radio", status:"idle", filter:"",
+const S = { channel:null, channels:[], albums:[], spots:[], msgs:[], mode:"radio", status:"idle", filter:"",
             histScope:"channel", audio:new Audio(), show:null, idx:-1, np:null, userPaused:false };
 const ALBUM = "album:";                       // virtual-station prefix for a catalog album
 S.audio.preload = "none";
@@ -697,6 +743,11 @@ async function loadCatalog() {
   try { S.albums = await (await fetch("/api/library/albums")).json(); } catch { S.albums = []; }
   renderStations();
 }
+async function loadSpots() {
+  try { S.spots = await (await fetch("/api/spots")).json(); } catch { S.spots = []; }
+  renderStations();
+  if ($("spotted").classList.contains("open")) renderSpotted();
+}
 function renderStations() {
   const w = $("stations"); w.innerHTML = "";
 
@@ -748,6 +799,30 @@ function renderStations() {
       `<div class="sub">Your ripped CDs, with covers →</div></span>`;
     b.onclick = () => openCollection();
     w.appendChild(b);
+  }
+
+  // ── spot: capture music you hear out in the world ──
+  const shead = document.createElement("div");
+  shead.className = "cathead";
+  shead.textContent = "Spot";
+  w.appendChild(shead);
+  const snap = document.createElement("button");
+  snap.className = "dep album";
+  snap.innerHTML =
+    `<span class="mk">📷</span>` +
+    `<span><span class="nm">Spot a song</span>` +
+    `<div class="sub">Snap what you're hearing → we find it</div></span>`;
+  snap.onclick = () => $("spotFile").click();
+  w.appendChild(snap);
+  if (S.spots && S.spots.length) {
+    const sb = document.createElement("button");
+    sb.className = "dep album";
+    sb.innerHTML =
+      `<span class="mk">◎</span>` +
+      `<span><span class="nm">Spotted (${S.spots.length})</span>` +
+      `<div class="sub">Everything you've caught →</div></span>`;
+    sb.onclick = () => openSpotted();
+    w.appendChild(sb);
   }
 }
 
@@ -1231,7 +1306,7 @@ async function refresh() {
 setInterval(() => { if (S.mode === "radio") refresh(); }, 3000);  // a track change
 // Drop a CD in the mini's drive and it rips itself into the catalog — so poll for it, and a
 // new record just appears on the shelf without a reload. Members only (anonymous gets []).
-setInterval(() => { if (S.user) loadCatalog(); }, 30000);
+setInterval(() => { if (S.user) { loadCatalog(); loadSpots(); } }, 30000);
 
 // rip status — a slim bar while a CD is being ingested, so you can watch it land
 let ripLast = "idle";
@@ -1338,7 +1413,7 @@ async function loadMe() {
   try { S.user = (await (await fetch("/api/me")).json()).user; } catch { S.user = null; }
   $("who").textContent = S.user ? "●" : "☺";
   $("who").title = S.user ? `Signed in as ${S.user.email} — click to sign out` : "sign in";
-  if (S.user) { await pullFavs(); await loadCatalog(); } else { S.albums = []; }
+  if (S.user) { await pullFavs(); await loadCatalog(); loadSpots(); } else { S.albums = []; S.spots = []; }
   renderStations();
 }
 
@@ -1507,6 +1582,87 @@ $("collClose").onclick = closeCollection;
 $("collection").onclick = (e) => { if (e.target === $("collection")) closeCollection(); };  // click backdrop
 $("collFind").oninput = renderCollection;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCollection(); });
+
+/* ── spot: photograph music in the wild, station identifies it ─────────────── */
+$("spotFile").onchange = async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";                           // let the same photo be re-picked later
+  if (!file) return;
+  if (!S.user) { alert("Sign in first — spots are saved to your account."); return; }
+  $("spotWaitTitle").textContent = "Reading your photo…";
+  $("spotWait").classList.add("on");
+  try {
+    const fd = new FormData(); fd.append("photo", file);
+    const r = await fetch("/api/spot", { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "couldn't identify");
+    const spot = await r.json();
+    await loadSpots();
+    $("spotWait").classList.remove("on");
+    openSpotted(spot.id);                         // open the shelf and flash the new catch
+  } catch (err) {
+    $("spotWaitTitle").textContent = "Couldn't read that one";
+    setTimeout(() => $("spotWait").classList.remove("on"), 1600);
+  }
+};
+function spotShotBg(sp) {
+  if (sp.image_path) return `url('${sp.image_path}')`;
+  return "linear-gradient(150deg,#2a2a30,#141418)";
+}
+function renderSpotted(flashId) {
+  const q = ($("spotFind").value || "").toLowerCase().trim();
+  const list = q ? S.spots.filter(s => (s.artist + " " + s.title + " " + s.album + " " + s.saw)
+                                        .toLowerCase().includes(q)) : S.spots;
+  const g = $("spotGrid");
+  g.innerHTML = list.map(sp => {
+    const name = sp.title || sp.album || "Unidentified";
+    const sub = sp.title ? esc(sp.artist || "—") + (sp.album ? " · " + esc(sp.album) : "")
+                         : esc(sp.artist || sp.saw || "");
+    const yr = sp.year ? ` · ${esc(String(sp.year))}` : "";
+    let action = "";
+    if (sp.status === "matched") {
+      action = `<button class="spotplay" data-play="${esc(sp.matched_dir)}">▶ In your collection</button>`;
+    } else if (sp.status === "wishlist") {
+      const L = sp.links || {};
+      action = `<div class="spotlinks">` +
+        (L.youtube  ? `<a href="${esc(L.youtube)}" target="_blank" rel="noopener">YouTube ↗</a>` : "") +
+        (L.discogs  ? `<a href="${esc(L.discogs)}" target="_blank" rel="noopener">Discogs ↗</a>` : "") +
+        (L.musicbrainz ? `<a href="${esc(L.musicbrainz)}" target="_blank" rel="noopener">MusicBrainz ↗</a>` : "") +
+        `</div>`;
+    } else {
+      action = `<div class="spotlinks"><span class="msub">Couldn't identify — try a clearer shot</span></div>`;
+    }
+    return `<div class="spotcard" data-id="${sp.id}">` +
+      `<div class="spotshot" style="background-image:${spotShotBg(sp)}">` +
+        `<span class="spotbadge ${sp.status}">${sp.status === "matched" ? "Have it"
+            : sp.status === "wishlist" ? "Find it" : "?"}</span>` +
+        `<button class="spotdel" data-del="${sp.id}" title="delete">✕</button>` +
+      `</div>` +
+      `<div class="spotcap"><span class="albname">${esc(name)}</span>` +
+      `<span class="albsub">${sub}${yr}</span>${action}</div></div>`;
+  }).join("") || `<p class="msub" style="padding:20px">Nothing spotted yet — tap “Spot a song” and photograph what you're hearing.</p>`;
+  g.querySelectorAll("[data-play]").forEach(b => b.onclick = () => { closeSpotted(); tuneAlbum(b.dataset.play); });
+  g.querySelectorAll("[data-del]").forEach(b => b.onclick = async (e) => {
+    e.stopPropagation();
+    await fetch("/api/spot/delete", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(b.dataset.del) }) });
+    await loadSpots();
+  });
+  if (flashId) {
+    const el = g.querySelector(`.spotcard[data-id="${flashId}"]`);
+    if (el) { el.scrollIntoView({ block: "center" }); el.style.outline = "2px solid var(--yellow)";
+              setTimeout(() => el.style.outline = "", 1400); }
+  }
+}
+async function openSpotted(flashId) {
+  await loadSpots();
+  $("spotFind").value = ""; renderSpotted(flashId);
+  $("spotted").classList.add("open");
+}
+function closeSpotted() { $("spotted").classList.remove("open"); }
+$("spotClose").onclick = closeSpotted;
+$("spotted").onclick = (e) => { if (e.target === $("spotted")) closeSpotted(); };
+$("spotFind").oninput = () => renderSpotted();
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSpotted(); });
 
 /* the album tile — a tonal cover derived from the album name (until real cover art lands).
    Muted saturation + a dark gradient reads like a pressed sleeve, not a swatch. */
