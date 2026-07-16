@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0F0F11">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<title>jam</title>
+<style>
+  :root {
+    --board:#0F0F11; --panel:#17171A; --sunk:#0A0A0C; --line:#2B2B31;
+    --ink:#FFFFFF; --muted:#8C8C94; --faint:#5A5A62;
+    --yellow:#FFD200; --on-yellow:#12120C; --live:#2FD16A;
+    --pad: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; }
+  body {
+    background:var(--board); color:var(--ink); overflow-x:hidden;
+    font:15px/1.5 -apple-system,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .msub { color:var(--muted); font-size:13px; }
+  button { font:inherit; color:inherit; cursor:pointer; }
+
+  /* header */
+  header {
+    position:sticky; top:0; z-index:30; background:var(--board);
+    display:flex; align-items:center; gap:12px; padding:14px 16px 10px;
+    padding-top:calc(14px + env(safe-area-inset-top, 0px));
+    border-bottom:1px solid var(--line);
+  }
+  .brand { font-weight:900; letter-spacing:.02em; font-size:19px; }
+  .brand b { color:var(--yellow); }
+  .spacer { flex:1; }
+  .iconbtn {
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--line);
+    background:var(--panel); font-size:16px; display:grid; place-items:center;
+  }
+  .iconbtn.in { border-color:var(--live); color:var(--live); }
+
+  /* tabs */
+  nav#tabs {
+    position:sticky; z-index:29; background:var(--board);
+    top:calc(63px + env(safe-area-inset-top, 0px));
+    display:flex; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line);
+    overflow-x:auto; scrollbar-width:none;
+  }
+  nav#tabs::-webkit-scrollbar { display:none; }
+  nav#tabs button {
+    flex:0 0 auto; border:1px solid var(--line); background:transparent; color:var(--muted);
+    border-radius:999px; padding:8px 18px; font-size:13px; font-weight:700; letter-spacing:.02em;
+  }
+  nav#tabs button.on { background:var(--yellow); color:var(--on-yellow); border-color:var(--yellow); }
+
+  /* view / gallery */
+  main#view { padding:16px 14px calc(150px + var(--pad)); min-height:60vh; }
+  .filter {
+    width:100%; padding:11px 14px; margin-bottom:14px; border-radius:10px;
+    border:1px solid var(--line); background:var(--panel); color:var(--ink); font-size:15px; outline:none;
+  }
+  .filter:focus { border-color:var(--yellow); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px 14px; }
+  .card { display:flex; flex-direction:column; min-width:0; text-align:left; border:0; background:transparent; padding:0; }
+  .cover {
+    aspect-ratio:1; border-radius:12px; overflow:hidden; background-size:cover; background-position:center;
+    display:grid; place-items:center; font-size:40px; font-weight:200; color:#fff; position:relative;
+    box-shadow:0 12px 28px -14px #000c, inset 0 0 0 1px #ffffff12;
+  }
+  .card:active .cover { transform:scale(.97); }
+  .cover, .card:active .cover { transition:transform .12s ease; }
+  .badge {
+    position:absolute; top:8px; left:8px; font-size:9px; font-weight:800; letter-spacing:.08em;
+    text-transform:uppercase; padding:3px 7px; border-radius:5px; color:var(--on-yellow);
+  }
+  .badge.matched { background:var(--live); }
+  .badge.wishlist { background:var(--yellow); }
+  .badge.unknown  { background:#8C8C94; }
+  .playmark { position:absolute; inset:0; display:grid; place-items:center; opacity:0; }
+  .cap { margin-top:9px; min-width:0; }
+  .nm { display:block; font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sub { display:block; font-size:12px; color:var(--muted); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* a spot expanded in place — spans both columns */
+  .card.spot.open { grid-column:1 / -1; }
+  .card.spot.open .cover { aspect-ratio:auto; }
+  .card.spot.open .cover img { width:100%; display:block; border-radius:12px; }
+  .detail { margin-top:10px; }
+  .detail .saw { font-size:12px; color:var(--faint); margin:2px 0 10px; }
+  .links { display:flex; gap:10px; flex-wrap:wrap; }
+  .links a, .playbtn {
+    font-size:13px; font-weight:700; text-decoration:none; border-radius:8px; padding:9px 14px; display:inline-block;
+  }
+  .links a { color:var(--yellow); border:1px solid var(--line); }
+  .playbtn { background:var(--live); color:var(--on-yellow); border:0; }
+  .delbtn { margin-left:auto; background:transparent; border:1px solid var(--line); color:var(--muted);
+    border-radius:8px; padding:9px 12px; font-size:13px; }
+
+  .empty { text-align:center; color:var(--muted); padding:48px 20px; }
+  .empty b { color:var(--ink); display:block; font-size:16px; margin-bottom:6px; }
+
+  /* spot a song — a big obvious action atop the Spots tab */
+  .snap {
+    width:100%; border:1px dashed var(--line); background:var(--panel); color:var(--ink);
+    border-radius:14px; padding:16px; margin-bottom:16px; display:flex; align-items:center; gap:14px;
+  }
+  .snap .em { font-size:26px; }
+  .snap b { display:block; }
+
+  /* persistent mini-player */
+  #mini {
+    position:fixed; left:10px; right:10px; z-index:40;
+    bottom:calc(10px + var(--pad));
+    display:flex; align-items:center; gap:12px; padding:10px 12px;
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 16px 40px -16px #000e;
+  }
+  #mini[hidden] { display:none; }
+  #mini .mc { width:44px; height:44px; border-radius:8px; background-size:cover; background-position:center;
+    background-color:var(--sunk); flex:0 0 auto; display:grid; place-items:center; color:#fff8; font-size:18px; }
+  #mini .mm { flex:1; min-width:0; }
+  #mini .mm b { display:block; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #mini .mpplay { width:44px; height:44px; border-radius:50%; border:0; background:var(--yellow);
+    color:var(--on-yellow); font-size:16px; flex:0 0 auto; }
+  #mini .mpplay.busy { opacity:.6; }
+
+  /* full-screen now-playing sheet */
+  #now {
+    position:fixed; inset:0; z-index:50; background:var(--board);
+    transform:translateY(100%); transition:transform .28s cubic-bezier(.3,.7,.3,1);
+    display:flex; flex-direction:column; align-items:center; padding:20px 24px;
+    padding-top:calc(14px + env(safe-area-inset-top, 0px)); padding-bottom:calc(30px + var(--pad));
+  }
+  #now.up { transform:translateY(0); }
+  #now .grab { width:40px; height:5px; border-radius:3px; background:var(--line); margin-bottom:26px; }
+  #now .big { width:min(74vw, 320px); aspect-ratio:1; border-radius:16px; background-size:cover;
+    background-position:center; background-color:var(--sunk); box-shadow:0 30px 70px -24px #000; margin-bottom:26px;
+    display:grid; place-items:center; color:#fff8; font-size:64px; font-weight:200; }
+  #now h2 { font-size:22px; margin:0 0 4px; text-align:center; }
+  #now .art { color:var(--muted); margin:0 0 4px; text-align:center; }
+  #now .spec { color:var(--faint); font-size:11px; letter-spacing:.14em; text-transform:uppercase; margin-bottom:26px; }
+  #now .tp { display:flex; align-items:center; gap:26px; margin-top:auto; }
+  #now .tp button { background:transparent; border:0; font-size:26px; color:var(--ink); }
+  #now .tp .big2 { width:72px; height:72px; border-radius:50%; background:var(--yellow); color:var(--on-yellow); font-size:26px; }
+  #now .tp button:disabled { opacity:.28; }
+
+  /* account / sign-in sheet */
+  #sheet { position:fixed; inset:0; z-index:60; background:#000b; display:none; align-items:flex-end; }
+  #sheet.up { display:flex; }
+  #sheet .card2 { background:var(--panel); width:100%; border-radius:18px 18px 0 0; padding:24px 22px;
+    padding-bottom:calc(24px + var(--pad)); border-top:1px solid var(--line); }
+  #sheet h3 { margin:0 0 6px; font-size:18px; }
+  #sheet input { width:100%; padding:13px 14px; margin:14px 0 10px; border-radius:10px;
+    border:1px solid var(--line); background:var(--board); color:var(--ink); font-size:16px; outline:none; }
+  #sheet .go { width:100%; padding:13px; border:0; border-radius:10px; background:var(--yellow);
+    color:var(--on-yellow); font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+  #sheet .ghost { width:100%; padding:11px; margin-top:10px; background:transparent; border:1px solid var(--line);
+    color:var(--muted); border-radius:10px; }
+  #sheet .msg { font-size:13px; margin:10px 0 0; min-height:18px; }
+  .err { color:var(--red, #F0402F); } .ok { color:var(--live); }
+
+  /* photo-reading overlay */
+  #wait { position:fixed; inset:0; z-index:70; background:#000c; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px; text-align:center; padding:24px; }
+  #wait.up { display:flex; }
+  #wait .ring { width:46px; height:46px; border:3px solid #ffffff22; border-top-color:var(--yellow);
+    border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand"><b>⚡</b> jam</div>
+    <span class="spacer"></span>
+    <button class="iconbtn" id="acct" aria-label="account">◎</button>
+  </header>
+
+  <nav id="tabs">
+    <button data-tab="stations" class="on">Stations</button>
+    <button data-tab="cds">CDs</button>
+    <button data-tab="spots">Spots</button>
+  </nav>
+
+  <main id="view"></main>
+
+  <div id="mini" hidden>
+    <div class="mc" id="mCover">♪</div>
+    <div class="mm"><b id="mTitle">—</b><span class="sub" id="mArtist"></span></div>
+    <button class="mpplay" id="mPlay" aria-label="play">▶</button>
+  </div>
+
+  <div id="now">
+    <div class="grab"></div>
+    <div class="big" id="nCover">♪</div>
+    <h2 id="nTitle">Tune in</h2>
+    <p class="art" id="nArtist"></p>
+    <p class="spec" id="nSpec"></p>
+    <div class="tp">
+      <button id="nPrev" aria-label="previous">⏮</button>
+      <button class="big2" id="nPlay" aria-label="play">▶</button>
+      <button id="nNext" aria-label="next">⏭</button>
+    </div>
+  </div>
+
+  <div id="sheet">
+    <div class="card2" id="sheetBody"></div>
+  </div>
+
+  <input id="file" type="file" accept="image/*" hidden>
+  <div id="wait">
+    <div class="ring"></div>
+    <div><b id="waitTitle">Reading your photo…</b><br><span class="msub">identifying the music</span></div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"']/g, c =>
+  ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])));
+
+const S = {
+  user: null, tab: localStorage.getItem("jam-m-tab") || "stations",
+  stations: [], albums: [], spots: [], filter: "", openSpot: null,
+  // playback
+  audio: new Audio(), kind: null, slug: null, dir: null, tracks: [], idx: -1,
+  np: { title: "", artist: "", cover: "" }, npTimer: null,
+};
+S.audio.preload = "none";
+S.audio.crossOrigin = "anonymous";
+
+/* ── data ─────────────────────────────────────────────────────────────── */
+async function getJSON(u) { try { const r = await fetch(u); return r.ok ? await r.json() : null; } catch { return null; } }
+
+async function loadMe()       { const d = await getJSON("/api/me"); S.user = d && d.user; paintAcct(); }
+async function loadStations() { S.stations = (await getJSON("/api/channels")) || []; if (S.tab === "stations") render(); }
+async function loadAlbums()   { S.albums = (S.user ? await getJSON("/api/library/albums") : []) || []; if (S.tab === "cds") render(); }
+async function loadSpots()    { S.spots = (S.user ? await getJSON("/api/spots") : []) || []; if (S.tab === "spots") render(); }
+async function loadAll()      { await loadMe(); loadStations(); loadAlbums(); loadSpots(); }
+
+/* ── tabs ─────────────────────────────────────────────────────────────── */
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+function setTab(t) {
+  S.tab = t; S.filter = ""; S.openSpot = null;
+  localStorage.setItem("jam-m-tab", t);
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  render();
+  $("view").scrollIntoView({ block: "start" });
+}
+
+/* ── render ───────────────────────────────────────────────────────────── */
+function tonal(name) {
+  let h = 0; for (const c of (name || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const hue = h % 360, m = (name || "").match(/[A-Za-z0-9]/);
+  return { bg: `linear-gradient(150deg, hsl(${hue},30%,33%), hsl(${(hue + 34) % 360},34%,13%))`,
+           mono: m ? m[0].toUpperCase() : "♪" };
+}
+function coverStyle(url, name) {
+  if (url) return `background-image:url('${url}')`;
+  return `background-image:${tonal(name).bg}`;
+}
+
+function render() {
+  const v = $("view");
+  if (S.tab === "stations") return renderStations(v);
+  if (S.tab === "cds")      return renderAlbums(v);
+  if (S.tab === "spots")    return renderSpots(v);
+}
+
+function filterBox(ph) {
+  return `<input class="filter" id="flt" placeholder="${ph}" autocomplete="off" value="${esc(S.filter)}">`;
+}
+function wireFilter() {
+  const f = $("flt"); if (!f) return;
+  f.oninput = () => { S.filter = f.value; const g = $("gridbox"); if (g) g.innerHTML = gridHTML(); wireCards(); };
+}
+
+function renderStations(v) {
+  v.innerHTML = filterBox("Filter stations") + `<div id="gridbox"></div>`;
+  $("gridbox").innerHTML = gridHTML(); wireFilter(); wireCards();
+}
+function renderAlbums(v) {
+  if (!S.user) return v.innerHTML = signedOut("your records", "Your ripped CDs live here once you sign in.");
+  v.innerHTML = filterBox("Filter albums") + `<div id="gridbox"></div>`;
+  $("gridbox").innerHTML = gridHTML(); wireFilter(); wireCards();
+}
+function renderSpots(v) {
+  if (!S.user) return v.innerHTML = signedOut("your spots", "Sign in to snap songs you hear and keep them here.");
+  v.innerHTML =
+    `<button class="snap" id="snap"><span class="em">📷</span>` +
+    `<span><b>Spot a song</b><span class="msub">Pick a photo or snap one → we find it</span></span></button>` +
+    filterBox("Filter spots") + `<div id="gridbox"></div>`;
+  $("gridbox").innerHTML = gridHTML(); wireFilter(); wireCards();
+  $("snap").onclick = () => $("file").click();
+}
+function signedOut(what, line) {
+  return `<div class="empty"><b>Sign in to see ${esc(what)}</b>${esc(line)}<br><br>` +
+         `<button class="playbtn" onclick="openAcct()">Sign in</button></div>`;
+}
+
+function items() {
+  const q = S.filter.toLowerCase().trim();
+  if (S.tab === "stations") {
+    let a = S.stations.filter(c => c.playable !== false);
+    if (q) a = a.filter(c => (c.name + " " + (c.description || "")).toLowerCase().includes(q));
+    return a.map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio",
+                         cover: "", nameForTone: c.name, playing: S.kind === "radio" && S.slug === c.slug }));
+  }
+  if (S.tab === "cds") {
+    let a = S.albums;
+    if (q) a = a.filter(al => (al.album + " " + al.artist).toLowerCase().includes(q));
+    return a.map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
+                          sub: (al.artist || "—") + (al.year ? " · " + al.year : ""),
+                          cover: al.cover_url || "", nameForTone: al.album,
+                          playing: S.kind === "album" && S.dir === al.dir }));
+  }
+  let a = S.spots;
+  if (q) a = a.filter(s => (s.artist + " " + s.title + " " + s.album + " " + (s.saw || "")).toLowerCase().includes(q));
+  return a;   // spots keep their raw shape (render specially)
+}
+
+function gridHTML() {
+  const list = items();
+  if (!list.length) return `<div class="empty"><b>Nothing here yet</b>${
+    S.tab === "spots" ? "Tap “Spot a song” to catch what you're hearing." :
+    S.tab === "cds" ? "Rip a CD on the mini and it lands here." : "No stations match."}</div>`;
+  if (S.tab === "spots") return `<div class="grid">${list.map(spotCard).join("")}</div>`;
+  return `<div class="grid">${list.map(it => `
+    <button class="card" data-kind="${it.kind}" data-id="${esc(it.id)}">
+      <div class="cover" style="${coverStyle(it.cover, it.nameForTone)}">${it.cover ? "" : tonal(it.nameForTone).mono}
+        ${it.playing ? '<span class="playmark" style="opacity:1">▶</span>' : ""}</div>
+      <div class="cap"><span class="nm">${esc(it.name)}</span><span class="sub">${esc(it.sub)}</span></div>
+    </button>`).join("")}</div>`;
+}
+
+function spotCard(sp) {
+  const open = S.openSpot === sp.id;
+  const name = sp.title || sp.album || "Unidentified";
+  const sub = sp.title ? esc(sp.artist || "—") + (sp.album ? " · " + esc(sp.album) : "") : esc(sp.artist || "");
+  const yr = sp.year ? " · " + esc(String(sp.year)) : "";
+  const badge = sp.status === "matched" ? "Have it" : sp.status === "wishlist" ? "Find it" : "?";
+  if (!open) {
+    return `<button class="card spot" data-spot="${sp.id}">
+      <div class="cover" style="${coverStyle(sp.image_path, name)}">
+        <span class="badge ${sp.status}">${badge}</span></div>
+      <div class="cap"><span class="nm">${esc(name)}</span><span class="sub">${sub}</span></div></button>`;
+  }
+  const L = sp.links || {};
+  let action = "";
+  if (sp.status === "matched") action = `<button class="playbtn" data-playalbum="${esc(sp.matched_dir)}">▶ Play — in your collection</button>`;
+  else if (sp.status === "wishlist") action = `<div class="links">` +
+    (L.youtube ? `<a href="${esc(L.youtube)}" target="_blank" rel="noopener">YouTube ↗</a>` : "") +
+    (L.discogs ? `<a href="${esc(L.discogs)}" target="_blank" rel="noopener">Discogs ↗</a>` : "") +
+    (L.musicbrainz ? `<a href="${esc(L.musicbrainz)}" target="_blank" rel="noopener">MusicBrainz ↗</a>` : "") + `</div>`;
+  else action = `<span class="msub">Couldn't identify — try a clearer photo.</span>`;
+  return `<div class="card spot open" data-spot="${sp.id}">
+    <div class="cover" style="background:var(--sunk)">
+      ${sp.image_path ? `<img src="${esc(sp.image_path)}" alt="">` : ""}
+      <span class="badge ${sp.status}">${badge}</span></div>
+    <div class="detail">
+      <span class="nm">${esc(name)}${yr}</span><span class="sub">${sub}</span>
+      <div class="saw">${sp.saw ? "seen as: " + esc(sp.saw) : ""}</div>
+      <div class="links" style="align-items:center">${action}
+        <button class="delbtn" data-del="${sp.id}">Delete</button></div>
+    </div></div>`;
+}
+
+function wireCards() {
+  document.querySelectorAll(".card[data-kind]").forEach(b => b.onclick = () => {
+    if (b.dataset.kind === "station") playRadio(b.dataset.id);
+    else playAlbum(b.dataset.id);
+  });
+  document.querySelectorAll(".card[data-spot]").forEach(b => b.onclick = (e) => {
+    if (e.target.closest("a,[data-playalbum],[data-del]")) return;
+    const id = Number(b.dataset.spot);
+    S.openSpot = (S.openSpot === id) ? null : id;
+    $("gridbox").innerHTML = gridHTML(); wireCards();
+  });
+  document.querySelectorAll("[data-playalbum]").forEach(b => b.onclick = () => playAlbum(b.dataset.playalbum));
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    await fetch("/api/spot/delete", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(b.dataset.del) }) });
+    S.openSpot = null; await loadSpots();
+  });
+}
+
+/* ── playback ─────────────────────────────────────────────────────────── */
+function stopNpPoll() { if (S.npTimer) { clearInterval(S.npTimer); S.npTimer = null; } }
+
+async function playRadio(slug) {
+  const st = S.stations.find(c => c.slug === slug) || {};
+  stopNpPoll();
+  S.kind = "radio"; S.slug = slug; S.dir = null; S.tracks = []; S.idx = -1;
+  S.np = { title: st.name || "", artist: "Live", cover: "" };
+  S.audio.src = "/stream/" + slug;
+  try { await S.audio.play(); } catch {}
+  paintPlayer(); render();
+  pollNp(); S.npTimer = setInterval(pollNp, 8000);
+}
+async function pollNp() {
+  if (S.kind !== "radio" || !S.slug) return;
+  const np = await getJSON("/api/nowplaying?channel=" + encodeURIComponent(S.slug));
+  if (np && (np.title || np.artist)) {
+    S.np = { title: np.title || S.np.title, artist: np.artist || "", cover: "" };
+    paintPlayer();
+  }
+}
+async function playAlbum(dir, startIdx) {
+  const d = await getJSON("/api/library/album?dir=" + encodeURIComponent(dir));
+  if (!d || !d.tracks || !d.tracks.length) return;
+  stopNpPoll();
+  S.kind = "album"; S.dir = dir; S.slug = null; S.tracks = d.tracks; S.idx = startIdx || 0;
+  playIdx(S.idx); render();
+}
+function playIdx(i) {
+  if (i < 0 || i >= S.tracks.length) return;
+  S.idx = i;
+  const t = S.tracks[i];
+  S.np = { title: t.title || "—", artist: t.artist || "", cover: t.cover_url || "" };
+  S.audio.src = t.url;
+  S.audio.play().catch(() => {});
+  paintPlayer();
+}
+function togglePlay() {
+  if (!S.kind) return;
+  if (S.audio.paused) S.audio.play().catch(() => {}); else S.audio.pause();
+}
+function next() { if (S.kind === "album") playIdx(S.idx + 1); }
+function prev() { if (S.kind === "album") { S.audio.currentTime > 3 ? (S.audio.currentTime = 0) : playIdx(S.idx - 1); } }
+
+S.audio.addEventListener("ended", () => { if (S.kind === "album") next(); });
+["play", "pause", "waiting", "playing"].forEach(ev => S.audio.addEventListener(ev, paintPlayer));
+
+/* ── player UI (mini bar + full sheet) ────────────────────────────────── */
+function paintPlayer() {
+  const has = !!S.kind;
+  $("mini").hidden = !has;
+  const playing = has && !S.audio.paused;
+  const busy = has && (S.audio.readyState < 3 && !S.audio.paused);
+  const glyph = busy ? "…" : playing ? "❚❚" : "▶";
+  $("mPlay").textContent = glyph; $("nPlay").textContent = glyph;
+  $("mPlay").classList.toggle("busy", busy);
+  $("mTitle").textContent = S.np.title || "—";
+  $("mArtist").textContent = S.np.artist || "";
+  const mc = $("mCover");
+  if (S.np.cover) { mc.style.backgroundImage = `url('${S.np.cover}')`; mc.textContent = ""; }
+  else { mc.style.backgroundImage = ""; mc.textContent = tonal(S.np.title || S.np.artist).mono; }
+  // full sheet
+  $("nTitle").textContent = S.np.title || "Tune in";
+  $("nArtist").textContent = S.np.artist || "";
+  $("nSpec").textContent = !has ? "" : (S.kind === "radio" ? "256 kbps · live" : `on demand · ${S.idx + 1}/${S.tracks.length}`);
+  const nc = $("nCover");
+  if (S.np.cover) { nc.style.backgroundImage = `url('${S.np.cover}')`; nc.textContent = ""; }
+  else { nc.style.backgroundImage = ""; nc.textContent = tonal(S.np.title || S.np.artist).mono; }
+  const album = S.kind === "album";
+  $("nPrev").disabled = !album; $("nNext").disabled = !album;
+  updateMediaSession();
+}
+$("mPlay").onclick = (e) => { e.stopPropagation(); togglePlay(); };
+$("nPlay").onclick = togglePlay;
+$("nPrev").onclick = prev;
+$("nNext").onclick = next;
+$("mini").onclick = () => $("now").classList.add("up");
+// tap the grab handle or swipe-down area to close the sheet
+$("now").querySelector(".grab").onclick = () => $("now").classList.remove("up");
+let touchY = 0;
+$("now").addEventListener("touchstart", e => touchY = e.touches[0].clientY, { passive: true });
+$("now").addEventListener("touchend", e => { if (e.changedTouches[0].clientY - touchY > 70) $("now").classList.remove("up"); }, { passive: true });
+
+function updateMediaSession() {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: S.np.title || "jam-station", artist: S.np.artist || "",
+      artwork: S.np.cover ? [{ src: S.np.cover, sizes: "512x512", type: "image/jpeg" }] : [] });
+    navigator.mediaSession.setActionHandler("play", () => S.audio.play());
+    navigator.mediaSession.setActionHandler("pause", () => S.audio.pause());
+    navigator.mediaSession.setActionHandler("nexttrack", () => next());
+    navigator.mediaSession.setActionHandler("previoustrack", () => prev());
+  } catch {}
+}
+
+/* ── spot upload (with the HEIC → JPEG fix) ───────────────────────────── */
+async function toJpeg(file, maxEdge = 1600, quality = 0.85) {
+  if (file.type === "image/jpeg" && file.size < 1500000) return file;
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { return file; }
+  const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", quality));
+  return blob ? new File([blob], "spot.jpg", { type: "image/jpeg" }) : file;
+}
+$("file").onchange = async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  if (!S.user) { openAcct(); return; }
+  $("waitTitle").textContent = "Reading your photo…";
+  $("wait").classList.add("up");
+  try {
+    const up = await toJpeg(file);
+    const fd = new FormData(); fd.append("photo", up);
+    const r = await fetch("/api/spot", { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "couldn't identify");
+    const sp = await r.json();
+    await loadSpots();
+    S.openSpot = sp.id;
+    $("wait").classList.remove("up");
+    setTab("spots");
+  } catch (err) {
+    $("waitTitle").textContent = "Couldn't read that one — " + (err.message || "try again");
+    setTimeout(() => $("wait").classList.remove("up"), 2600);
+  }
+};
+
+/* ── account / auth ───────────────────────────────────────────────────── */
+function paintAcct() { $("acct").classList.toggle("in", !!S.user); }
+$("acct").onclick = () => openAcct();
+window.openAcct = function () {
+  const b = $("sheetBody");
+  if (S.user) {
+    b.innerHTML = `<h3>You're in</h3><p class="msub">${esc(S.user.email || S.user.name || "signed in")}</p>
+      <button class="ghost" id="signout">Sign out</button>
+      <button class="ghost" id="toDesktop" style="margin-top:8px">Open desktop version</button>
+      <button class="go" id="closeSheet" style="margin-top:14px">Done</button>`;
+    $("signout").onclick = async () => { await fetch("/api/auth/signout", { method: "POST" }); await loadAll(); openAcct(); };
+  } else {
+    b.innerHTML = `<h3>Sign in</h3><p class="msub">Type your passphrase or the code you were sent.
+      You don't need an account to listen — signing in adds your CDs and Spots.</p>
+      <input id="pass" placeholder="Passphrase or code" autocapitalize="off" autocomplete="off">
+      <button class="go" id="doSignin">Sign in</button>
+      <p class="msg" id="signMsg"></p>
+      <button class="ghost" id="closeSheet">Close</button>`;
+    const go = async () => {
+      const code = $("pass").value.trim(); if (!code) return;
+      $("signMsg").textContent = "…"; $("signMsg").className = "msg";
+      const r = await fetch("/api/auth/key", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }) });
+      if (r.ok) { $("signMsg").textContent = "Signed in"; $("signMsg").className = "msg ok";
+        await loadAll(); setTimeout(closeSheet, 500); }
+      else { $("signMsg").textContent = "That code or passphrase isn't valid."; $("signMsg").className = "msg err"; }
+    };
+    $("doSignin").onclick = go;
+    $("pass").addEventListener("keydown", ev => { if (ev.key === "Enter") go(); });
+  }
+  const td = $("toDesktop"); if (td) td.onclick = () => location.href = "/?desktop=1";
+  $("closeSheet").onclick = closeSheet;
+  $("sheet").classList.add("up");
+};
+function closeSheet() { $("sheet").classList.remove("up"); }
+$("sheet").onclick = (e) => { if (e.target === $("sheet")) closeSheet(); };
+
+/* ── go ───────────────────────────────────────────────────────────────── */
+setTab(S.tab);
+loadAll();
+setInterval(() => { if (S.user) { loadAlbums(); loadSpots(); } }, 30000);
+</script>
+</body>
+</html>

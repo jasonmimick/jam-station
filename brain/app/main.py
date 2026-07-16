@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 
@@ -33,12 +34,21 @@ def health():
     return {"ok": True}
 
 
+# A phone and a desktop want genuinely different apps, not one page bent to fit both — the
+# desktop is a 3-pane console, the phone is a gallery + a pinned player. So we serve two files
+# and pick by user-agent. Overrides: ?m=1 forces mobile (to test from a laptop), ?desktop=1
+# forces the console (the escape hatch if the sniff is ever wrong on a tablet).
+_MOBILE_UA = re.compile(r"iPhone|Android.+Mobile|Windows Phone|iPod", re.I)
+
+
 @app.get("/")
-def index():
+def index(request: Request, m: str = "", desktop: str = ""):
+    ua = request.headers.get("user-agent", "")
+    mobile = m == "1" or (desktop != "1" and bool(_MOBILE_UA.search(ua)))
     # no-cache = the browser MAY keep a copy but must revalidate before using it (cheap 304 if
     # unchanged). Without this the page ships only a Last-Modified, and mobile Safari happily
     # serves a stale index for hours — which is why a fresh deploy kept showing the old UI.
-    return FileResponse(os.path.join(STATIC, "index.html"),
+    return FileResponse(os.path.join(STATIC, "mobile.html" if mobile else "index.html"),
                         headers={"Cache-Control": "no-cache"})
 
 
