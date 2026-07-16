@@ -140,7 +140,7 @@ echo "  ripping $n tracks -> music/cds/$DIR  @ ${BITRATE}k"
 
 stage=$(mktemp -d)          # cleaned up by the EXIT trap set with the lock, above
 mkdir -p "$stage/$DIR"
-i=0
+i=0; ok=0                   # ok = tracks that actually ripped (a damaged one gets skipped)
 for f in "$disc"*.aiff; do
   base=$(basename "$f" .aiff)
   num=${base%% *}; title=${base#* }
@@ -150,8 +150,16 @@ for f in "$disc"*.aiff; do
   printf '  [%2d/%2d] %s\n' "$i" "$n" "$title"
   report ripping "$i" "$n" "$title"
   declutter                          # QuickLook/Spotlight/Music relaunch — shoo them off again
-  encode "$f" "$stage/$DIR/$out" "$title" "$num" "$n"
+  # A damaged/unreadable track must NOT kill the whole rip — skip it and keep going, so a
+  # scratched disc still yields its other tracks instead of failing entirely (and looping).
+  if encode "$f" "$stage/$DIR/$out" "$title" "$num" "$n"; then
+    ok=$((ok + 1))
+  else
+    echo "  [!] track $num unreadable — skipped"
+    rm -f "$stage/$DIR/$out"
+  fi
 done
+[ "${ok:-0}" -gt 0 ] || { echo "  no readable tracks — clean the disc and try again"; exit 1; }
 
 # The volume is inside Docker Desktop's VM — there is no host path to write to. docker cp is
 # the door. mkdir first: cp needs the parent to exist.
