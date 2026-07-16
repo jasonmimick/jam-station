@@ -1243,28 +1243,54 @@ setInterval(() => { if (S.user) loadCatalog(); }, 30000);
 
 // rip status — a slim bar while a CD is being ingested, so you can watch it land
 let ripLast = "idle";
+let ripView = false;
+// the big now-playing panel becomes "NOW RIPPING" while a disc ingests (see Jason's ask)
+function paintRip(r) {
+  $("boardLbl").textContent = "Now ripping";
+  $("onair").classList.remove("on");
+  flapTo((r.title && r.title !== "Audio Track") ? r.title : (r.album || "Ripping"));
+  $("byline").innerHTML = esc(r.album || "") +
+    (r.track && r.total ? ` <span class="sm">· track ${r.track} of ${r.total}</span>` : "");
+  $("npSpec").textContent = "ingesting from CD · 256 kbps";
+  $("npMeta").innerHTML = "";
+  renderNpArt(S.albums.find(a => a.album === r.album) || { album: r.album });
+}
+function paintNow() {   // hand the panel back to what's actually playing
+  const t = currentTrack(), playing = S.status === "playing";
+  $("boardLbl").textContent = S.mode === "radio" ? "Now playing" : "On demand";
+  flapTo(t ? (t.title || "") : "Tune in");
+  $("byline").innerHTML = t
+    ? `${esc(t.artist || "")} ${t.album ? `<span class="sm">· ${esc(t.album)}</span>` : ""}`
+    : `<span class="empty">Select a station</span>`;
+  $("onair").classList.toggle("on", playing && S.mode === "radio");
+  $("npSpec").textContent = !playing ? "" : (S.mode === "radio" ? "256 kbps · mp3 · live" : "on demand");
+  renderNpMeta(t); renderNpArt(t);
+}
 async function pollRip() {
   let r; try { r = await (await fetch("/api/rip")).json(); } catch { return; }
-  const bar = $("ripBar");
-  if (!r || r.state === "idle") {
+  const bar = $("ripBar"), ripping = r && r.state !== "idle" && r.state !== "done";
+  if (!ripping) {
     bar.classList.remove("ripping");
-    $("ripText").textContent = "Not ripping — pop a CD in the mini to add it";
-    $("ripPct").textContent = ""; $("ripFill").style.width = "0";
-    ripLast = "idle";
+    if (r && r.state === "done") {
+      $("ripText").textContent = "Added " + (r.album || "new album");
+      $("ripPct").textContent = ""; $("ripFill").style.width = "100%";
+      if (ripLast !== "done" && S.user) loadCatalog();     // the new record just landed
+    } else {
+      $("ripText").textContent = "Not ripping — pop a CD in the mini to add it";
+      $("ripPct").textContent = ""; $("ripFill").style.width = "0";
+    }
+    if (ripView) { ripView = false; paintNow(); }          // rip over → restore now-playing
+    ripLast = (r && r.state) || "idle";
     return;
   }
   bar.classList.add("ripping");
-  if (r.state === "done") {
-    $("ripText").textContent = "Added " + (r.album || "new album");
-    $("ripPct").textContent = ""; $("ripFill").style.width = "100%";
-    if (ripLast !== "done" && S.user) loadCatalog();     // the new record just landed
-    ripLast = "done";
-  } else {
-    $("ripText").textContent = "Ripping " + (r.album || "") + (r.title ? " · " + r.title : "");
-    $("ripPct").textContent = (r.track && r.total) ? `${r.track}/${r.total}` : "";
-    $("ripFill").style.width = (r.total ? Math.round(r.track / r.total * 100) : 0) + "%";
-    ripLast = "ripping";
-  }
+  $("ripText").textContent = "Ripping " + (r.album || "") + (r.title && r.title !== "Audio Track" ? " · " + r.title : "");
+  $("ripPct").textContent = (r.track && r.total) ? `${r.track}/${r.total}` : "";
+  $("ripFill").style.width = (r.total ? Math.round(r.track / r.total * 100) : 0) + "%";
+  // take over the panel only when nothing's actively playing — don't interrupt a listener
+  if (S.status !== "playing") { ripView = true; paintRip(r); }
+  else if (ripView) { ripView = false; paintNow(); }
+  ripLast = "ripping";
 }
 setInterval(pollRip, 4000); pollRip();
   // should land in seconds, not up to 10s later. the brain now reports what icecast

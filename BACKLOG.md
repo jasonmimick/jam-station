@@ -4,6 +4,11 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Next up
 
+- [ ] **"LISTEN AND RIP"** — the product concept for the CD flow: the station is something you
+      listen to AND grow by feeding it discs. As a disc rips, the now-playing panel becomes
+      "NOW RIPPING" (done 2026-07-16 — panel takeover when idle). Expand: surface it as a mode /
+      tagline, and make the rip a first-class moment (cover, progress, "added to your shelf").
+
 - [ ] **RENAME. "jam-station" is wrong and we know it.** The product outgrew the name: it
       plays ragtime, klezmer, gamelan, newgrass, funk. "Jam" boxes it into one genre it left
       behind. Deferred 2026-07-13 (needs more thought), but **it gets more expensive every
