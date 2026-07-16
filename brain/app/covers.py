@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 import urllib.parse
 import urllib.request
 
 from . import config
+
+_GENERIC = re.compile(r"^(\d{1,2})[ .\-_]+audio track$", re.I)   # "01 Audio Track" — an un-named rip
+_NUMPREFIX = re.compile(r"^(\d{1,2})[ .\-_]+")
 
 UA = "jam-station/1.0 (https://jam-station.runslab.run)"
 _lock = threading.Lock()
@@ -61,6 +65,53 @@ def _fetch_cover(mbid: str, dest: str) -> bool:
     return False
 
 
+def _has_generic(folder: str) -> bool:
+    try:
+        return any(_GENERIC.match(os.path.splitext(f)[0])
+                   for f in os.listdir(folder) if f.lower().endswith(".mp3"))
+    except Exception:
+        return False
+
+
+def _tracklist(mbid: str) -> dict:
+    """{position: title} from the release's recordings — the real song names MusicBrainz has
+    even when macOS labelled every track 'Audio Track'."""
+    try:
+        data = json.load(_get(f"https://musicbrainz.org/ws/2/release/{mbid}?inc=recordings&fmt=json"))
+    except Exception:
+        return {}
+    titles = {}
+    for medium in data.get("media", []):
+        for t in medium.get("tracks", []):
+            try:
+                pos = int(t.get("position") or t.get("number"))
+            except (TypeError, ValueError):
+                continue
+            title = t.get("title") or (t.get("recording") or {}).get("title")
+            if pos and title and pos not in titles:
+                titles[pos] = title
+    return titles
+
+
+def _retitle(folder: str, titles: dict) -> None:
+    for f in os.listdir(folder):
+        if not f.lower().endswith(".mp3"):
+            continue
+        m = _GENERIC.match(os.path.splitext(f)[0])         # only rename generic "NN Audio Track"
+        if not m:
+            continue
+        title = titles.get(int(m.group(1)))
+        if not title:
+            continue
+        safe = re.sub(r'[/\\:*?"<>|]', "-", title).strip()
+        newname = f"{m.group(1)} {safe}.mp3"
+        if newname != f:
+            try:
+                os.rename(os.path.join(folder, f), os.path.join(folder, newname))
+            except Exception:
+                pass
+
+
 def _enrich_one(folder: str, name: str) -> None:
     meta_p = os.path.join(folder, "_album.json")
     cover_p = os.path.join(folder, "_cover.jpg")
@@ -68,8 +119,10 @@ def _enrich_one(folder: str, name: str) -> None:
         meta = json.load(open(meta_p)) if os.path.exists(meta_p) else {}
     except Exception:
         meta = {}
-    if meta.get("tried") and (os.path.exists(cover_p) or not meta.get("mbid")):
-        return                                        # already enriched (or tried and gave up)
+    # skip only when nothing's left to do: cover in hand (or unmatchable) AND no generic titles
+    cover_done = os.path.exists(cover_p) or (meta.get("tried") and not meta.get("mbid"))
+    if meta.get("tried") and cover_done and not _has_generic(folder):
+        return
 
     artist, album = meta.get("artist"), meta.get("album")
     if not album:                                     # derive from "Artist - Album" folder name
@@ -85,6 +138,11 @@ def _enrich_one(folder: str, name: str) -> None:
     if meta.get("mbid") and not os.path.exists(cover_p):
         _fetch_cover(meta["mbid"], cover_p)
         time.sleep(0.4)
+    if meta.get("mbid") and _has_generic(folder):     # give the tracks their real names
+        titles = _tracklist(meta["mbid"])
+        time.sleep(1.1)
+        if titles:
+            _retitle(folder, titles)
 
     meta.update({"artist": artist or meta.get("artist", ""), "album": album, "tried": True})
     try:
