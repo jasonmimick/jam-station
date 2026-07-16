@@ -46,6 +46,13 @@ else
 fi
 [ -n "${disc:-}" ] || { echo "no audio CD mounted. insert one and wait for the Finder to see it."; exit 1; }
 
+# Clear the drive of everything else that reads it — the CD has ONE head, and a rival reader
+# turns lame's read into a stall. Spotlight indexes an inserted disc (mds reading the same
+# tracks we do); Music grabs it to import. Tell Spotlight to skip this volume and kill Music
+# before we start. Best-effort (mdutil may want root; harmless if it can't).
+mdutil -i off "$disc" >/dev/null 2>&1 || true
+pkill -x Music 2>/dev/null || true
+
 # ONE RIPPER PER DRIVE, not per host. The constraint is physical: a drive has one head, so two
 # rippers on the SAME drive fight it and both crawl — but two DIFFERENT drives are independent
 # and should rip in parallel. So the lock is keyed on the drive device (via df), not global.
