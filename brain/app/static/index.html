@@ -100,11 +100,14 @@
   #ripBar.ripping #ripFill::after { content:""; position:absolute; right:-6px; bottom:0;
     border-style:solid; border-width:0 6px 9px 6px; border-color:transparent transparent var(--red) transparent; }
 
-  /* the collection — a full-screen grid of album covers */
-  #collection { display:none; position:fixed; inset:0; z-index:80; background:var(--board);
-    flex-direction:column; }
+  /* the collection — a centered modal of album covers (dimmed app behind, not a takeover) */
+  #collection { display:none; position:fixed; inset:0; z-index:80; background:#000a;
+    align-items:center; justify-content:center; padding:28px; }
   #collection.open { display:flex; }
-  .collhead { display:flex; align-items:center; gap:14px; padding:16px 24px; border-bottom:1px solid var(--line); }
+  .collinner { background:var(--board); border:1px solid var(--line); border-radius:8px;
+    width:100%; max-width:940px; max-height:84vh; display:flex; flex-direction:column;
+    overflow:hidden; box-shadow:0 30px 80px -20px #000c; }
+  .collhead { display:flex; align-items:center; gap:14px; padding:16px 22px; border-bottom:1px solid var(--line); }
   .collhead .lbl { font-size:11px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
   .collhead input { flex:1; max-width:300px; padding:9px 12px; border:1px solid var(--line);
     border-radius:2px; background:var(--board); color:var(--ink); font:inherit; outline:none; }
@@ -407,12 +410,14 @@
 
   <!-- your collection: a full cover grid, opened from the sidebar -->
   <div id="collection">
-    <div class="collhead">
-      <span class="lbl">Your collection</span>
-      <input id="collFind" type="text" placeholder="Filter albums" autocomplete="off" aria-label="filter albums">
-      <button class="icon" id="collClose" title="close" aria-label="close collection">✕</button>
+    <div class="collinner">
+      <div class="collhead">
+        <span class="lbl">Your collection</span>
+        <input id="collFind" type="text" placeholder="Filter albums" autocomplete="off" aria-label="filter albums">
+        <button class="icon" id="collClose" title="close" aria-label="close collection">✕</button>
+      </div>
+      <div class="collgrid" id="collGrid"></div>
     </div>
-    <div class="collgrid" id="collGrid"></div>
   </div>
 
   <div class="app">
@@ -1464,7 +1469,9 @@ buildFlaps(); buildEq();
 
 /* ── the collection: a full grid of album covers ─────────────────────────── */
 function albBg(al) {   // {bg, mono} for a cover — real art if we have it, else a tonal tile
-  if (al.cover_url) return { bg: `url("${al.cover_url}")`, mono: "" };
+  // SINGLE quotes inside url(): this goes into a double-quoted style="" attribute, so double
+  // quotes here would close the attribute early and the image never loads.
+  if (al.cover_url) return { bg: `url('${al.cover_url}')`, mono: "" };
   let h = 0; for (const c of (al.album || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const hue = h % 360, m = (al.album || "").match(/[A-Za-z0-9]/);
   return { bg: `linear-gradient(150deg, hsl(${hue},30%,33%), hsl(${(hue + 34) % 360},34%,13%))`,
@@ -1491,6 +1498,7 @@ async function openCollection() {
 }
 function closeCollection() { $("collection").classList.remove("open"); }
 $("collClose").onclick = closeCollection;
+$("collection").onclick = (e) => { if (e.target === $("collection")) closeCollection(); };  // click backdrop
 $("collFind").oninput = renderCollection;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCollection(); });
 
