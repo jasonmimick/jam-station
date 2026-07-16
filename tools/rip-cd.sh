@@ -136,6 +136,16 @@ report() {   # state track total title
 }
 
 DIR="$(safe "$ARTIST") - $(safe "$ALBUM")"
+# Multi-disc set: two discs of one release (a 2-CD live set) identify as the SAME album, so
+# disc 2 would land in disc 1's folder and its "01..07" would overwrite disc 1's "01..07". If
+# the folder already exists in the library, this is a different disc — give it its own folder.
+# (The ledger already blocks re-ripping the SAME disc, so an existing folder means disc N+1.)
+if docker exec "$BRAIN" test -d "/music/cds/$DIR" 2>/dev/null; then
+  d=2
+  while docker exec "$BRAIN" test -d "/music/cds/$DIR (disc $d)" 2>/dev/null; do d=$((d + 1)); done
+  DIR="$DIR (disc $d)"
+  echo "  (that album's already here — this disc goes to '$DIR')"
+fi
 n=$(ls "$disc"*.aiff | wc -l | tr -d ' ')
 
 echo "  disc    $disc"
