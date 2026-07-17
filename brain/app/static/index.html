@@ -142,7 +142,9 @@
   .collgrid { flex:1; overflow-y:auto; padding:18px 16px; display:grid; align-content:start;
     grid-template-columns:repeat(auto-fill, minmax(116px, 1fr)); gap:16px 14px; }
   /* gallery view toggle (grid ▦ / list ☰), Finder-style */
-  .vtog { display:inline-flex; margin-left:auto; }
+  .galsort { margin-left:auto; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--panel);
+    color:var(--ink); font:inherit; font-size:12px; cursor:pointer; }
+  .vtog { display:inline-flex; }
   .vtog button { width:32px; height:28px; border:1px solid var(--line); background:var(--panel); color:var(--muted); cursor:pointer; font-size:13px; }
   .vtog button:first-child { border-radius:6px 0 0 6px; }
   .vtog button:last-child { border-radius:0 6px 6px 0; border-left:0; }
@@ -560,6 +562,12 @@
       <div id="galleryView" style="display:none">
         <div class="ph"><span class="lbl" id="galLbl">Gallery</span>
           <input id="galFind" type="text" placeholder="Filter" autocomplete="off" aria-label="filter gallery">
+          <select class="galsort" id="galSort" aria-label="Sort by">
+            <option value="added">Recently added</option>
+            <option value="artist">Artist</option>
+            <option value="album">Album</option>
+            <option value="tracks">Tracks</option>
+          </select>
           <span class="vtog" id="vtog">
             <button data-v="grid" title="Grid view" aria-label="Grid view">▦</button>
             <button data-v="list" title="List view" aria-label="List view">☰</button>
@@ -904,6 +912,7 @@ function tune(slug) {
   // the phone locks. Play the raw element (survives lock + lock-screen controls); the EQ graph
   // is built lazily only if the listener actually opens the EQ.
   S.audio.play().catch(() => setStatus("paused"));
+  eagerAudio();
   loadChannels(); refresh();
 }
 
@@ -969,6 +978,7 @@ function playIdx(i) {
   setStatus("buffering");
   S.audio.src = t.url;                  // archive.org: ACAO:* + accept-ranges → seekable
   S.audio.play().catch(() => setStatus("paused"));   // raw element — background-safe on mobile
+  eagerAudio();
   flapTo(t.title);
   $("byline").innerHTML = `${esc(t.artist)} <span class="sm">· ${esc(t.album)}</span>`;
   $("prev").disabled = i === 0;
@@ -989,6 +999,7 @@ $("play").onclick = () => {
   if (!S.audio.paused) { S.userPaused = true; S.audio.pause(); return; }
   S.userPaused = false;
   setStatus("buffering");
+  eagerAudio();
   if (S.mode === "radio") { S.audio.src = `/stream/${S.channel}`; S.audio.play().catch(() => setStatus("error")); }
   else if (S.audio.src) { S.audio.play().catch(() => setStatus("error")); }   // resume where paused
   else { playIdx(S.idx < 0 ? 0 : S.idx); }                                    // start the selected track
@@ -1019,6 +1030,11 @@ $("share").onclick = async () => {
 const BANDS = [[60,"60"],[250,"250"],[1000,"1k"],[4000,"4k"],[12000,"12k"]];
 const PRESETS = { Flat:[0,0,0,0,0], Warm:[4,2,0,-1,-2], Bright:[-1,0,1,3,4],
                   Bass:[6,3,0,0,1], Vocal:[-2,0,3,2,0] };
+// iOS suspends Web-Audio-routed playback on lock, so there we stay lazy (EQ opens it). Desktop has
+// no such penalty — light up the EQ + visualizer automatically on first play.
+const CAN_EAGER_AUDIO = !/Mobi|Android|iP(hone|ad|od)/i.test(navigator.userAgent)
+  && !(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function eagerAudio() { if (CAN_EAGER_AUDIO) initAudio(); }
 let actx=null, filters=[], analyser=null;
 function initAudio() {
   if (actx) { if (actx.state === "suspended") actx.resume(); return; }
@@ -1615,15 +1631,30 @@ function setDtab(t, flashSpot) {
 }
 function deskItems() {
   if (dtab === "stations") return (S.channels || []).filter(c => c.playable !== false)
-    .map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio", cover: "" }));
+    .map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio", cover: "",
+                 sortArtist: (c.name || "").toLowerCase(), sortAlbum: (c.name || "").toLowerCase(), mtime: 0, tracks: 0 }));
   return (S.albums || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
-    sub: (al.artist || "—") + (al.year ? " · " + al.year : ""), cover: al.cover_url || "" }));
+    sub: (al.artist || "—") + (al.year ? " · " + al.year : ""), cover: al.cover_url || "",
+    sortArtist: (al.artist || "").toLowerCase(), sortAlbum: (al.album || "").toLowerCase(),
+    mtime: al.mtime || 0, tracks: al.tracks || 0 }));
 }
 let galView = localStorage.getItem("jam-galview") || "grid";
 function setGalView(v) { galView = v; localStorage.setItem("jam-galview", v);
   document.querySelectorAll("#vtog button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
   renderDeskGallery(); }
 document.querySelectorAll("#vtog button").forEach(b => { b.classList.toggle("on", b.dataset.v === galView); b.onclick = () => setGalView(b.dataset.v); });
+let galSort = localStorage.getItem("jam-galsort") || "added";
+(function () { const s = document.getElementById("galSort"); if (!s) return;
+  s.value = galSort; s.onchange = () => { galSort = s.value; localStorage.setItem("jam-galsort", galSort); renderDeskGallery(); }; })();
+function sortItems(list) {
+  const by = {
+    added:  (a, b) => (b.mtime || 0) - (a.mtime || 0),
+    artist: (a, b) => (a.sortArtist || "").localeCompare(b.sortArtist || "") || (a.sortAlbum || "").localeCompare(b.sortAlbum || ""),
+    album:  (a, b) => (a.sortAlbum || "").localeCompare(b.sortAlbum || ""),
+    tracks: (a, b) => (b.tracks || 0) - (a.tracks || 0),
+  };
+  return [...list].sort(by[galSort] || by.added);
+}
 function renderDeskGallery(flashSpot) {
   const g = $("dgallery"); if (!g) return;
   g.className = "collgrid";
@@ -1640,6 +1671,7 @@ function renderDeskGallery(flashSpot) {
   if (dtab === "cds" && !S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to see your CDs.</p>`; return; }
   let list = deskItems();
   if (q) list = list.filter(it => (it.name + " " + it.sub).toLowerCase().includes(q));
+  list = sortItems(list);
   if (galView === "list") g.className = "collgrid aslist";
   g.innerHTML = list.map(it => {
     const a = albBg({ album: it.name, cover_url: it.cover });
