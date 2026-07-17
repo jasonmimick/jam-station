@@ -141,6 +141,22 @@
   .collhead .icon { margin-left:auto; }
   .collgrid { flex:1; overflow-y:auto; padding:18px 16px; display:grid; align-content:start;
     grid-template-columns:repeat(auto-fill, minmax(116px, 1fr)); gap:16px 14px; }
+  /* gallery view toggle (grid ▦ / list ☰), Finder-style */
+  .vtog { display:inline-flex; margin-left:auto; }
+  .vtog button { width:32px; height:28px; border:1px solid var(--line); background:var(--panel); color:var(--muted); cursor:pointer; font-size:13px; }
+  .vtog button:first-child { border-radius:6px 0 0 6px; }
+  .vtog button:last-child { border-radius:0 6px 6px 0; border-left:0; }
+  .vtog button.on { background:var(--yellow); color:var(--on-yellow); border-color:var(--yellow); }
+  /* list view — compact rows that scale to a big collection */
+  .collgrid.aslist { display:block; padding:4px 12px 40px; }
+  .alrow { display:flex; align-items:center; gap:12px; width:100%; padding:9px 8px; border:0; border-bottom:1px solid var(--line);
+    background:transparent; color:var(--ink); cursor:pointer; text-align:left; }
+  .alrow:hover { background:var(--panel); }
+  .althumb { width:44px; height:44px; border-radius:5px; flex:0 0 auto; background-size:cover; background-position:center;
+    display:grid; place-items:center; color:#fff; font-size:17px; box-shadow:inset 0 0 0 1px rgba(128,128,128,.14); }
+  .alrowmeta { min-width:0; display:flex; flex-direction:column; }
+  .alrowname { font-size:14px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .alrowsub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .albcard { border:0; background:transparent; padding:0; cursor:pointer; text-align:left; min-width:0; }
   .albcover { aspect-ratio:1; border-radius:6px; overflow:hidden; display:grid; place-items:center;
     background-size:cover; background-position:center; font-size:46px; font-weight:200; color:#fff;
@@ -544,6 +560,10 @@
       <div id="galleryView" style="display:none">
         <div class="ph"><span class="lbl" id="galLbl">Gallery</span>
           <input id="galFind" type="text" placeholder="Filter" autocomplete="off" aria-label="filter gallery">
+          <span class="vtog" id="vtog">
+            <button data-v="grid" title="Grid view" aria-label="Grid view">▦</button>
+            <button data-v="list" title="List view" aria-label="List view">☰</button>
+          </span>
         </div>
         <div class="collgrid" id="dgallery"></div>
       </div>
@@ -1599,8 +1619,14 @@ function deskItems() {
   return (S.albums || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
     sub: (al.artist || "—") + (al.year ? " · " + al.year : ""), cover: al.cover_url || "" }));
 }
+let galView = localStorage.getItem("jam-galview") || "grid";
+function setGalView(v) { galView = v; localStorage.setItem("jam-galview", v);
+  document.querySelectorAll("#vtog button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  renderDeskGallery(); }
+document.querySelectorAll("#vtog button").forEach(b => { b.classList.toggle("on", b.dataset.v === galView); b.onclick = () => setGalView(b.dataset.v); });
 function renderDeskGallery(flashSpot) {
   const g = $("dgallery"); if (!g) return;
+  g.className = "collgrid";
   const q = ($("galFind").value || "").toLowerCase().trim();
   $("galLbl").textContent = dtab === "stations" ? "Stations" : dtab === "cds" ? `Your collection · ${S.albums.length}` : "Spotted";
   if (dtab === "spots") {
@@ -1614,13 +1640,18 @@ function renderDeskGallery(flashSpot) {
   if (dtab === "cds" && !S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to see your CDs.</p>`; return; }
   let list = deskItems();
   if (q) list = list.filter(it => (it.name + " " + it.sub).toLowerCase().includes(q));
+  if (galView === "list") g.className = "collgrid aslist";
   g.innerHTML = list.map(it => {
     const a = albBg({ album: it.name, cover_url: it.cover });
+    if (galView === "list")
+      return `<button class="alrow" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
+        `<div class="althumb" style="background-image:${a.bg}">${a.mono}</div>` +
+        `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}</span><span class="alrowsub">${esc(it.sub)}</span></div></button>`;
     return `<button class="albcard" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
       `<div class="albcover" style="background-image:${a.bg}">${a.mono}</div>` +
       `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span></div></button>`;
   }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match." : "No albums yet — rip a CD."}</p>`;
-  g.querySelectorAll(".albcard").forEach(b => b.onclick = () => {
+  g.querySelectorAll(".albcard, .alrow").forEach(b => b.onclick = () => {
     if (b.dataset.kind === "station") tune(b.dataset.id); else tuneAlbum(b.dataset.id);
     setDtab("playing");
   });
