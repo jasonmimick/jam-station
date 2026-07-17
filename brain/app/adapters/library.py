@@ -109,9 +109,10 @@ def list_albums(root: str = "cds") -> list[dict]:
             "artist": first["artist"],
             "album": first["album"],
             "tracks": len(audio),
+            "mtime": os.path.getmtime(dirpath),                  # for newest-first ordering
             **_folder_extra(dirpath, rel),                       # year / cover_url / learn_url
         })
-    out.sort(key=lambda a: (a["artist"].lower(), a["album"].lower()))
+    out.sort(key=lambda a: a["mtime"], reverse=True)             # newest-ripped disc first
     return out
 
 

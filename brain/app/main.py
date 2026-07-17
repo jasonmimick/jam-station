@@ -217,11 +217,12 @@ def api_rip():
 # ---------------------------------------------------------------- catalog (your records)
 
 @app.get("/api/library/albums")
-def api_library_albums(request: Request):
+def api_library_albums(request: Request, response: Response):
     """Browse the record crate: one entry per ripped album. Members only — these are Jason's
     actual CDs. Returns [] (not 403) for anonymous, so the UI just shows no catalog rather
     than erroring; the audio itself is still gated at /music and /stream."""
     from .adapters import library
+    response.headers["Cache-Control"] = "no-store"   # Safari was caching this and hiding new rips
     if not _is_member(request):
         return []
     covers.kick()            # a new album may have landed; enrich art/year in the background
