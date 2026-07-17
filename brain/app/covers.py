@@ -73,6 +73,36 @@ def _fetch_cover(mbid: str, dest: str) -> bool:
     return False
 
 
+def _itunes_cover(artist: str, album: str, dest: str) -> bool:
+    """Fallback when the Cover Art Archive has nothing. The iTunes Search API is free, keyless, and
+    has artwork for nearly every commercial album — you just ask for a bigger size than it returns."""
+    term = f"{artist} {album}".strip()
+    if not term:
+        return False
+    url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
+        {"term": term, "entity": "album", "limit": "3"})
+    try:
+        results = json.load(_get(url)).get("results") or []
+    except Exception:
+        return False
+    for r in results:
+        art = r.get("artworkUrl100") or r.get("artworkUrl60") or ""
+        if not art:
+            continue
+        big = art.replace("100x100bb", "600x600bb").replace("60x60bb", "600x600bb")
+        try:
+            data = _get(big, timeout=30).read()
+        except Exception:
+            continue
+        if data and len(data) > 1500:
+            tmp = dest + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, dest)
+            return True
+    return False
+
+
 def _has_generic(folder: str) -> bool:
     try:
         return any(_GENERIC.match(os.path.splitext(f)[0])
@@ -128,7 +158,7 @@ def _enrich_one(folder: str, name: str) -> None:
     except Exception:
         meta = {}
     # skip only when nothing's left to do: cover in hand (or unmatchable) AND no generic titles
-    cover_done = os.path.exists(cover_p) or (meta.get("tried") and not meta.get("mbid"))
+    cover_done = os.path.exists(cover_p) or meta.get("itunes")   # a cover in hand, or both sources tried
     if meta.get("tried") and cover_done and not _has_generic(folder):
         return
 
@@ -146,6 +176,10 @@ def _enrich_one(folder: str, name: str) -> None:
     if meta.get("mbid") and not os.path.exists(cover_p):
         _fetch_cover(meta["mbid"], cover_p)
         time.sleep(0.4)
+    if not os.path.exists(cover_p) and not meta.get("itunes"):   # Cover Art Archive missed — try iTunes
+        _itunes_cover(artist, album, cover_p)
+        meta["itunes"] = True
+        time.sleep(0.3)
     if meta.get("mbid") and _has_generic(folder):     # give the tracks their real names
         titles = _tracklist(meta["mbid"])
         time.sleep(1.1)
