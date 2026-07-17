@@ -136,15 +136,17 @@ report() {   # state track total title
 }
 
 DIR="$(safe "$ARTIST") - $(safe "$ALBUM")"
-# Multi-disc set: two discs of one release (a 2-CD live set) identify as the SAME album, so
-# disc 2 would land in disc 1's folder and its "01..07" would overwrite disc 1's "01..07". If
-# the folder already exists in the library, this is a different disc — give it its own folder.
-# (The ledger already blocks re-ripping the SAME disc, so an existing folder means disc N+1.)
+# The folder name is NOT unique — a name legitimately collides (a self-titled album, disc 2 of a
+# set that IDs the same as disc 1, two different bands both called "John Smith", or the dated
+# "Unknown Album" fallback). NEVER overwrite: if this name is already in the library, append the
+# next free " (2)", " (3)"… so every disc lands in its own folder. (Re-inserting the SAME physical
+# disc is already skipped upstream by the TOC-signature ledger, so an existing folder here always
+# means a genuinely different disc — safe to give it a new numbered folder.)
 if docker exec "$BRAIN" test -d "/music/cds/$DIR" 2>/dev/null; then
   d=2
-  while docker exec "$BRAIN" test -d "/music/cds/$DIR (disc $d)" 2>/dev/null; do d=$((d + 1)); done
-  DIR="$DIR (disc $d)"
-  echo "  (that album's already here — this disc goes to '$DIR')"
+  while docker exec "$BRAIN" test -d "/music/cds/$DIR ($d)" 2>/dev/null; do d=$((d + 1)); done
+  DIR="$DIR ($d)"
+  echo "  (a '$(safe "$ARTIST") - $(safe "$ALBUM")' is already here — this disc goes to '$DIR')"
 fi
 n=$(ls "$disc"*.aiff | wc -l | tr -d ' ')
 
