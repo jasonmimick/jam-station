@@ -159,6 +159,12 @@
   .alrowmeta { min-width:0; display:flex; flex-direction:column; }
   .alrowname { font-size:14px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .alrowsub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* owner: drop a cover on an album (for discs nothing online has) */
+  .albcover { position:relative; }
+  .setcov { position:absolute; top:6px; right:6px; width:24px; height:24px; border:0; border-radius:50%;
+    background:#000a; color:#fff; font-size:13px; line-height:1; cursor:pointer; opacity:0; display:grid; place-items:center; z-index:2; }
+  .albcard:hover .setcov, .alrow:hover .setcov { opacity:1; }
+  .alrow .setcov { position:static; margin-left:auto; opacity:.5; flex:0 0 auto; }
   .albcard { border:0; background:transparent; padding:0; cursor:pointer; text-align:left; min-width:0; }
   .albcover { aspect-ratio:1; border-radius:6px; overflow:hidden; display:grid; place-items:center;
     background-size:cover; background-position:center; font-size:46px; font-weight:200; color:#fff;
@@ -574,6 +580,7 @@
           </span>
         </div>
         <div class="collgrid" id="dgallery"></div>
+        <input id="coverFile" type="file" accept="image/*" style="display:none">
       </div>
     </div>
     <div class="rez" id="rez1" title="drag to resize"></div>
@@ -1655,6 +1662,15 @@ function sortItems(list) {
   };
   return [...list].sort(by[galSort] || by.added);
 }
+let coverDir = null;
+function setCoverFor(dir) { coverDir = dir; const inp = $("coverFile"); if (inp) inp.click(); }
+(function () { const inp = $("coverFile"); if (!inp) return;
+  inp.onchange = async (e) => { const file = e.target.files && e.target.files[0]; e.target.value = ""; if (!file || !coverDir) return;
+    const fd = new FormData(); fd.append("dir", coverDir); fd.append("photo", file);
+    try { const r = await fetch("/api/library/cover", { method: "POST", body: fd });
+      if (r.ok) { await loadCatalog(); renderDeskGallery(); } else alert("Couldn't set the cover."); }
+    catch { alert("Couldn't set the cover."); } };
+})();
 function renderDeskGallery(flashSpot) {
   const g = $("dgallery"); if (!g) return;
   g.className = "collgrid";
@@ -1673,16 +1689,19 @@ function renderDeskGallery(flashSpot) {
   if (q) list = list.filter(it => (it.name + " " + it.sub).toLowerCase().includes(q));
   list = sortItems(list);
   if (galView === "list") g.className = "collgrid aslist";
+  const canCover = dtab === "cds" && S.user;
   g.innerHTML = list.map(it => {
     const a = albBg({ album: it.name, cover_url: it.cover });
+    const cov = canCover ? `<span class="setcov" data-cover-dir="${esc(it.id)}" title="Set cover">⤓</span>` : "";
     if (galView === "list")
       return `<button class="alrow" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
         `<div class="althumb" style="background-image:${a.bg}">${a.mono}</div>` +
-        `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}</span><span class="alrowsub">${esc(it.sub)}</span></div></button>`;
+        `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}</span><span class="alrowsub">${esc(it.sub)}</span></div>${cov}</button>`;
     return `<button class="albcard" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
-      `<div class="albcover" style="background-image:${a.bg}">${a.mono}</div>` +
+      `<div class="albcover" style="background-image:${a.bg}">${a.mono}${cov}</div>` +
       `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span></div></button>`;
   }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match." : "No albums yet — rip a CD."}</p>`;
+  g.querySelectorAll(".setcov").forEach(b => b.onclick = (e) => { e.stopPropagation(); setCoverFor(b.dataset.coverDir); });
   g.querySelectorAll(".albcard, .alrow").forEach(b => b.onclick = () => {
     if (b.dataset.kind === "station") tune(b.dataset.id); else tuneAlbum(b.dataset.id);
     setDtab("playing");

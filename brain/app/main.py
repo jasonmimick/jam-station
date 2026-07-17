@@ -5,7 +5,7 @@ import time
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, StreamingResponse)
 from pydantic import BaseModel
@@ -227,6 +227,28 @@ def api_library_albums(request: Request, response: Response):
         return []
     covers.kick()            # a new album may have landed; enrich art/year in the background
     return library.list_albums()
+
+
+@app.post("/api/library/cover")
+def set_cover(request: Request, dir: str = Form(...), photo: UploadFile = File(...)):
+    """Owner drops a cover on an album — for the handful of discs nothing online has. Saves the
+    upload as _cover.jpg in the album folder; the enricher then leaves it alone (a cover exists)."""
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    base = os.path.realpath(config.MUSIC_DIR)
+    full = os.path.realpath(os.path.join(config.MUSIC_DIR, dir))
+    if full != base and not full.startswith(base + os.sep):
+        raise HTTPException(403, "no")                    # ../../ escape
+    if not os.path.isdir(full):
+        raise HTTPException(404, "no such album")
+    data = photo.file.read()
+    if not data:
+        raise HTTPException(400, "empty image")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(413, "image too large")
+    with open(os.path.join(full, "_cover.jpg"), "wb") as f:
+        f.write(data)
+    return {"ok": True}
 
 
 @app.get("/api/library/album")
