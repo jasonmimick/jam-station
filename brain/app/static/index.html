@@ -79,6 +79,21 @@
   .palpop .custom input[type=color] { width:28px; height:28px; padding:0; border:1px solid var(--line);
     border-radius:4px; background:none; cursor:pointer; }
   .palpop .custom label { font-size:11px; color:var(--muted); }
+  .dtog { width:100%; padding:7px 0; border:1px solid var(--line); border-radius:4px; cursor:pointer;
+    background:var(--sunk); color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.04em; }
+  .dtog.on { background:var(--yellow); color:var(--on-yellow); border-color:transparent; }
+
+  /* screensaver — the board steps aside, the music owns the screen */
+  #saver { position:fixed; inset:0; z-index:200; background:#060607; cursor:none;
+    display:flex; flex-direction:column; justify-content:flex-end; }
+  #saver[hidden] { display:none; }
+  #saverViz { position:absolute; inset:0; width:100%; height:100%; }
+  .saverMeta { position:relative; z-index:1; padding:0 6vw 7vh; pointer-events:none; }
+  #saverTitle { font-size:clamp(28px, 5vw, 64px); font-weight:800; letter-spacing:.01em;
+    color:var(--yellow); text-shadow:0 0 26px color-mix(in srgb, var(--yellow) 45%, transparent);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #saverSub { font-size:clamp(13px, 1.6vw, 20px); font-weight:600; color:#8b8b93; margin-top:8px;
+    letter-spacing:.14em; text-transform:uppercase; }
 
   /* rip status — a persistent strip under the header; subdued when idle, loud while ripping */
   #ripBar { display:flex; position:relative; align-items:center; gap:11px; padding:9px 18px;
@@ -173,6 +188,8 @@
   .albcap { margin-top:11px; min-width:0; }
   .albname { display:block; font-size:13.5px; font-weight:600; color:var(--ink);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .albdate { display:block; font-size:10.5px; font-style:italic; color:var(--muted); opacity:.75; margin-top:2px; }
+  .alrowdate { font-size:11px; font-style:italic; color:var(--muted); opacity:.75; white-space:nowrap; margin-left:auto; padding-left:10px; }
   .albsub { display:block; font-size:11.5px; color:var(--muted); margin-top:2px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* ── desktop center-pane tabs: Playing / Stations / CDs / Spots ── */
@@ -459,6 +476,7 @@
       <div class="status" id="status"><span class="dot"></span><span id="statusTxt">TUNED OUT</span></div>
       <button class="icon" id="who" title="sign in" aria-label="sign in">☺</button>
       <button class="icon" id="palette" title="accent colour" aria-label="choose accent colour">◗</button>
+      <button class="icon" id="saverBtn" title="screensaver" aria-label="start the screensaver">▓</button>
       <button class="icon" id="theme" title="light / dark" aria-label="switch light or dark theme">☾</button>
       <div class="palpop" id="palPop">
         <p class="lbl">Accent</p>
@@ -467,11 +485,19 @@
           <input type="color" id="palCustom" value="#FFD200" aria-label="custom accent colour">
           <label for="palCustom">Custom</label>
         </div>
+        <div class="custom">
+          <button id="danceTog" class="dtog" aria-pressed="false">♪ Let it dance</button>
+        </div>
       </div>
     </div>
   </header>
 
   <div id="ripBar"><span class="ripdot"></span><span id="ripText"></span><span id="ripPct"></span><i id="ripFill"></i></div>
+
+  <div id="saver" hidden>
+    <canvas id="saverViz"></canvas>
+    <div class="saverMeta"><div id="saverTitle"></div><div id="saverSub"></div></div>
+  </div>
 
   <!-- The CD + Spot galleries now live INLINE in the center pane (see #galleryView), reached by
        the Stations/CDs/Spots tabs — no more overlay modals. -->
@@ -1108,6 +1134,125 @@ function drawViz() {
 }
 
 
+/* ── let it dance — the accent colour rides the music ────────────────────────
+   The analyser the EQ already owns tells us bass and brightness ~30×/sec; instead of a
+   fixed hex, the accent variable becomes a moving colour: sustained treble slowly walks
+   the hue around the wheel, a bass kick shoves it and snaps saturation, the level
+   breathes the lightness. Turn it off and your picked accent comes straight back.
+   Painting bypasses setAccent on purpose — no localStorage writes, no swatch churn,
+   just the three CSS variables, at half frame rate. */
+function hexToHsl(hex) {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2;
+  if (!d) return { h: 0, s: 0, l: l * 100 };
+  const s = d / (l > .5 ? 2 - mx - mn : mx + mn);
+  const h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { h: h * 60, s: s * 100, l: l * 100 };
+}
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360;
+  s = Math.min(100, Math.max(0, s)) / 100; l = Math.min(100, Math.max(0, l)) / 100;
+  const f = n => { const k = (n + h / 30) % 12;
+    const c = l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(c * 255).toString(16).padStart(2, "0"); };
+  return "#" + f(0) + f(8) + f(4);
+}
+let dance = localStorage.getItem("jam-dance") === "1";
+let dRAF = 0, dTick = 0, dEma = 0.06, dKick = 0, dDrift = 0, dLastBeat = 0, dDark = null;
+const dBuf = new Uint8Array(32);
+function paintAccent(hex) {
+  const r = document.documentElement;
+  r.style.setProperty("--yellow", hex); r.style.setProperty("--flap-ink", hex);
+  // hysteresis on the riding-text flip so it can't flicker at the luminance boundary
+  const lum = _lum(hex);
+  if (dDark === null || (dDark && lum < .38) || (!dDark && lum > .52)) dDark = lum > .45;
+  r.style.setProperty("--on-yellow", dDark ? "#12120C" : "#FFFFFF");
+}
+function danceFrame() {
+  dRAF = requestAnimationFrame(danceFrame);
+  if (!analyser || S.status !== "playing" || (dTick++ & 1)) return;   // paint at ~30fps
+  analyser.getByteFrequencyData(dBuf);
+  const bass = (dBuf[0] + dBuf[1]) / 510;
+  const treb = (dBuf[6] + dBuf[9] + dBuf[12]) / 765;
+  const level = (bass + treb) / 2;
+  dEma = dEma * 0.95 + bass * 0.05;
+  const now = performance.now();
+  if (bass > dEma * 1.3 + 0.02 && now - dLastBeat > 260) { dKick = 1; dLastBeat = now; }
+  dKick *= 0.90;
+  dDrift = (dDrift + treb * 0.55) % 360;
+  const base = hexToHsl(localStorage.getItem("jam-accent") || DEFAULT_ACCENT);
+  paintAccent(hslToHex(
+    base.h + dDrift + dKick * 45,
+    Math.min(100, base.s * (0.8 + 0.3 * level) + dKick * 25),
+    Math.max(28, Math.min(62, base.l * (0.94 + 0.09 * level + 0.10 * dKick)))));
+}
+function setDance(on) {
+  dance = on; localStorage.setItem("jam-dance", on ? "1" : "0");
+  const b = $("danceTog");
+  if (b) { b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); }
+  if (on) { initAudio(); if (!dRAF) danceFrame(); }   // on the phone this IS the Web-Audio opt-in
+  else { cancelAnimationFrame(dRAF); dRAF = 0; dDark = null;
+         setAccent(localStorage.getItem("jam-accent") || DEFAULT_ACCENT, false); }
+}
+$("danceTog").onclick = () => setDance(!dance);
+if (dance) {
+  // restore the toggle + loop, but DON'T build the audio graph yet: a context created
+  // with no user gesture starts suspended, and a suspended context mutes the element
+  // it was given. The first real tap/click builds it inside a gesture instead.
+  const b = $("danceTog"); b.classList.add("on"); b.setAttribute("aria-pressed", "true");
+  danceFrame();
+  addEventListener("pointerdown", () => { if (dance) initAudio(); }, { once: true, passive: true });
+}
+
+/* ── screensaver — idle on the desktop, the music owns the screen ───────────
+   The full 32-bin spectrum, wall to wall in the (possibly dancing) accent, with the
+   now-playing in big signage type. Opens by hand from the masthead any time, or by
+   itself after 3 idle minutes while playing (desktop only — on the phone the lock
+   screen already is the screensaver). Any touch of the room brings the board back. */
+const SAVER_IDLE_MS = 3 * 60 * 1000;
+let svOn = false, svRAF = 0, svShownAt = 0, svIdleT = 0, svAccent = "#FFD200", svTick = 0;
+function saverShow() {
+  if (svOn) return;
+  initAudio(); if (!analyser) return;
+  svOn = true; svShownAt = performance.now(); $("saver").hidden = false;
+  svFrame();
+}
+function saverHide() {
+  if (!svOn) return;
+  svOn = false; cancelAnimationFrame(svRAF); svRAF = 0; $("saver").hidden = true;
+}
+function svFrame() {
+  svRAF = requestAnimationFrame(svFrame);
+  const c = $("saverViz"), ctx = c.getContext("2d");
+  if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; }
+  if (!(svTick++ % 10)) {   // the accent may be dancing — re-read it, but not every frame
+    svAccent = getComputedStyle(document.documentElement).getPropertyValue("--yellow").trim() || "#FFD200";
+    const t = currentTrack() || {}, ch = S.channel ? chName(S.channel) : "";
+    $("saverTitle").textContent = t.title || ch || "jam-station";
+    $("saverSub").textContent = [t.artist, ch].filter(Boolean).join("  ·  ");
+  }
+  analyser.getByteFrequencyData(dBuf);
+  ctx.clearRect(0, 0, c.width, c.height);
+  const n = 26, w = c.width / n;
+  ctx.fillStyle = svAccent; ctx.shadowColor = svAccent; ctx.shadowBlur = 22;
+  for (let i = 0; i < n; i++) {
+    const v = dBuf[Math.round(i * 31 / (n - 1))] / 255;
+    const h = Math.max(2, v * c.height * 0.72);
+    ctx.globalAlpha = 0.28 + v * 0.72;
+    ctx.fillRect(i * w + w * 0.18, c.height - h, w * 0.64, h);
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+}
+$("saverBtn").onclick = () => saverShow();
+["pointermove", "pointerdown", "keydown"].forEach(ev =>
+  addEventListener(ev, () => {
+    if (svOn && performance.now() - svShownAt > 400) saverHide();
+    clearTimeout(svIdleT);
+    if (CAN_EAGER_AUDIO) svIdleT = setTimeout(() => {
+      if (S.status === "playing" && !document.hidden) saverShow();
+    }, SAVER_IDLE_MS);
+  }, { passive: true }));
+
 /* ── Favourites ──────────────────────────────────────────────────────────────
    No auth and no sessions yet, so the browser is the account: likes live in
    localStorage. A favourite stores the track's URL, not just its name — a liked
@@ -1653,6 +1798,13 @@ document.querySelectorAll("#vtog button").forEach(b => { b.classList.toggle("on"
 let galSort = localStorage.getItem("jam-galsort") || "added";
 (function () { const s = document.getElementById("galSort"); if (!s) return;
   s.value = galSort; s.onchange = () => { galSort = s.value; localStorage.setItem("jam-galsort", galSort); renderDeskGallery(); }; })();
+// "added 16 Jul" (year only once it stops being this year); stations have no mtime — blank.
+function fmtAdded(mtime) {
+  if (!mtime) return "";
+  const d = new Date(mtime * 1000);
+  const day = d.getDate() + " " + d.toLocaleString(undefined, { month: "short" });
+  return "added " + (d.getFullYear() === new Date().getFullYear() ? day : day + " " + d.getFullYear());
+}
 function sortItems(list) {
   const by = {
     added:  (a, b) => (b.mtime || 0) - (a.mtime || 0),
@@ -1693,13 +1845,16 @@ function renderDeskGallery(flashSpot) {
   g.innerHTML = list.map(it => {
     const a = albBg({ album: it.name, cover_url: it.cover });
     const cov = canCover ? `<span class="setcov" data-cover-dir="${esc(it.id)}" title="Set cover">⤓</span>` : "";
+    const added = fmtAdded(it.mtime);
     if (galView === "list")
       return `<button class="alrow" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
         `<div class="althumb" style="background-image:${a.bg}">${a.mono}</div>` +
-        `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}</span><span class="alrowsub">${esc(it.sub)}</span></div>${cov}</button>`;
+        `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}</span><span class="alrowsub">${esc(it.sub)}</span></div>` +
+        (added ? `<span class="alrowdate">${added}</span>` : "") + `${cov}</button>`;
     return `<button class="albcard" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
       `<div class="albcover" style="background-image:${a.bg}">${a.mono}${cov}</div>` +
-      `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span></div></button>`;
+      `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span>` +
+      (added ? `<span class="albdate">${added}</span>` : "") + `</div></button>`;
   }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match." : "No albums yet — rip a CD."}</p>`;
   g.querySelectorAll(".setcov").forEach(b => b.onclick = (e) => { e.stopPropagation(); setCoverFor(b.dataset.coverDir); });
   g.querySelectorAll(".albcard, .alrow").forEach(b => b.onclick = () => {
