@@ -95,6 +95,19 @@ use `ssh -i ~/.ssh/id_euler`. Verify after: `curl -s https://jam-station.runslab
 - **UI state lives in localStorage** (accent, dance, screensaver pick, pane collapse,
   column widths, favourites) — no server round-trips for taste.
 
+## Auth, in one breath
+
+Email is the identity; there is no identity provider (deliberately no Clerk/OAuth).
+Three ways in, all in `auth.py`: a reusable **magic link** (`/k/<token>`), a
+**passcode** (8 chars generated, or 6–24 owner-chosen — normalized UPPERCASE, no
+spaces/dashes, at creation and at sign-in, so both must use `normalize_code`), and an
+optional self-set **passphrase** (PBKDF2). The owner adding you IS the approval:
+`/api/owner/add` creates the member and **emails them the link + passcode**
+(`send_key_email`; "New link"/rotate re-sends a fresh pair and kills the old).
+Keys are stored hashed and shown once. Sessions are 30-day HttpOnly cookies.
+`mail.py` speaks SMTP; the `console` backend prints the mail so the whole flow works
+with zero credentials — the mini has real SMTP secrets set on `jam-brain`.
+
 ## Gotchas
 
 - Queue top-ups are guarded by per-channel `threading.Lock`s (`channels._lock_for`).
