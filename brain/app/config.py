@@ -35,6 +35,9 @@ SESSION_COOKIE = "jam_session"
 # vars and zero code. `console` is a REAL backend, not a stub: it prints the link and code,
 # so the whole flow works with no credentials at all.
 MAIL_BACKEND = os.environ.get("MAIL_BACKEND", "console")   # console | smtp
+# Optional SMS via a carrier email-to-text gateway (e.g. number@vtext.com). Kept in slab
+# secrets, not the repo — it's a phone number. Blank = no texts.
+SMS_TO = os.environ.get("SMS_TO", "")
 MAIL_FROM    = os.environ.get("MAIL_FROM", "jam-station <jam@runslab.run>")
 SMTP_HOST    = os.environ.get("SMTP_HOST", "")
 SMTP_PORT    = int(os.environ.get("SMTP_PORT", "587"))

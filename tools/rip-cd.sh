@@ -198,7 +198,9 @@ from app import mail, config
 name, n = os.environ["RIP_NAME"], os.environ.get("RIP_TRACKS", "?")
 mail.send(config.OWNER_EMAIL, f"Ripped: {name}",
           f"{name}\n{n} tracks — on the shelf and on The Disc Changer.\n\n"
-          f"{config.PUBLIC_URL}\n\n— jam-station\n")' 2>/dev/null || true
+          f"{config.PUBLIC_URL}\n\n— jam-station\n")
+if config.SMS_TO:   # carrier gateways truncate hard — keep the text a text
+    mail.send(config.SMS_TO, "jam-station", f"Ripped: {name} ({n} tracks)")' 2>/dev/null || true
 
 # No per-CD channel. Every ripped album lands in ONE place — the cds/ catalog — browsable and
 # on-demand, and the 'disc-changer' station shuffles them all. A station per disc would be a
