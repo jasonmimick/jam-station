@@ -34,6 +34,12 @@ import urllib.request
 UA = "jam-station/1.0 (https://jam-station.runslab.run)"
 MB = "https://musicbrainz.org/ws/2"
 DRIFT_MAX_S = 5.0    # max per-track start drift to accept a fuzzy candidate (75 sectors = 1s)
+
+
+def _drift_max(ntracks: int) -> float:
+    """Fewer tracks = less offset structure = a fuzzy match must be tighter to be believed.
+    (A synthetic uniform 6-track TOC matched a real EP at the 5s window in testing.)"""
+    return DRIFT_MAX_S if ntracks >= 8 else 2.0
 FUZZY_CANDIDATES = 5  # how many fuzzy candidates are worth a disc-offset check
 
 
@@ -133,11 +139,6 @@ def _gnudb(parts: list[int]) -> tuple[str, str] | None:
     only here). Candidates are verified the same way as MB fuzzy ones: every track's start
     must sit within DRIFT_MAX_S of ours, using the frame offsets in the CDDB entry itself."""
     offs, total_s = parts[3:], parts[2] // 75
-    # Short discs collide: a synthetic 3-track TOC matched a real CD single within drift
-    # tolerance in testing. Under 5 tracks there isn't enough offset structure to trust a
-    # fuzzy CDDB hit — stay silent and let the dated-Unknown fallback do its honest job.
-    if len(offs) < 5:
-        return None
 
     def dsum(frame: int) -> int:
         sec, t = frame // 75, 0
@@ -174,7 +175,7 @@ def _gnudb(parts: list[int]) -> tuple[str, str] | None:
         if len(theirs) != len(offs) or not title:
             continue
         shift = theirs[0] - offs[0]                               # pressings disagree on the pregap
-        if max(abs((t - shift) - o) for t, o in zip(theirs, offs)) / 75.0 > DRIFT_MAX_S:
+        if max(abs((t - shift) - o) for t, o in zip(theirs, offs)) / 75.0 > _drift_max(len(offs)):
             continue
         artist, _, album = title.partition(" / ")
         artist, album = artist.strip(), album.strip()
@@ -197,6 +198,14 @@ def lookup(parts: list[int]) -> tuple[str, str] | None:
         # falls back to a dated 'Unknown' folder, instead of committing a wrong box-set name.
         return _name(sorted(rels, key=_rank)[0])
 
+    # Short discs collide: in testing, synthetic 3- and 6-track TOCs each matched a REAL
+    #    CD single/EP within drift tolerance — few tracks means too little offset structure
+    #    for ANY fuzzy match (MB or CDDB) to prove itself. Exact disc ID above is a hash and
+    #    stays trustworthy at any track count; below 5 tracks, fuzzy stays silent and the
+    #    dated-Unknown fallback does its honest job.
+    if len(parts) - 3 < 5:
+        return None
+
     # 2) fuzzy: discid '-' means "match this raw TOC instead". Candidates here are only
     #    length-alike, so each must prove its per-track offsets before we believe it.
     tocstr = "+".join(str(x) for x in parts)
@@ -208,7 +217,7 @@ def lookup(parts: list[int]) -> tuple[str, str] | None:
         if verified:
             time.sleep(1)                       # MusicBrainz asks for 1 req/sec
         d = _drift_s(parts, r.get("id", ""))
-        if d is not None and d <= DRIFT_MAX_S:
+        if d is not None and d <= _drift_max(len(parts) - 3):
             verified.append((d, r))
     if verified:
         return _name(min(verified, key=lambda x: x[0])[1])

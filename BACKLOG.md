@@ -68,6 +68,12 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Done
 
+- 2026-07-18: **No more Unknown Albums.** The three mystery rips identified and renamed
+  (North Sea Jazz Festival sampler via CDDB with 0.8s offset proof; Road to You -> Pat
+  Metheny Group; Grammavision sampler -> Various Artists). cd-name now falls back to
+  gnudb/CDDB when MusicBrainz has never seen the disc; fuzzy matching refuses <5-track
+  discs and tightens to 2s drift under 8 tracks — never a wrong name.
+
 - 2026-07-18: **Invite email works end-to-end** (owner-tested): Add person → the station
   emails their magic link + passcode (Gmail SMTP); passcode can be owner-chosen; rotate
   re-sends a fresh pair
