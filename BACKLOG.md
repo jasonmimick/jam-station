@@ -63,6 +63,9 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Done
 
+- 2026-07-18: **Invite email works end-to-end** (owner-tested): Add person → the station
+  emails their magic link + passcode (Gmail SMTP); passcode can be owner-chosen; rotate
+  re-sends a fresh pair
 - 2026-07-17: **Mini player** (masthead ⧉ — Document PiP: now-playing, transport, pocket
   visualizer; Chrome/Edge). Menu-bar app only if this isn't enough.
 - 2026-07-17: Collapsible Tunes/DJ panes (slim rails); narrow desktop windows keep the
