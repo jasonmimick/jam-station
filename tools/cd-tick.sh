@@ -33,7 +33,23 @@ fi
 for v in /Volumes/*/; do
   has_aiff "$v" || continue
   sig=$(disc_sig "$v"); [ -n "$sig" ] || continue
-  grep -q "^$sig" "$LEDGER" 2>/dev/null && continue          # already ripped, ever
+  # Already ripped, ever? Don't skip SILENTLY — a re-inserted disc sitting mute in the
+  # drive reads as "the ripper is hosed". Say so, eject it, text the owner why.
+  if line=$(grep "^$sig" "$LEDGER" 2>/dev/null | head -1) && [ -n "$line" ]; then
+    name=$(printf '%s' "$line" | sed -E 's/^[0-9a-f]+  [0-9: -]+  //')
+    echo "STATE=DUPLICATE $name"
+    dev=$(diskutil info "$v" 2>/dev/null | awk -F: '/Device Node/{gsub(/ /,"",$2);print $2}')
+    diskutil eject force "${dev:-$v}" >/dev/null 2>&1 || drutil eject >/dev/null 2>&1 || true
+    docker exec -e RIP_NAME="$name" "${BRAIN:-slab-jam-brain}" python -c '
+import os
+from app import mail, config
+name = os.environ["RIP_NAME"]
+mail.send(config.OWNER_EMAIL, f"Already on the shelf: {name}",
+          f"{name} is already in the catalog — ejected it unripped.\n")
+if config.SMS_TO:
+    mail.send(config.SMS_TO, "jam-station", f"Already on the shelf: {name} - ejected")' 2>/dev/null || true
+    continue
+  fi
   drive=$(drive_id "$v")
   [ -d "/tmp/jam-rip-${drive:-single}.lock" ] && { echo "STATE=RIPPING (lock $drive)"; exit 0; }
   # settle: a just-inserted disc is still being enumerated; don't rip a partial one
