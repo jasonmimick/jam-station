@@ -82,6 +82,10 @@
   .dtog { width:100%; padding:7px 0; border:1px solid var(--line); border-radius:4px; cursor:pointer;
     background:var(--sunk); color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.04em; }
   .dtog.on { background:var(--yellow); color:var(--on-yellow); border-color:transparent; }
+  .svmodes { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .svmodes button { padding:6px 0; border:1px solid var(--line); border-radius:4px; cursor:pointer;
+    background:var(--sunk); color:var(--muted); font-size:10px; font-weight:700; }
+  .svmodes button.on { background:var(--yellow); color:var(--on-yellow); border-color:transparent; }
 
   /* screensaver — the board steps aside, the music owns the screen */
   #saver { position:fixed; inset:0; z-index:200; background:#060607; cursor:none; }
@@ -487,6 +491,12 @@
         </div>
         <div class="custom">
           <button id="danceTog" class="dtog" aria-pressed="false">♪ Let it dance</button>
+        </div>
+        <div class="custom" style="display:block">
+          <p class="lbl">Screensaver</p>
+          <div class="svmodes" id="svModes">
+            <button data-m="rotate">Rotate</button><button data-m="0">Bars</button><button data-m="1">Ring</button><button data-m="2">Scope</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1273,12 +1283,24 @@ function svScope(ctx, c) {
   }
 }
 const SV_MODES = [svBars, svRing, svScope];
+// pick a look, or let them rotate — remembered like the accent is
+let svPick = localStorage.getItem("jam-saver") || "rotate";
+(function () {
+  const w = $("svModes"); if (!w) return;
+  const paint = () => w.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.m === svPick));
+  paint();
+  w.querySelectorAll("button").forEach(b => b.onclick = () => {
+    svPick = b.dataset.m; localStorage.setItem("jam-saver", svPick); paint();
+    if (svPick !== "rotate") svMode = +svPick;
+  });
+  if (svPick !== "rotate") svMode = +svPick;
+})();
 function svFrame() {
   svRAF = requestAnimationFrame(svFrame);
   const c = $("saverViz"), ctx = c.getContext("2d");
   if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; }
   const now = performance.now();
-  if (now - svModeAt > SAVER_MODE_MS) { svMode = (svMode + 1) % SV_MODES.length; svModeAt = now; }
+  if (svPick === "rotate" && now - svModeAt > SAVER_MODE_MS) { svMode = (svMode + 1) % SV_MODES.length; svModeAt = now; }
   if (!(svTick++ % 10)) {   // the accent may be dancing — re-read it, but not every frame
     svAccent = getComputedStyle(document.documentElement).getPropertyValue("--yellow").trim() || "#FFD200";
     const t = currentTrack() || {}, ch = S.channel ? chName(S.channel) : "";
