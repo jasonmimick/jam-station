@@ -127,6 +127,67 @@ def _drift_s(parts: list[int], release_id: str) -> float | None:
     return best
 
 
+def _gnudb(parts: list[int]) -> tuple[str, str] | None:
+    """CDDB (gnudb) fallback — the CD-era database is far deeper than MusicBrainz's disc IDs
+    for samplers, promos and label pressings ('Your Guide to North Sea Jazz Festival' lived
+    only here). Candidates are verified the same way as MB fuzzy ones: every track's start
+    must sit within DRIFT_MAX_S of ours, using the frame offsets in the CDDB entry itself."""
+    offs, total_s = parts[3:], parts[2] // 75
+    # Short discs collide: a synthetic 3-track TOC matched a real CD single within drift
+    # tolerance in testing. Under 5 tracks there isn't enough offset structure to trust a
+    # fuzzy CDDB hit — stay silent and let the dated-Unknown fallback do its honest job.
+    if len(offs) < 5:
+        return None
+
+    def dsum(frame: int) -> int:
+        sec, t = frame // 75, 0
+        while sec:
+            t += sec % 10
+            sec //= 10
+        return t
+
+    discid = ((sum(dsum(o) for o in offs) % 255) << 24) | ((total_s - offs[0] // 75) << 8) | len(offs)
+    base = "http://gnudb.gnudb.org/~cddb/cddb.cgi?cmd="
+    hello = "&hello=jam+station+xmcd+2.1&proto=5"     # gnudb rejects unknown client names
+    cmd = "cddb query %08x %d %s %d" % (discid, len(offs), " ".join(str(o) for o in offs), total_s)
+    try:
+        req = urllib.request.Request(base + urllib.parse.quote_plus(cmd) + hello,
+                                     headers={"User-Agent": UA})
+        lines = urllib.request.urlopen(req, timeout=12).read().decode("utf-8", "replace").splitlines()
+    except Exception:
+        return None
+    cands = []
+    if lines and lines[0].startswith("200 "):                     # exact: "200 categ discid title"
+        cands = [lines[0].split(" ", 3)[1:3]]
+    elif lines and (lines[0].startswith("210") or lines[0].startswith("211")):
+        cands = [l.split(" ", 2)[:2] for l in lines[1:] if l and l != "."][:5]
+    for categ, did in cands:
+        try:
+            req = urllib.request.Request(base + urllib.parse.quote_plus(f"cddb read {categ} {did}") + hello,
+                                         headers={"User-Agent": UA})
+            entry = urllib.request.urlopen(req, timeout=12).read().decode("utf-8", "replace")
+        except Exception:
+            continue
+        theirs = [int(l.strip("#\t ")) for l in entry.splitlines()
+                  if l.startswith("#") and l.strip("#\t ").isdigit()]
+        title = next((l.split("=", 1)[1] for l in entry.splitlines() if l.startswith("DTITLE=")), "")
+        if len(theirs) != len(offs) or not title:
+            continue
+        shift = theirs[0] - offs[0]                               # pressings disagree on the pregap
+        if max(abs((t - shift) - o) for t, o in zip(theirs, offs)) / 75.0 > DRIFT_MAX_S:
+            continue
+        artist, _, album = title.partition(" / ")
+        artist, album = artist.strip(), album.strip()
+        if not album:
+            artist, album = "Unknown Artist", artist
+        if _is_boxset(album):
+            continue
+        if artist.lower() in ("various", "va", "various artists"):
+            artist = "Various Artists"
+        return artist, album
+    return None
+
+
 def lookup(parts: list[int]) -> tuple[str, str] | None:
     # 1) exact: this pressing's disc ID is in the database — trustworthy, no drift check.
     data = _get(f"{MB}/discid/{mb_discid(parts)}?inc=artists&fmt=json&cdstubs=no")
@@ -149,9 +210,11 @@ def lookup(parts: list[int]) -> tuple[str, str] | None:
         d = _drift_s(parts, r.get("id", ""))
         if d is not None and d <= DRIFT_MAX_S:
             verified.append((d, r))
-    if not verified:
-        return None
-    return _name(min(verified, key=lambda x: x[0])[1])
+    if verified:
+        return _name(min(verified, key=lambda x: x[0])[1])
+
+    # 3) MusicBrainz has never seen this disc — ask the old CDDB network before giving up.
+    return _gnudb(parts)
 
 
 def main() -> int:
