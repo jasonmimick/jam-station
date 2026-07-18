@@ -250,6 +250,13 @@
     background:transparent; color:var(--ink); font:inherit; cursor:pointer; }
   .dep > span { min-width:0; }
   .dep .sub { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .dep.withart { grid-template-columns:14px 42px minmax(0,1fr); }
+  .depart { width:42px; height:42px; border-radius:5px; background-size:cover; background-position:center;
+    background-color:var(--sunk); box-shadow:inset 0 0 0 1px #ffffff14; }
+  /* station-art styling — one treatment across every .artf tile, picked in the palette */
+  html.art-mono .artf { filter:grayscale(1) contrast(1.06) brightness(.92); }
+  html.art-tint .artf { filter:grayscale(1) sepia(.55) hue-rotate(4deg) saturate(1.5) contrast(1.05) brightness(.88); }
+  html.art-invert .artf { filter:invert(1) hue-rotate(180deg) contrast(1.05); }
   .dep:hover { background:var(--sunk); }
   .dep .mk { color:var(--faint); font-size:13px; }
   .dep .nm { font-size:15px; font-weight:700; overflow-wrap:anywhere; }
@@ -513,6 +520,12 @@
           <p class="lbl">Screensaver</p>
           <div class="svmodes" id="svModes">
             <button data-m="rotate">Rotate</button><button data-m="0">Bars</button><button data-m="1">Ring</button><button data-m="2">Scope</button>
+          </div>
+        </div>
+        <div class="custom" style="display:block">
+          <p class="lbl">Station art</p>
+          <div class="svmodes" id="artModes">
+            <button data-a="natural">Natural</button><button data-a="mono">Mono</button><button data-a="tint">Tint</button><button data-a="invert">Invert</button>
           </div>
         </div>
       </div>
@@ -882,9 +895,10 @@ function renderStations() {
   for (const ch of shown) {
     const dead = ch.playable === false, on = S.channel === ch.slug;
     const b = document.createElement("button");
-    b.className = "dep" + (on ? " on" : "") + (dead ? " dead" : "");
+    b.className = "dep withart" + (on ? " on" : "") + (dead ? " dead" : "");
     b.innerHTML =
       `<span class="mk">${on && S.status === "playing" ? "▶" : on ? "■" : "○"}</span>` +
+      `<span class="depart artf" style="background-image:url('${ch.art_url || stationArt(ch.name)}')"></span>` +
       `<span><span class="nm">${esc(ch.name)}</span>` +
       // Only members ever receive a private station in /api/channels, so the badge isn't a
       // gate — it's a reassurance. It says: this one is off the public dial.
@@ -1310,6 +1324,21 @@ function svScope(ctx, c) {
     ctx.stroke();
   }
 }
+/* station-art style — a single treatment across every station tile (sidebar, gallery) */
+(function () {
+  const w = $("artModes"); if (!w) return;
+  let cur = localStorage.getItem("jam-artstyle") || "natural";
+  const apply = () => {
+    document.documentElement.classList.remove("art-mono", "art-tint", "art-invert");
+    if (cur !== "natural") document.documentElement.classList.add("art-" + cur);
+    w.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.a === cur));
+  };
+  w.querySelectorAll("button").forEach(b => b.onclick = () => {
+    cur = b.dataset.a; localStorage.setItem("jam-artstyle", cur); apply();
+  });
+  apply();
+})();
+
 const SV_MODES = [svBars, svRing, svScope];
 // pick a look, or let them rotate — remembered like the accent is
 let svPick = localStorage.getItem("jam-saver") || "rotate";
@@ -2067,13 +2096,14 @@ function renderDeskGallery(flashSpot) {
     const a = albBg({ album: it.name, cover_url: it.cover });
     const cov = canCover ? `<span class="setcov" data-cover-dir="${esc(it.id)}" title="Set cover">⤓</span>` : "";
     const added = fmtAdded(it.mtime);
+    const af = it.kind === "station" ? " artf" : "";
     if (galView === "list")
       return `<button class="alrow" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
-        `<div class="althumb" style="background-image:${a.bg}">${a.mono}</div>` +
+        `<div class="althumb${af}" style="background-image:${a.bg}">${a.mono}</div>` +
         `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}</span><span class="alrowsub">${esc(it.sub)}</span></div>` +
         (added ? `<span class="alrowdate">${added}</span>` : "") + `${cov}</button>`;
     return `<button class="albcard" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
-      `<div class="albcover" style="background-image:${a.bg}">${a.mono}${cov}</div>` +
+      `<div class="albcover${af}" style="background-image:${a.bg}">${a.mono}${cov}</div>` +
       `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span>` +
       (added ? `<span class="albdate">${added}</span>` : "") + `</div></button>`;
   }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match." : "No albums yet — rip a CD."}</p>`;
