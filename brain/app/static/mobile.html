@@ -467,8 +467,11 @@ function paintPlayer() {
   $("mPlay").classList.toggle("busy", busy);
   $("mTitle").textContent = S.np.title || "—";
   $("mArtist").textContent = S.np.artist || "";
+  const ch = (S.stations || []).find(c => c.slug === S.slug);
+  const stArt = ch ? (ch.art_url || stationArt(ch.name)) : "";   // the station IS the sleeve
   const mc = $("mCover");
   if (S.np.cover) { mc.style.backgroundImage = `url('${S.np.cover}')`; mc.textContent = ""; }
+  else if (stArt) { mc.style.backgroundImage = `url('${stArt}')`; mc.textContent = ""; }
   else { mc.style.backgroundImage = ""; mc.textContent = tonal(S.np.title || S.np.artist).mono; }
   // full sheet
   $("nTitle").textContent = S.np.title || "Tune in";
@@ -476,6 +479,7 @@ function paintPlayer() {
   $("nSpec").textContent = !has ? "" : (S.kind === "radio" ? "256 kbps · live" : `on demand · ${S.idx + 1}/${S.tracks.length}`);
   const nc = $("nCover");
   if (S.np.cover) { nc.style.backgroundImage = `url('${S.np.cover}')`; nc.textContent = ""; }
+  else if (stArt) { nc.style.backgroundImage = `url('${stArt}')`; nc.textContent = ""; }
   else { nc.style.backgroundImage = ""; nc.textContent = tonal(S.np.title || S.np.artist).mono; }
   const album = S.kind === "album";
   $("nPrev").disabled = !album; $("nNext").disabled = !album;

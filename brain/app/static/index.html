@@ -1533,9 +1533,12 @@ function updateMediaSession(t) {
   if (!("mediaSession" in navigator)) return;
   const ms = navigator.mediaSession;
   if (t && t.title) {
+    const ch = (S.channels || []).find(c => c.slug === S.channel);
+    const photo = ch && ch.art_url;               // station photo on the lock screen, bolt otherwise
     ms.metadata = new MediaMetadata({
       title: t.title, artist: t.artist || "", album: t.album || "jam-station",
-      artwork: [{ src: artwork(), sizes: "512x512", type: "image/png" }],
+      artwork: [photo ? { src: location.origin + photo, sizes: "600x600", type: "image/jpeg" }
+                      : { src: artwork(), sizes: "512x512", type: "image/png" }],
     });
   }
   ms.playbackState = S.status === "playing" ? "playing" : "paused";
@@ -2226,9 +2229,16 @@ setDtab(dtab);   // restore the last tab (Playing by default)
    Muted saturation + a dark gradient reads like a pressed sleeve, not a swatch. */
 function renderNpArt(t) {
   const art = $("npArt"), mono = $("npMono"); if (!art) return;
+  art.classList.remove("artf");
   if (t && t.cover_url) {                         // the real sleeve, from the Cover Art Archive
     art.style.backgroundImage = `url("${t.cover_url}")`;
     art.classList.add("hasart");
+    return;
+  }
+  const ch = (S.channels || []).find(c => c.slug === S.channel);
+  if (ch) {                                       // no sleeve? the station's art IS the sleeve
+    art.style.backgroundImage = `url('${ch.art_url || stationArt(ch.name)}')`;
+    art.classList.add("hasart"); art.classList.add("artf");
     return;
   }
   art.style.backgroundImage = "";
