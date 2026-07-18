@@ -75,15 +75,41 @@ def _phishin_handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(404)
 
 
+def _test_db_url():
+    """The configured DATABASE_URL with '_test' appended to the database name.
+
+    Tests must NEVER run against the configured database itself: on the mini that is
+    production — members, sessions, play history. (The old fixture patched DB_PATH,
+    which the Postgres migration stopped reading, so every test run silently wrote
+    into the live database and the suite rotted as state accumulated.)"""
+    import re
+    from app import config
+    m = re.search(r"/([^/?]+?)(\?[^/]*)?$", config.DATABASE_URL)
+    name = m.group(1) + "_test"
+    return config.DATABASE_URL[: m.start(1)] + name + (m.group(2) or ""), name
+
+
 @pytest.fixture()
 def app_env(tmp_path, monkeypatch):
-    """Fresh temp DB/dirs + mocked archive.org for every test."""
+    """Fresh temp dirs + a dedicated, wiped _test database + mocked archive.org."""
     from app import config
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(config, "CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(config, "MUSIC_DIR", str(tmp_path / "music"))
-    monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "data" / "channels.db"))
     monkeypatch.setattr(config, "PREFETCH", False)
+    # next_track fires a background top-up thread; with the production MIN_QUEUE it races
+    # the test's own assertions (it reliably LOST that race on SQLite and reliably wins it
+    # on Postgres). At 1, "anything unserved" means topped-up, so the thread adds nothing.
+    monkeypatch.setattr(config, "MIN_QUEUE", 1)
+
+    import psycopg
+    test_url, test_name = _test_db_url()
+    with psycopg.connect(config.DATABASE_URL, autocommit=True) as con:
+        try:
+            con.execute(f'CREATE DATABASE "{test_name}"')
+        except psycopg.errors.DuplicateDatabase:
+            pass
+    monkeypatch.setattr(config, "DATABASE_URL", test_url)
 
     from app.adapters import archive, phishin
     archive.set_client(httpx.Client(transport=httpx.MockTransport(_handler),
@@ -92,6 +118,14 @@ def app_env(tmp_path, monkeypatch):
                                     base_url="https://phish.in"))
 
     from app import db, channels
+    # the pool may still hold connections to the previous URL — rebuild it lazily,
+    # and blow the schema away so every test starts from genuinely nothing
+    if db._pool is not None:
+        db._pool.close()
+        db._pool = None
+    with psycopg.connect(test_url, autocommit=True) as con:
+        con.execute("DROP SCHEMA public CASCADE")
+        con.execute("CREATE SCHEMA public")
     # background top-up threads from a previous test can still hold a
     # per-channel lock; start each test with a fresh lock table
     channels._topup_locks.clear()
@@ -100,3 +134,6 @@ def app_env(tmp_path, monkeypatch):
     yield
     archive.set_client(None)  # type: ignore[arg-type]
     phishin.set_client(None)  # type: ignore[arg-type]
+    if db._pool is not None:
+        db._pool.close()
+        db._pool = None
