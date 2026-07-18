@@ -270,7 +270,7 @@ def _member_slug(name: str) -> str:
     return cand
 
 
-def create_key_member(name: str, contact: str = "", email: str = "") -> dict:
+def create_key_member(name: str, contact: str = "", email: str = "", code: str = "") -> dict:
     """Owner adds a person. Approved on the spot (the owner adding you IS the approval), with a
     fresh reusable link + code. Returns the raw link and code ONCE — they're stored hashed and
     can't be shown again; to re-send, rotate."""
@@ -283,16 +283,51 @@ def create_key_member(name: str, contact: str = "", email: str = "") -> dict:
         "contact=excluded.contact",
         (ident, name, contact.strip()[:120], _stamp(_now()), _stamp(_now())),
     )
-    link, code = _issue_key(ident)
+    link, code = _issue_key(ident, code)
     return {"email": ident, "name": name, "link": link, "code": code}
 
 
-def _issue_key(email: str) -> tuple[str, str]:
-    """Mint a reusable token+code for a member; returns the raw pair (caller relays them)."""
-    raw_token, code = secrets.token_urlsafe(18), _code()
+def _issue_key(email: str, code: str = "") -> tuple[str, str]:
+    """Mint a reusable token+code for a member; returns the raw pair (caller relays them).
+    A caller-supplied code must already be normalized (see normalize_code) — code_login
+    normalizes what people type, so anything stored differently could never match."""
+    raw_token, code = secrets.token_urlsafe(18), (code or _code())
     db.execute("INSERT INTO access_keys(token_hash, code_hash, email, created_at) VALUES(?,?,?,?)",
                (_hash(raw_token), _hash(code), norm(email), _stamp(_now())))
     return f"{config.PUBLIC_URL}/k/{raw_token}", code
+
+
+def normalize_code(raw: str) -> str:
+    """A custom passcode, the way code_login will see it typed: uppercase, no spaces/dashes.
+    Returns "" if what's left is too short to be accepted at sign-in (min 6)."""
+    c = (raw or "").strip().upper().replace("-", "").replace(" ", "")
+    return c if 6 <= len(c) <= 24 else ""
+
+
+def send_key_email(name: str, email: str, link: str, code: str) -> bool:
+    """The invite itself — everything a person needs to start listening, in one email."""
+    first = (name or "").split()[0] if (name or "").strip() else "there"
+    return mail.send(
+        email,
+        "Your key to jam-station",
+        f"Hi {first},\n"
+        "\n"
+        "You're in. jam-station is a private internet radio station — live show tapes\n"
+        "(Grateful Dead, jazz, bluegrass, funk…) and a shelf of ripped CDs, streaming\n"
+        "around the clock.\n"
+        "\n"
+        "Two ways in, both yours for good:\n"
+        "\n"
+        f"  Your link:      {link}\n"
+        f"  Your passcode:  {code}\n"
+        "\n"
+        f"Tap the link on any device — or go to {config.PUBLIC_URL} and type the\n"
+        "passcode into the Sign in box. Phone, laptop, the car: it all works.\n"
+        "\n"
+        "Keep this email — the link and passcode don't expire.\n"
+        "\n"
+        "— jam-station\n",
+    )
 
 
 def rotate_key(email: str) -> dict | None:

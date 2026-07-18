@@ -703,11 +703,14 @@
       <div id="ownerPeople" style="display:none;margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
         <div class="lbl" style="margin-bottom:6px">People</div>
         <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.5">
-          Add someone with their email, then text them their link. Lost link or code?
-          <b>New link</b> sends a fresh pair — the old one stops working.</p>
+          Add someone and the station <b>emails them</b> their link + passcode.
+          Lost link or code? <b>New link</b> emails a fresh pair — the old one stops working.</p>
         <input id="ownName" placeholder="Name (e.g. Dad)"
                style="width:100%;padding:10px;margin-bottom:8px">
         <input id="ownContact" type="email" placeholder="Their email (they'll sign in with it)"
+               style="width:100%;padding:10px;margin-bottom:8px">
+        <input id="ownCode" placeholder="Passcode (optional — we'll invent one)"
+               autocapitalize="characters" autocomplete="off"
                style="width:100%;padding:10px;margin-bottom:8px">
         <button id="ownAdd" style="width:100%;padding:11px;border:0;border-radius:2px;
                 background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
@@ -1860,14 +1863,25 @@ function wireCopies(root) {
     });
   });
 }
+function sentNote(d) {   // did the invite email go out? say so either way
+  const email = d.email && d.email.includes("@") ? d.email : "";
+  if (!email) return `<p class="msub" style="margin:0 0 8px">No email given — text them the card below.</p>`;
+  return d.sent
+    ? `<p style="font-size:12.5px;color:var(--green,#3fbf6f);margin:0 0 8px">✉ Emailed ${esc(email)} their link + passcode.</p>`
+    : `<p style="font-size:12.5px;color:var(--red);margin:0 0 8px">Email didn't send — text them the card below.</p>`;
+}
 $("ownAdd").onclick = async () => {
   const name = $("ownName").value.trim(); if (!name) return;
   const r = await fetch("/api/owner/add", { method: "POST", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ name, email: $("ownContact").value.trim() }) });
-  if (!r.ok) return;
+    body: JSON.stringify({ name, email: $("ownContact").value.trim(), code: $("ownCode").value.trim() }) });
+  if (!r.ok) {
+    const err = (await r.json().catch(() => ({}))).detail || "Couldn't add them.";
+    $("ownResult").innerHTML = `<p style="font-size:12.5px;color:var(--red)">${esc(err)}</p>`;
+    return;
+  }
   const d = await r.json();
-  $("ownName").value = ""; $("ownContact").value = "";
-  $("ownResult").innerHTML = keyCard(d); wireCopies($("ownResult"));
+  $("ownName").value = ""; $("ownContact").value = ""; $("ownCode").value = "";
+  $("ownResult").innerHTML = sentNote(d) + keyCard(d); wireCopies($("ownResult"));
   renderOwnerList();
 };
 async function renderOwnerList() {
@@ -1885,7 +1899,8 @@ async function renderOwnerList() {
   w.querySelectorAll("[data-rotate]").forEach(b => b.onclick = async () => {
     const r = await fetch("/api/owner/rotate", { method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ email: b.dataset.rotate }) });
-    if (r.ok) { $("ownResult").innerHTML = keyCard(await r.json()); wireCopies($("ownResult")); }
+    if (r.ok) { const d = await r.json();
+      $("ownResult").innerHTML = sentNote(d) + keyCard(d); wireCopies($("ownResult")); }
   });
   w.querySelectorAll("[data-revoke]").forEach(b => b.onclick = async () => {
     if (!confirm("Remove this person? Their link and code stop working.")) return;

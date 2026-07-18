@@ -687,19 +687,29 @@ def api_invite(body: InviteReq, request: Request):
 class AddPersonReq(BaseModel):
     name: str
     email: str = ""
+    code: str = ""     # optional owner-chosen passcode; blank = we invent one
 
 
 @app.post("/api/owner/add")
 def api_owner_add(body: AddPersonReq, request: Request):
-    """The dead-simple invite: owner adds a person (name + their email) and gets a link + code
-    to text them. The email is their identity — it's what they'll use if they set a passphrase.
-    No email round-trip, no approval step — the owner adding you IS the approval."""
+    """The dead-simple invite: owner adds a person (name + email, passcode optional) — the
+    station EMAILS them their link + passcode, and the same card comes back to the owner as
+    a fallback to text. The email is their identity — it's what they'll use if they set a
+    passphrase. No approval step — the owner adding you IS the approval."""
     me = _me(request)
     if not me or me["role"] != "owner":
         raise HTTPException(403, "owner only")
     if not body.name.strip():
         raise HTTPException(400, "give them a name")
-    return auth.create_key_member(body.name, contact=body.email, email=body.email)
+    code = ""
+    if body.code.strip():
+        code = auth.normalize_code(body.code)
+        if not code:
+            raise HTTPException(400, "passcode needs 6–24 letters/numbers")
+    r = auth.create_key_member(body.name, contact=body.email, email=body.email, code=code)
+    r["sent"] = bool("@" in r["email"]
+                     and auth.send_key_email(r["name"], r["email"], r["link"], r["code"]))
+    return r
 
 
 @app.post("/api/owner/rotate")
@@ -711,6 +721,8 @@ def api_owner_rotate(body: EmailReq, request: Request):
     r = auth.rotate_key(body.email)
     if not r:
         raise HTTPException(404, "no such person")
+    r["sent"] = bool("@" in r["email"]
+                     and auth.send_key_email(r["name"], r["email"], r["link"], r["code"]))
     return r
 
 
