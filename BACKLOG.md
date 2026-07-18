@@ -35,20 +35,6 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
       Recommendation: **Shortwave**. The vocabulary keeps working — *on air · call sign ·
       affiliate · carriage · relay · the dial.*
 
-- [ ] **Mini-player for laptops.** A compact, always-visible player so the station
-      keeps running while you work in another tab/window. Options, roughly in order
-      of effort:
-      1. **Compact mode in-page** — collapse to a slim bar (art, title, transport,
-         station switcher). Cheap, works everywhere, no install.
-      2. **Picture-in-Picture** — the browser's Document PiP API gives a real
-         floating always-on-top window from a web app. Chrome/Edge only today, but
-         it's exactly the "mini-player" shape and needs no native app.
-      3. **Menu-bar app** — a true macOS status-bar player. Most native, most work;
-         only worth it if 1 and 2 aren't enough.
-      Note: MediaSession already puts the track + transport on the OS media widget
-      and lock screen, so some of this need may already be met — check that first
-      before building anything.
-
 - [ ] **Load your own music.** The single unlock that lights up both `70s Fusion`
       and `BeBop` (currently shown honestly as "NO MUSIC"). Needs the music files on
       the mac-mini and a slab volume mount. This is also the *only* way to get real
@@ -77,6 +63,17 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Done
 
+- 2026-07-17: **Mini player** (masthead ⧉ — Document PiP: now-playing, transport, pocket
+  visualizer; Chrome/Edge). Menu-bar app only if this isn't enough.
+- 2026-07-17: Collapsible Tunes/DJ panes (slim rails); narrow desktop windows keep the
+  three columns (stacked pseudo-mobile fallback removed)
+- 2026-07-17: Screensaver (▓ / 3 idle min): Bars · Ring · Scope, pick or Rotate; "Let it
+  dance" — accent colour sways with the music; gallery shows date added
+- 2026-07-17: CD naming hardened — exact MusicBrainz disc ID first, fuzzy only with
+  per-track offset proof (the *Are You Experienced* → "Fiddler's Green" bug); the
+  misnamed rip repaired in place
+- 2026-07-17: pytest isolated into a `_test` Postgres DB — it was silently writing into
+  the live database since the Postgres migration
 - Departures-board UI (Schiphol), dark + light, split-flap now-playing, gate logo
 - RADIO (live icecast) + ON DEMAND (browser plays Archive MP3s: jump, scrub, rewind)
 - Favourites (localStorage) as an on-demand station

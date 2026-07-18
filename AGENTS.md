@@ -5,22 +5,29 @@ point here. Keep all three in sync by editing only this file.
 
 ## What this project is
 
-A personal, multi-channel internet radio station for one person and a couple of
-friends. It runs in Docker on a Mac mini, streams over the owner's Tailscale tailnet
-(never the public internet), and uses an AI DJ (Claude tool-calling) to find and queue
-live shows from the Internet Archive's Live Music Archive. Personal use only — never
-add features that download from, or rebroadcast, DRM'd/subscription sources
-(Spotify, Apple Music, YouTube audio). Those services are integrated *playlist-only*:
-the AI curates via their official APIs, their native apps play.
+A personal, multi-channel internet radio station for one person, family, and a few
+approved friends. It runs as a slab system on a home Mac mini and is public at
+**https://jam-station.runslab.run** (named Cloudflare tunnel). An AI DJ (Claude
+tool-calling) finds and queues live shows from the Internet Archive's Live Music
+Archive; a growing CD collection ("LISTEN AND RIP") is ripped on the host and served
+to members. Personal use only — never add features that download from, or rebroadcast,
+DRM'd/subscription sources (Spotify, Apple Music, YouTube audio). Those services are
+integrated *playlist-only*: the AI curates via their official APIs, their native apps play.
 
 ## Architecture in one paragraph
 
-`brain` (FastAPI, `brain/app/`) is the only custom service. It owns channel
-definitions (SQLite), searches archive.org (community `avg_rating` is the quality
-signal), runs the Claude tool loop (`dj.py`), and serves the web UI. `liquidsoap`
+`brain` (FastAPI, `brain/app/`) is the only custom service. It owns channel definitions
+and members/sessions (**Postgres** via slab-postgres — SQLite is gone, see `db.py`'s
+docstring), searches archive.org (community `avg_rating` is the quality signal), runs
+the Claude tool loop (`dj.py`), does its own auth (magic link + code + passphrase —
+no Clerk/OAuth, deliberately), and serves two no-build UIs: `static/index.html`
+(desktop) and `static/mobile.html` (served by user-agent). `liquidsoap`
 (`liquidsoap/radio.liq`) polls `GET /api/next?channel=<slug>` per channel, crossfades,
-and feeds `icecast` (one mount per channel). `navidrome` serves the owner's own files.
-Everything is wired in `docker-compose.yml`.
+and feeds `icecast` (one mount per channel); it self-reloads when the channel list
+changes. CD ripping runs **on the host** (`tools/`), not in a container — slab forbids
+host mounts, so the ripper hands finished MP3s to the brain's music volume via
+`docker cp`. Wiring: `system.toml` (slab). `docker-compose.yml` still exists for the
+full local stack (incl. navidrome, which slab doesn't run yet).
 
 ## Layout
 
@@ -28,12 +35,19 @@ Everything is wired in `docker-compose.yml`.
 brain/app/main.py            FastAPI routes (thin — logic lives elsewhere)
 brain/app/channels.py        channel manager: seeds, queue top-up, next_track, prefetch
 brain/app/dj.py              AI DJ: system prompt, TOOLS schema, tool loop
-brain/app/adapters/          one module per audio source (archive.py, library.py)
-brain/app/db.py              sqlite helpers (query/execute) — no ORM, keep it that way
-brain/app/static/index.html  the whole web UI (single file, vanilla JS, no build step)
-brain/tests/                 pytest; conftest.py mocks archive.org via httpx.MockTransport
+brain/app/auth.py, mail.py   invite/approve, magic link + 8-char code, sessions; SMTP or console
+brain/app/covers.py          album enrichment: MusicBrainz year/tracklist, Cover Art Archive/iTunes art
+brain/app/spot.py            photograph music in the wild, vision API identifies it
+brain/app/adapters/          one module per audio source (archive.py, library.py, phishin.py, cc.py)
+brain/app/db.py              Postgres via a ?->%s facade — no ORM, keep it that way
+brain/app/static/index.html  the whole desktop UI (single file, vanilla JS, no build step)
+brain/app/static/mobile.html the phone app, same rules, served by user-agent
+brain/tests/                 pytest; conftest mocks archive.org AND isolates the DB (see below)
 liquidsoap/radio.liq         radio engine config (liquidsoap 2.2.x)
-docs/architecture.html       the system diagram (update it if you change the shape)
+tools/                       host-side CD pipeline: rip-cd.sh, cd-watch.sh, cd-tick.sh, cd-name.py
+tools/mini/, tools/euler/    launchd plists + helpers (watcher, backups, jam-cdd FDA helper)
+system.toml, slab/           the slab system (jam-brain, jam-icecast, jam-radio)
+docs/                        architecture.html + DESIGN-*.md (auth built; family/network on hold)
 ```
 
 ## Commands
@@ -41,62 +55,80 @@ docs/architecture.html       the system diagram (update it if you change the sha
 ```bash
 cd brain
 pip install -r requirements-dev.txt
-pytest                                  # must pass; no network needed (archive mocked)
+pytest        # must pass before any commit. Needs a reachable Postgres (slab's is fine):
+              # tests create and use <dbname>_test, drop its schema fresh per test, and
+              # NEVER touch the configured database — on the mini that is production.
 uvicorn app.main:app --reload --port 8080
 
-# validate liquidsoap changes (apt liquidsoap 2.2.x works; image pins v2.2.5):
-liquidsoap --check liquidsoap/radio.liq   # warnings ok; errors are not
-# note: --check also RUNS top-level code; with no brain reachable the script
-# intentionally exits 1 via shutdown(). Type errors print messages; exit 1 alone
-# with no output usually just means "brain not running".
-
-docker compose up -d --build            # full stack (on the mac mini)
+liquidsoap --check liquidsoap/radio.liq   # after touching radio.liq (apt 2.2.4 close enough)
 ```
+
+### Deploy
+
+```bash
+git push origin main
+ssh jason@jasons-mac-mini 'cd ~/business/jam-station && git pull --ff-only'
+slab -N jasons-mac-mini deploy jam-brain
+```
+
+**`slab deploy` builds from the MINI's checkout (`~/business/jam-station`), not your
+local directory** — pull on the mini first or you ship the previous commit. From euler
+use `ssh -i ~/.ssh/id_euler`. Verify after: `curl -s https://jam-station.runslab.run/health`.
 
 ## Conventions
 
-- **Keep dependencies minimal.** Runtime deps are fastapi, uvicorn, httpx, anthropic.
-  Don't add an ORM, a task queue, or a frontend framework. sqlite3 + threads is enough
-  for a one-listener station.
+- **Keep dependencies minimal.** Runtime deps are fastapi, uvicorn, httpx, anthropic,
+  psycopg. No ORM, no task queue, no frontend framework. The web UIs are single static
+  files with vanilla JS — they must work from a browser with no build step.
+- **The path IS the tags.** The catalog reads artist/album/title from folder and file
+  names (`Artist - Album/07 Title.mp3`), never from ID3. Fix names, not tags.
 - **Adapters are the extension point.** A new audio source = a new module in
   `brain/app/adapters/` exposing track dicts (`url`, `title`, `artist`, `album`),
-  plus a `source` value handled in `channels.ensure_queue()`. Look at `library.py`
-  for the minimal shape.
-- **New DJ abilities** = add a tool schema to `TOOLS` in `dj.py`, a branch in
-  `_run_tool()`, and keep tool results JSON-serializable and truncated (see existing
-  20k cap).
-- **Tests mock the network.** archive.org is unreachable from CI/sandboxes; extend the
-  `httpx.MockTransport` handler in `tests/conftest.py` rather than hitting the real API.
-  Every new endpoint/adapter needs a test.
-- **The web UI stays a single static file** with vanilla JS — it must work from a
-  phone browser with no build step.
+  plus a `source` value handled in `channels.ensure_queue()`.
+- **New DJ abilities** = a tool schema in `TOOLS` (`dj.py`), a branch in `_run_tool()`,
+  results JSON-serializable and truncated (see existing 20k cap).
+- **Tests mock the network** (`httpx.MockTransport` in `tests/conftest.py`) and run in
+  the dedicated `_test` database with `MIN_QUEUE=1` (next_track's background top-up
+  thread races assertions otherwise). Every new endpoint/adapter needs a test.
 - **`/api/next` returns `annotate:` URIs.** Titles/quotes are escaped in
-  `channels._annotate()`; if you touch metadata, keep double quotes out of values.
+  `channels._annotate()`; keep double quotes out of values.
+- **UI state lives in localStorage** (accent, dance, screensaver pick, pane collapse,
+  column widths, favourites) — no server round-trips for taste.
 
 ## Gotchas
 
-- Queue top-ups are guarded by per-channel `threading.Lock`s (`channels._lock_for`) —
-  liquidsoap can poll while a background top-up runs. Don't remove the non-blocking
-  acquire or two top-ups will double-queue a show.
-- Archive channels enqueue **whole shows** (sets play in order — intentional radio
-  feel). Library channels enqueue random batches. Preserve that distinction.
-- Channels created at runtime (by the DJ) only get an Icecast mount after
-  `docker compose restart liquidsoap` — radio.liq fetches the channel list at startup.
-  The DJ's system prompt tells the owner this; keep that true if you change it.
-- Phish is not on the Archive (band policy) and commercial 70s fusion isn't either.
-  Don't "fix" empty search results for those by loosening queries — they need their
-  own adapters (phish.in) or the owner's library.
+- Queue top-ups are guarded by per-channel `threading.Lock`s (`channels._lock_for`).
+  Don't remove the non-blocking acquire or two top-ups will double-queue a show.
+- Archive channels enqueue **whole shows** (sets play in order); library channels
+  enqueue random batches. Preserve that distinction.
+- **CD identification is exact-first** (`tools/cd-name.py`): MusicBrainz disc ID from
+  the TOC, then fuzzy raw-TOC — but a fuzzy candidate is only believed after its
+  per-track offsets check out within 5s. The fuzzy search matches on rough total
+  length alone and once named an *Are You Experienced* disc "Fiddler's Green". Blank
+  stdout = dated Unknown folder. NEVER a wrong name. Test with `--toc "1+17+…"`.
+- The rip ledger (`~/.jam-ripped` on the mini) is keyed by a disc signature — a disc
+  that ripped (even misnamed) will be skipped forever unless its line is removed.
+- Ripping runs on the host because containers can't see the drive; a killed rip leaves
+  the disc mounted and unledgered, and the watcher retries it. Partial rips never
+  reach the volume (staged in a temp dir, `docker cp` only on success).
+- **Web Audio is an opt-in trade on iOS**: routing through it pauses playback on lock.
+  EQ open / "Let it dance" are the opt-ins; a restored dance session defers graph
+  creation to the first gesture (a gestureless AudioContext starts suspended and MUTES
+  the element). Desktop auto-inits on first play.
+- The desktop page never stacks its columns — narrow windows shrink the side panes
+  (or collapse them to rails). The old <1100px stacked fallback is gone; phones get
+  `mobile.html` by user-agent. Don't reintroduce a breakpoint that rearranges `.app`.
+- Phish is not on the Archive (band policy) — that's what `adapters/phishin.py` is for.
+  Commercial 70s fusion/bebop isn't either; it needs the owner's ripped library.
 - liquidsoap is pinned to `savonet/liquidsoap:v2.2.5`. Its scripting language breaks
-  between minor versions — if you bump the pin, re-run `liquidsoap --check` and expect
-  syntax churn (`http.get` response coercion, `try/catch`, source methods).
-- The docker registry may be unreachable in sandboxes; apt's liquidsoap 2.2.4 is close
-  enough for `--check`.
+  between minor versions — if you bump the pin, re-run `--check` and expect churn.
+- `liquidsoap --check` also RUNS top-level code; with no brain reachable the script
+  intentionally exits 1 via `shutdown()`. Exit 1 with no output ≠ a syntax error.
 
-## Roadmap (safe next tasks)
+## Roadmap (safe next tasks — see BACKLOG.md for the full list)
 
-1. phish.in adapter (free API, audio URLs — fits the archive.py shape)
-2. Spotify/YouTube *playlist* adapters (curate-only: write playlists via API; never audio)
-3. TTS DJ intros: generate a short spoken intro when a new show starts, insert via
-   liquidsoap `request.queue` jingle source
-4. "On this day" channel: archive search with `date:*-MM-DD` style free_text
-5. Play-history page in the web UI (`/api/history` already exists)
+1. The rename (candidate: Shortwave) — repo, slab apps, tunnel, docs, UI, PWA icons
+2. launchd for the cloudflared tunnel + slab daemon (a reboot still downs the station)
+3. Load-your-own-music volume mount — lights up 70s Fusion / BeBop
+4. TTS DJ intros via a liquidsoap `request.queue` jingle source
+5. "On this day" channel: archive search with `date:*-MM-DD` free_text
