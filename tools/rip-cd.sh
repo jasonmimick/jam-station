@@ -189,6 +189,17 @@ report done "$n" "$n" ""       # UI shows "added <album>", then goes idle when t
 # watcher consults the ledger.)
 [ -n "$sig" ] && echo "$sig  $(date '+%Y-%m-%d %H:%M')  $DIR" >> "$LEDGER"
 
+# Tell the owner the shelf grew. The brain has the mail machinery and OWNER_EMAIL; the name
+# rides in as an env var so no amount of quotes/brackets/ampersands in an album title can
+# break the python. Best-effort: a failed email never fails a successful rip.
+docker exec -e RIP_NAME="$DIR" -e RIP_TRACKS="$n" "$BRAIN" python -c '
+import os
+from app import mail, config
+name, n = os.environ["RIP_NAME"], os.environ.get("RIP_TRACKS", "?")
+mail.send(config.OWNER_EMAIL, f"Ripped: {name}",
+          f"{name}\n{n} tracks — on the shelf and on The Disc Changer.\n\n"
+          f"{config.PUBLIC_URL}\n\n— jam-station\n")' 2>/dev/null || true
+
 # No per-CD channel. Every ripped album lands in ONE place — the cds/ catalog — browsable and
 # on-demand, and the 'disc-changer' station shuffles them all. A station per disc would be a
 # dial full of one-album channels; the catalog is the shelf.
