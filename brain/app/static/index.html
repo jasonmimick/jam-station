@@ -82,6 +82,21 @@
   .dtog { width:100%; padding:7px 0; border:1px solid var(--line); border-radius:4px; cursor:pointer;
     background:var(--sunk); color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.04em; }
   .dtog.on { background:var(--yellow); color:var(--on-yellow); border-color:transparent; }
+  /* who's listening — a live pill in the masthead; click for the room */
+  .listen { border:1px solid var(--line); background:var(--sunk); color:var(--muted); cursor:pointer;
+    border-radius:999px; padding:5px 11px; font:inherit; font-size:12px; font-weight:800; }
+  .listen.live { color:var(--live,#2FD16A); border-color:var(--live,#2FD16A); }
+  .listenpop { position:absolute; top:44px; right:0; z-index:40; display:none; width:230px;
+    background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:12px;
+    box-shadow:0 12px 30px #0007; }
+  .listenpop.open { display:block; }
+  .listenpop .lbl { font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 8px; }
+  .lrow { display:flex; justify-content:space-between; gap:10px; padding:6px 0; font-size:12.5px;
+    border-top:1px solid var(--line); }
+  .lrow:first-child { border-top:0; }
+  .lrow .lwho { font-weight:700; }
+  .lrow .lch { color:var(--muted); text-align:right; }
   .svmodes { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
   .svmodes button { padding:6px 0; border:1px solid var(--line); border-radius:4px; cursor:pointer;
     background:var(--sunk); color:var(--muted); font-size:10px; font-weight:700; }
@@ -500,6 +515,11 @@
       <button id="mOnDemand">On demand</button>
     </div>
     <div class="hdr-r">
+      <button class="listen" id="listenPill" hidden aria-label="who's listening">◉ 0</button>
+      <div class="listenpop" id="listenPop">
+        <p class="lbl">On the air now</p>
+        <div id="listenRows"></div>
+      </div>
       <div class="status" id="status"><span class="dot"></span><span id="statusTxt">TUNED OUT</span></div>
       <button class="icon" id="who" title="sign in" aria-label="sign in">☺</button>
       <button class="icon" id="palette" title="accent colour" aria-label="choose accent colour">◗</button>
@@ -1324,6 +1344,46 @@ function svScope(ctx, c) {
     ctx.stroke();
   }
 }
+/* ── who's listening — members see the whole room ────────────────────────────
+   Radio listeners are counted server-side from their open /stream connections;
+   on-demand playback never touches the brain, so we heartbeat it while playing. */
+const AID = localStorage.getItem("jam-aid") ||
+  (localStorage.setItem("jam-aid", Math.random().toString(36).slice(2, 14)), localStorage.getItem("jam-aid"));
+function chLabel(slug) {
+  const ch = (S.channels || []).find(c => c.slug === slug);
+  if (ch) return ch.name;
+  if (slug === FAVS) return "Favourites";
+  if (String(slug).startsWith("cds/")) return "the collection";
+  return "on demand";
+}
+function fmtFor(s) { return s < 90 ? "just now" : s < 3600 ? Math.round(s / 60) + "m" : Math.round(s / 3600) + "h"; }
+async function refreshListeners() {
+  const pill = $("listenPill"); if (!pill) return;
+  if (!S.user) { pill.hidden = true; return; }
+  try {
+    const d = await (await fetch("/api/listeners")).json();
+    pill.hidden = false;
+    pill.textContent = `◉ ${d.count}`;
+    pill.classList.toggle("live", d.count > 0);
+    $("listenRows").innerHTML = d.count
+      ? d.listeners.map(l => `<div class="lrow"><span class="lwho">${esc(l.name)}</span>` +
+          `<span class="lch">${esc(chLabel(l.channel))}${l.mode === "ondemand" ? " · od" : ""} · ${fmtFor(l.for_seconds)}</span></div>`).join("")
+      : `<p class="msub">Nobody's tuned in right now.</p>`;
+  } catch {}
+}
+$("listenPill").onclick = (e) => { e.stopPropagation(); refreshListeners(); $("listenPop").classList.toggle("open"); };
+document.addEventListener("click", (e) => {
+  if (!$("listenPop").contains(e.target) && e.target !== $("listenPill")) $("listenPop").classList.remove("open");
+});
+function sendBeat() {
+  if (S.status !== "playing" || S.mode === "radio") return;   // radio presence is the stream itself
+  fetch("/api/presence", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel: String(S.channel || "on-demand"), aid: AID }) }).catch(() => {});
+}
+S.audio.addEventListener("playing", sendBeat);                 // count on-demand listeners instantly
+setInterval(() => { if (!document.hidden) { sendBeat(); refreshListeners(); } }, 30000);
+setTimeout(refreshListeners, 2500);                            // after loadMe has settled
+
 /* station-art style — a single treatment across every station tile (sidebar, gallery) */
 (function () {
   const w = $("artModes"); if (!w) return;

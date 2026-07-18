@@ -248,6 +248,17 @@ function setTab(t) {
   $("view").scrollIntoView({ block: "start" });
 }
 
+/* on-demand heartbeat: radio presence is the open /stream connection, but album
+   playback pulls files directly — beat every 30s so who's-listening sees phones too */
+const AID = localStorage.getItem("jam-aid") ||
+  (localStorage.setItem("jam-aid", Math.random().toString(36).slice(2, 14)), localStorage.getItem("jam-aid"));
+function sendBeat() {
+  if (S.kind === "radio" || !S.kind || S.audio.paused) return;
+  fetch("/api/presence", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel: String(S.dir || "on-demand"), aid: AID }) }).catch(() => {});
+}
+setInterval(() => { if (!document.hidden) sendBeat(); }, 30000);
+
 /* ── render ───────────────────────────────────────────────────────────── */
 /* station placards — airport-gate call signs in flap type, same rules as desktop */
 const PLACARD = ["#A8842C","#0E7C6B","#B4552D","#3E6FB0","#7D5BA6","#4E8C4A",

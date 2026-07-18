@@ -10,7 +10,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, StreamingResponse)
 from pydantic import BaseModel
 
-from . import auth, channels, config, covers, db, dj, spot
+from . import auth, channels, config, covers, db, dj, presence, spot
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
@@ -139,11 +139,16 @@ async def stream(slug: str, request: Request):
         await client.aclose()
         raise HTTPException(code, "no such stream")
 
+    # the open connection is the listener's presence — cookie tells us who (see presence.py)
+    me = _me(request)
+    sid = presence.stream_connect(me["name"] if me else "", me["email"] if me else "", slug)
+
     async def body():
         try:
             async for chunk in upstream.aiter_raw():
                 yield chunk
         finally:
+            presence.stream_disconnect(sid)
             await upstream.aclose()
             await client.aclose()
 
@@ -359,6 +364,31 @@ def api_chat(body: ChatBody):
 
 
 # ---------------------------------------------------------------- debug
+
+class PresenceBeat(BaseModel):
+    channel: str
+    aid: str = ""      # anonymous device id from the UI, so signed-out listeners still count
+
+
+@app.post("/api/presence")
+def api_presence(body: PresenceBeat, request: Request):
+    """On-demand heartbeat. Radio needs none — the open /stream connection is the presence."""
+    me = _me(request)
+    key = me["email"] if me else "anon:" + (body.aid or request.client.host or "?")[:24]
+    presence.heartbeat(me["name"] if me else "", me["email"] if me else "",
+                       key, body.channel[:80])
+    return {"ok": True}
+
+
+@app.get("/api/listeners")
+def api_listeners(request: Request):
+    """Who's here. Members only — anonymous gets an empty room, not an error, in the same
+    spirit as the catalog: the UI simply shows nothing rather than breaking."""
+    if not _is_member(request):
+        return {"count": 0, "listeners": []}
+    ls = presence.listeners()
+    return {"count": len(ls), "listeners": ls}
+
 
 @app.get("/api/history")
 def api_history(channel: str | None = None, limit: int = 30):

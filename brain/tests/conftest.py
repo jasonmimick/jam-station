@@ -129,6 +129,8 @@ def app_env(tmp_path, monkeypatch):
     # background top-up threads from a previous test can still hold a
     # per-channel lock; start each test with a fresh lock table
     channels._topup_locks.clear()
+    from app import presence
+    presence._streams.clear(); presence._beats.clear()   # presence is process-global too
     db.init()
     channels.ensure_seeded()
     yield
