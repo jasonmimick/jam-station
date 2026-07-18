@@ -253,7 +253,7 @@ function setTab(t) {
 const PLACARD = ["#A8842C","#0E7C6B","#B4552D","#3E6FB0","#7D5BA6","#4E8C4A",
                  "#C25B78","#356E7E","#8C6A3F","#5B7444"];
 function callSign(name) {
-  const words = (name || "").split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const words = (name || "").split(/[^A-Za-z0-9]+/).filter(w => w && !/^the$/i.test(w));
   const digits = ((name || "").match(/\d+/) || [""])[0].slice(-2);
   let letters = words.filter(w => /^[A-Za-z]/.test(w)).map(w => w[0].toUpperCase()).join("");
   if (letters.length < 3 && words[0] && !digits)
