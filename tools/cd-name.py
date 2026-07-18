@@ -41,6 +41,19 @@ def toc_string(vol: str) -> str | None:
         return None
 
 
+# Album titles that mean "this is a box set / reissue compilation", not the actual album. The
+# raw-TOC lookup matches the standalone album AND any box set that reused the same disc master, and
+# MusicBrainz doesn't order them helpfully — so a disc kept landing as "The Complete Columbia Album
+# Collection" (really E.S.P.) or "The Triple Album Collection" (really The Real Thing).
+_BOXSET = ("complete", "collection", "anthology", "box set", "boxset",
+           "classic albums", "original album", "triple album", "double album", "the works")
+
+
+def _is_boxset(title: str) -> bool:
+    t = (title or "").lower()
+    return any(k in t for k in _BOXSET)
+
+
 def lookup(tocstr: str) -> tuple[str, str] | None:
     q = urllib.parse.urlencode({"toc": tocstr, "inc": "artists", "fmt": "json"})
     # discid '-' means "I have no disc id, match this raw TOC instead" — the fuzzy lookup.
@@ -53,12 +66,23 @@ def lookup(tocstr: str) -> tuple[str, str] | None:
     rels = data.get("releases") or []
     if not rels:
         return None
-    r = rels[0]                       # first match; good enough to name a folder
+
+    def media_count(r: dict) -> int:
+        m = r.get("media")
+        return len(m) if isinstance(m, list) and m else 1
+
+    # prefer a real standalone album: not a box-set title, fewest discs, then earliest release.
+    def rank(r: dict):
+        return (1 if _is_boxset(r.get("title")) else 0, media_count(r), r.get("date") or "9999")
+
+    r = sorted(rels, key=rank)[0]
+    album = (r.get("title") or "").strip()
+    # If even the best match is a box set, DON'T name it that — return nothing so the caller falls
+    # back to a dated 'Unknown' folder you can rename, instead of committing a wrong box-set name.
+    if not album or _is_boxset(album):
+        return None
     ac = r.get("artist-credit") or []
     artist = "".join(a.get("name", "") + a.get("joinphrase", "") for a in ac).strip()
-    album = (r.get("title") or "").strip()
-    if not album:
-        return None
     return artist or "Unknown Artist", album
 
 
