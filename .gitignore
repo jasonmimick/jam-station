@@ -9,3 +9,4 @@ music/*
 !music/fusion/.gitkeep
 !music/jazz/.gitkeep
 .DS_Store
+graphify-out/
