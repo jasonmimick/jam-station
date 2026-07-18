@@ -121,6 +121,9 @@ with zero credentials — the mini has real SMTP secrets set on `jam-brain`.
   stdout = dated Unknown folder. NEVER a wrong name. Test with `--toc "1+17+…"`.
 - The rip ledger (`~/.jam-ripped` on the mini) is keyed by a disc signature — a disc
   that ripped (even misnamed) will be skipped forever unless its line is removed.
+- **Folder mtime IS "date added"** (gallery sorts by it). Repair renames bump it and
+  shuffle newest-first order — after any catalog surgery, `touch -d "<rip time>"` the
+  folder back to its ledger timestamp.
 - Ripping runs on the host because containers can't see the drive; a killed rip leaves
   the disc mounted and unledgered, and the watcher retries it. Partial rips never
   reach the volume (staged in a temp dir, `docker cp` only on success).
