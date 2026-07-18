@@ -223,6 +223,22 @@
      wider than the phone and everything inside it overflows with it. */
   .pane + .pane { border-left:1px solid var(--line); }
   .pane.left, .pane.right { background:var(--panel); }
+  /* collapse either side pane to a slim labelled rail; click the rail to bring it back */
+  .pcol { width:22px; height:22px; border:1px solid var(--line); border-radius:3px; background:none;
+    color:var(--muted); cursor:pointer; font-size:11px; line-height:1; flex:0 0 auto; padding:0; }
+  .pcol:hover { color:var(--ink); border-color:var(--yellow); }
+  .rail { display:none; }
+  @media (min-width:409px){
+    .app.lc { grid-template-columns:26px 0 minmax(0,1fr) 7px var(--c2,320px); }
+    .app.rc { grid-template-columns:var(--c1,270px) 7px minmax(0,1fr) 0 26px; }
+    .app.lc.rc { grid-template-columns:26px 0 minmax(0,1fr) 0 26px; }
+    .pane.closed { cursor:pointer; overflow:hidden; }
+    .pane.closed > * { display:none; }
+    .pane.closed .rail { display:flex; align-items:center; gap:8px; padding:14px 0;
+      writing-mode:vertical-rl; font-size:10px; font-weight:800; letter-spacing:.16em;
+      text-transform:uppercase; color:var(--muted); }
+    .pane.closed:hover .rail { color:var(--yellow); }
+  }
   .ph { padding:16px 16px 10px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
   #find { margin-left:auto; width:110px; padding:5px 8px; font-size:12px; border:1px solid var(--line);
     border-radius:2px; background:var(--board); color:var(--ink); outline:none; }
@@ -480,6 +496,7 @@
       <div class="status" id="status"><span class="dot"></span><span id="statusTxt">TUNED OUT</span></div>
       <button class="icon" id="who" title="sign in" aria-label="sign in">☺</button>
       <button class="icon" id="palette" title="accent colour" aria-label="choose accent colour">◗</button>
+      <button class="icon" id="pipBtn" title="mini player" aria-label="open the mini player">⧉</button>
       <button class="icon" id="saverBtn" title="screensaver" aria-label="start the screensaver">▓</button>
       <button class="icon" id="theme" title="light / dark" aria-label="switch light or dark theme">☾</button>
       <div class="palpop" id="palPop">
@@ -528,8 +545,10 @@
       <div class="ph"><span class="lbl">Tunes</span>
         <input id="find" type="text" placeholder="Filter" autocomplete="off"
                aria-label="filter stations">
+        <button class="pcol" id="colL" title="collapse Tunes" aria-label="collapse Tunes">⟨</button>
       </div>
       <div id="stations"></div>
+      <div class="rail" aria-hidden="true">♪ Tunes</div>
     </div>
     <div class="rez" id="rez0" title="drag to resize"></div>
 
@@ -622,7 +641,10 @@
     <div class="rez" id="rez1" title="drag to resize"></div>
 
     <div class="pane right">
-      <div class="ph"><span class="lbl">The DJ</span></div>
+      <div class="ph"><span class="lbl">The DJ</span>
+        <button class="pcol" id="colR" style="margin-left:auto" title="collapse the DJ" aria-label="collapse the DJ">⟩</button>
+      </div>
+      <div class="rail" aria-hidden="true">✦ The DJ</div>
       <div id="chat">
         <div class="msg dj"><b>DJ</b>Tuned in. Pick a station on the left, or tell me what you're in the mood for — I'll dig up a tape.</div>
       </div>
@@ -1225,13 +1247,16 @@ const SAVER_IDLE_MS = 3 * 60 * 1000;
 const SAVER_MODE_MS = 40 * 1000;          // each look gets 40s, then the next takes the stage
 let svOn = false, svRAF = 0, svShownAt = 0, svIdleT = 0, svAccent = "#FFD200", svTick = 0;
 let svAn = null, svWave = null, svMode = 0, svModeAt = 0, svRot = 0;
-function saverShow() {
-  if (svOn) return;
-  initAudio(); if (!analyser) return;
-  if (!svAn) {   // a second, high-res tap off the same chain: 1024 bins + a real waveform
+function svEnsureHiRes() {   // a second, high-res tap off the same chain: 1024 bins + a real waveform
+  if (!svAn && actx && analyser) {
     svAn = actx.createAnalyser(); svAn.fftSize = 2048; analyser.connect(svAn);
     svWave = new Uint8Array(svAn.fftSize);
   }
+}
+function saverShow() {
+  if (svOn) return;
+  initAudio(); if (!analyser) return;
+  svEnsureHiRes();
   svOn = true; svShownAt = svModeAt = performance.now(); $("saver").hidden = false;
   svFrame();
 }
@@ -1313,6 +1338,86 @@ function svFrame() {
   ctx.globalAlpha = 1; ctx.shadowBlur = 0;
 }
 $("saverBtn").onclick = () => saverShow();
+
+/* ── collapsible side panes — Tunes and the DJ fold to slim labelled rails ── */
+(function () {
+  const app = document.querySelector(".app");
+  const L = document.querySelector(".pane.left"), R = document.querySelector(".pane.right");
+  let st = {};
+  try { st = JSON.parse(localStorage.getItem("jam-panes") || "{}"); } catch {}
+  function apply() {
+    app.classList.toggle("lc", !!st.l); L.classList.toggle("closed", !!st.l);
+    app.classList.toggle("rc", !!st.r); R.classList.toggle("closed", !!st.r);
+    localStorage.setItem("jam-panes", JSON.stringify(st));
+  }
+  $("colL").onclick = (e) => { e.stopPropagation(); st.l = 1; apply(); };
+  $("colR").onclick = (e) => { e.stopPropagation(); st.r = 1; apply(); };
+  L.addEventListener("click", () => { if (st.l) { st.l = 0; apply(); } });
+  R.addEventListener("click", () => { if (st.r) { st.r = 0; apply(); } });
+  apply();
+})();
+
+/* ── mini player — a small floating always-on-top window (Document PiP), with the
+   now-playing and a pocket version of whichever screensaver look is picked. The
+   canvas loop runs on the PIP window's rAF: it stays visible (that's its whole job)
+   while this tab may be buried, where our own rAF would throttle to nothing. ── */
+let pipWin = null, pipTick = 0;
+async function openPip() {
+  if (!("documentPictureInPicture" in window)) {
+    alert("The mini player needs Chrome or Edge (Document Picture-in-Picture). Tip: the OS media keys and lock-screen widget already work everywhere via MediaSession.");
+    return;
+  }
+  if (pipWin) { pipWin.close(); return; }   // the button toggles
+  initAudio(); svEnsureHiRes();
+  let w;
+  try { w = await documentPictureInPicture.requestWindow({ width: 380, height: 172 }); }
+  catch { return; }
+  pipWin = w;
+  w.document.body.style.cssText = "margin:0;background:#0a0a0c;overflow:hidden;" +
+    "font-family:-apple-system,system-ui,sans-serif;-webkit-user-select:none;user-select:none";
+  const btn = "background:none;border:1px solid #3a3a42;border-radius:4px;color:#e8e8e4;" +
+    "cursor:pointer;font-size:13px;padding:4px 10px;line-height:1.2";
+  w.document.body.innerHTML =
+    `<canvas id="pViz" style="position:fixed;inset:0;width:100%;height:100%"></canvas>` +
+    `<div style="position:fixed;inset:0;display:flex;flex-direction:column;justify-content:flex-end;` +
+      `padding:11px 13px;background:linear-gradient(180deg,transparent 30%,#000c)">` +
+      `<div id="pTitle" style="font-weight:700;font-size:15px;color:#F2F2EE;white-space:nowrap;` +
+        `overflow:hidden;text-overflow:ellipsis"></div>` +
+      `<div id="pSub" style="font-weight:600;font-size:10px;color:#9a9aa2;letter-spacing:.12em;` +
+        `text-transform:uppercase;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>` +
+      `<div style="display:flex;gap:8px;margin-top:9px">` +
+        `<button id="pPrev" style="${btn}">⏮</button>` +
+        `<button id="pPlay" style="${btn};min-width:44px">▶</button>` +
+        `<button id="pNext" style="${btn}">⏭</button>` +
+      `</div></div>`;
+  // the pip buttons just press the board's own buttons — every mode rule stays in one place
+  w.document.getElementById("pPrev").onclick = () => $("prev").click();
+  w.document.getElementById("pPlay").onclick = () => $("play").click();
+  w.document.getElementById("pNext").onclick = () => $("next").click();
+  w.addEventListener("pagehide", () => { pipWin = null; });
+  (function pipFrame() {
+    if (!pipWin) return;
+    w.requestAnimationFrame(pipFrame);
+    const c = w.document.getElementById("pViz"); if (!c) return;
+    if (c.width !== c.clientWidth || c.height !== c.clientHeight) { c.width = c.clientWidth; c.height = c.clientHeight; }
+    const ctx = c.getContext("2d");
+    if (!(pipTick++ % 15)) {
+      const now = performance.now();
+      if (svPick === "rotate" && now - svModeAt > SAVER_MODE_MS) { svMode = (svMode + 1) % SV_MODES.length; svModeAt = now; }
+      const t = currentTrack() || {}, ch = S.channel ? chName(S.channel) : "";
+      w.document.getElementById("pTitle").textContent = t.title || ch || "jam-station";
+      w.document.getElementById("pSub").textContent = [t.artist, ch].filter(Boolean).join("  ·  ");
+      w.document.getElementById("pPlay").textContent = $("play").textContent;
+      svAccent = getComputedStyle(document.documentElement).getPropertyValue("--yellow").trim() || "#FFD200";
+    }
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (!analyser) return;
+    ctx.fillStyle = ctx.strokeStyle = ctx.shadowColor = svAccent; ctx.shadowBlur = 12;
+    (svAn ? SV_MODES[svMode] : svBars)(ctx, c);
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  })();
+}
+$("pipBtn").onclick = () => openPip();
 ["pointermove", "pointerdown", "keydown"].forEach(ev =>
   addEventListener(ev, () => {
     if (svOn && performance.now() - svShownAt > 400) saverHide();
