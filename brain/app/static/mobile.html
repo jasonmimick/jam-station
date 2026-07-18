@@ -249,6 +249,31 @@ function setTab(t) {
 }
 
 /* ── render ───────────────────────────────────────────────────────────── */
+/* station placards — airport-gate call signs in flap type, same rules as desktop */
+const PLACARD = ["#A8842C","#0E7C6B","#B4552D","#3E6FB0","#7D5BA6","#4E8C4A",
+                 "#C25B78","#356E7E","#8C6A3F","#5B7444"];
+function callSign(name) {
+  const words = (name || "").split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const digits = ((name || "").match(/\d+/) || [""])[0].slice(-2);
+  let letters = words.filter(w => /^[A-Za-z]/.test(w)).map(w => w[0].toUpperCase()).join("");
+  if (letters.length < 3 && words[0] && !digits)
+    letters = (words.join("")).replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase();
+  return ((letters + digits).slice(0, 4)) || "JAM";
+}
+function stationArt(name) {
+  let h = 0; for (const c of (name || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const sign = callSign(name);
+  const fs = sign.length >= 4 ? 54 : sign.length === 3 ? 66 : 78;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">` +
+    `<rect width="200" height="200" fill="${PLACARD[h % PLACARD.length]}"/>` +
+    `<rect width="200" height="100" fill="#fff" opacity=".07"/>` +
+    `<text x="100" y="100" text-anchor="middle" dominant-baseline="central" ` +
+    `font-family="Helvetica Neue,Arial,sans-serif" font-weight="800" font-size="${fs}" ` +
+    `letter-spacing="2" fill="#F6F3EA">${sign}</text>` +
+    `<rect y="99" width="200" height="2" fill="#000" opacity=".38"/>` +
+    `<rect y="101" width="200" height="1" fill="#fff" opacity=".08"/></svg>`;
+  return "data:image/svg+xml," + encodeURIComponent(svg);
+}
 function tonal(name) {
   let h = 0; for (const c of (name || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const hue = h % 360, m = (name || "").match(/[A-Za-z0-9]/);
@@ -304,7 +329,7 @@ function items() {
     let a = S.stations.filter(c => c.playable !== false);
     if (q) a = a.filter(c => (c.name + " " + (c.description || "")).toLowerCase().includes(q));
     return a.map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio",
-                         cover: "", nameForTone: c.name, playing: S.kind === "radio" && S.slug === c.slug }));
+                         cover: stationArt(c.name), nameForTone: c.name, playing: S.kind === "radio" && S.slug === c.slug }));
   }
   if (S.tab === "cds") {
     let a = S.albums;

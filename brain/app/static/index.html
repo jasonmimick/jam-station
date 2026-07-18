@@ -1941,6 +1941,37 @@ buildFlaps(); buildEq();
   wire("rez1", "--c2", -1, 200, 560, 320);   // right handle sizes the DJ column
 })();
 
+/* ── station placards: airport-gate call signs, not random monograms ────────
+   Every channel gets a deterministic gate placard — a 2-4 letter call sign in
+   flap type, bisected by the split-flap seam, on a colour from a curated signage
+   palette. DJ-created channels get one for free; no artwork to maintain. */
+const PLACARD = ["#A8842C","#0E7C6B","#B4552D","#3E6FB0","#7D5BA6","#4E8C4A",
+                 "#C25B78","#356E7E","#8C6A3F","#5B7444"];
+function callSign(name) {
+  const words = (name || "").split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const digits = ((name || "").match(/\d+/) || [""])[0].slice(-2);
+  let letters = words.filter(w => /^[A-Za-z]/.test(w)).map(w => w[0].toUpperCase()).join("");
+  if (letters.length < 3 && words[0] && !digits)
+    letters = (words.join("")).replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase();
+  return ((letters + digits).slice(0, 4)) || "JAM";
+}
+function stationArt(name) {
+  let h = 0; for (const c of (name || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const sign = callSign(name);
+  const fs = sign.length >= 4 ? 54 : sign.length === 3 ? 66 : 78;
+  // no single quotes anywhere in this SVG: encodeURIComponent leaves them alone
+  // and the data URI lands inside url('...') in a style attribute.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">` +
+    `<rect width="200" height="200" fill="${PLACARD[h % PLACARD.length]}"/>` +
+    `<rect width="200" height="100" fill="#fff" opacity=".07"/>` +
+    `<text x="100" y="100" text-anchor="middle" dominant-baseline="central" ` +
+    `font-family="Helvetica Neue,Arial,sans-serif" font-weight="800" font-size="${fs}" ` +
+    `letter-spacing="2" fill="#F6F3EA">${sign}</text>` +
+    `<rect y="99" width="200" height="2" fill="#000" opacity=".38"/>` +
+    `<rect y="101" width="200" height="1" fill="#fff" opacity=".08"/></svg>`;
+  return "data:image/svg+xml," + encodeURIComponent(svg);
+}
+
 /* ── the collection: a full grid of album covers ─────────────────────────── */
 function albBg(al) {   // {bg, mono} for a cover — real art if we have it, else a tonal tile
   // SINGLE quotes inside url(): this goes into a double-quoted style="" attribute, so double
@@ -1972,7 +2003,8 @@ function setDtab(t, flashSpot) {
 }
 function deskItems() {
   if (dtab === "stations") return (S.channels || []).filter(c => c.playable !== false)
-    .map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio", cover: "",
+    .map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio",
+                 cover: stationArt(c.name),
                  sortArtist: (c.name || "").toLowerCase(), sortAlbum: (c.name || "").toLowerCase(), mtime: 0, tracks: 0 }));
   return (S.albums || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
     sub: (al.artist || "—") + (al.year ? " · " + al.year : ""), cover: al.cover_url || "",
