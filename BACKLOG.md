@@ -55,6 +55,11 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Ideas
 
+- [ ] **Stylize the station photos** (Jason, 2026-07-18 — idea only, don't build yet):
+      run the channel-art photos through a unifying treatment so the wall reads as one
+      set — e.g. inverted, duotone/tinted toward the accent, or black-and-white with a
+      colour wash. Could be a CSS filter per tile (cheap, reversible, theme-aware) or
+      baked into the JPGs at curation time. Play with it later.
 - [ ] Branching workflows for the DJ (queue a whole set, not one show).
 - [ ] "Surprise me" — random station.
 - [ ] Favourites → export as a playlist / share a list.

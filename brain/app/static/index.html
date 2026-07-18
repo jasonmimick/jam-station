@@ -2004,7 +2004,7 @@ function setDtab(t, flashSpot) {
 function deskItems() {
   if (dtab === "stations") return (S.channels || []).filter(c => c.playable !== false)
     .map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio",
-                 cover: stationArt(c.name),
+                 cover: c.art_url || stationArt(c.name),
                  sortArtist: (c.name || "").toLowerCase(), sortAlbum: (c.name || "").toLowerCase(), mtime: 0, tracks: 0 }));
   return (S.albums || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
     sub: (al.artist || "—") + (al.year ? " · " + al.year : ""), cover: al.cover_url || "",

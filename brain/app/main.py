@@ -66,6 +66,20 @@ def icon(size: str):
     return FileResponse(os.path.join(STATIC, f"icon-{size}.png"), media_type="image/png")
 
 
+@app.get("/stations/{slug}.jpg")
+def station_photo(slug: str):
+    """Channel art: a curated photo per station (static/stations/<slug>.jpg). Public like
+    the icons — a picture of a banjo gates nothing. Slugs come from our own db, but the
+    path is caller-supplied, so refuse anything that isn't a plain slug."""
+    if not re.fullmatch(r"[a-z0-9-]+", slug or ""):
+        raise HTTPException(404, "no such station art")
+    p = os.path.join(STATIC, "stations", f"{slug}.jpg")
+    if not os.path.exists(p):
+        raise HTTPException(404, "no such station art")
+    return FileResponse(p, media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
 # Same-origin proxy for the icecast mounts. icecast is a separate slab app on
 # its own origin, so a browser served this page can't reach it directly (esp.
 # through a tunnel). Streaming it through here means one hostname serves both
@@ -142,6 +156,9 @@ async def stream(slug: str, request: Request):
 @app.get("/api/channels")
 def api_channels(request: Request):
     chans = channels.list_channels()
+    for c in chans:   # curated photo, if one exists — the UI falls back to a placard
+        if os.path.exists(os.path.join(STATIC, "stations", f"{c['slug']}.jpg")):
+            c["art_url"] = f"/stations/{c['slug']}.jpg"
     if _is_member(request):
         return chans
     return [c for c in chans if not c["private"]]   # your CDs aren't on the public dial

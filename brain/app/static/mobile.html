@@ -329,7 +329,7 @@ function items() {
     let a = S.stations.filter(c => c.playable !== false);
     if (q) a = a.filter(c => (c.name + " " + (c.description || "")).toLowerCase().includes(q));
     return a.map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio",
-                         cover: stationArt(c.name), nameForTone: c.name, playing: S.kind === "radio" && S.slug === c.slug }));
+                         cover: c.art_url || stationArt(c.name), nameForTone: c.name, playing: S.kind === "radio" && S.slug === c.slug }));
   }
   if (S.tab === "cds") {
     let a = S.albums;
