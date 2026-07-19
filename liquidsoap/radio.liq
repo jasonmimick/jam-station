@@ -98,6 +98,11 @@ def watch_channels() =
   body = string.trim("#{resp}")
   if body != "" and body != chan_body then
     log("jam-station: channel list changed — restarting to open the new mounts")
+    # BACKSTOP: shutdown() waits for every source thread, and a wedged icecast
+    # connection can make that wait forever — it hung 2026-07-19 and took the whole
+    # station off air until a human force-restarted the container. If the graceful
+    # path hasn't finished in 15s, exit hard; the supervisor restarts us either way.
+    thread.run(delay=15., fun () -> exit(1))
     shutdown(code=1)
   end
 end
