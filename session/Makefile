@@ -17,22 +17,26 @@ ios-sim:
 	xcrun simctl install "$(SIM)" ios/build/Build/Products/Debug-iphonesimulator/Session.app
 	xcrun simctl launch "$(SIM)" $(BUNDLE)
 
-# build + install onto the real iPhone (must be plugged in / on wifi-pairing)
-ios-phone:
+# Device installs build against the GENERIC iOS destination — xcodebuild's
+# per-device discovery flakes when the phone naps, and a `| tail` pipe once
+# masked a failed build so devicectl kept re-installing a stale bundle.
+# Fail loudly, then verify with the device's own app listing.
+ios-build:
 	cd ios && xcodegen generate -q && xcodebuild -project SessioniOS.xcodeproj \
-	  -scheme Session -destination 'platform=iOS,id=$(PHONE)' \
-	  -destination-timeout 120 -allowProvisioningUpdates \
-	  -derivedDataPath build build | tail -1
-	xcrun devicectl device install app --device $(PHONE) \
-	  ios/build/Build/Products/Debug-iphoneos/Session.app | tail -1
+	  -scheme Session -destination 'generic/platform=iOS' \
+	  -allowProvisioningUpdates -derivedDataPath build -quiet build
 
-ios-ipad:
-	cd ios && xcodegen generate -q && xcodebuild -project SessioniOS.xcodeproj \
-	  -scheme Session -destination 'platform=iOS,id=$(IPAD)' \
-	  -destination-timeout 120 -allowProvisioningUpdates \
-	  -derivedDataPath build build | tail -1
+ios-phone: ios-build
+	xcrun devicectl device install app --device $(PHONE) \
+	  ios/build/Build/Products/Debug-iphoneos/Session.app | grep -E "App installed" \
+	  || (echo "INSTALL FAILED — is the phone unlocked / plugged in?" && false)
+	@xcrun devicectl device info apps --device $(PHONE) | grep -i "^Session " || true
+
+ios-ipad: ios-build
 	xcrun devicectl device install app --device $(IPAD) \
-	  ios/build/Build/Products/Debug-iphoneos/Session.app | tail -1
+	  ios/build/Build/Products/Debug-iphoneos/Session.app | grep -E "App installed" \
+	  || (echo "INSTALL FAILED — is the iPad unlocked / plugged in?" && false)
+	@xcrun devicectl device info apps --device $(IPAD) | grep -i "^Session " || true
 
 mac:
 	swift build -c release
