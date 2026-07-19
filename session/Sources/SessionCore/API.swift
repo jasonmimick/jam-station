@@ -105,6 +105,26 @@ public struct StationAPI {
         _ = try? await post("api/favourites/remove", json: ["url": url])
     }
 
+    // ── spot: photograph music in the wild ──
+
+    public func spot(jpeg: Data) async throws -> SpotResult {
+        let boundary = "session-spot-\(UUID().uuidString)"
+        var req = URLRequest(url: base.appendingPathComponent("api/spot"))
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"spot.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".utf8))
+        body.append(jpeg)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        req.httpBody = body
+        req.timeoutInterval = 90        // the vision call takes its time
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SpotResult.self, from: data)
+    }
+
     // ── the play log ──
 
     public func history(limit: Int = 40) async throws -> [HistoryRow] {

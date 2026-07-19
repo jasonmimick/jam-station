@@ -167,6 +167,32 @@ public struct HistoryRow: Decodable, Equatable, Identifiable {
     }
 }
 
+public struct SpotResult: Decodable, Equatable, Identifiable {
+    public let id: Int
+    public let status: String       // matched | wishlist | unknown
+    public let artist: String
+    public let title: String
+    public let album: String
+    public let links: [String: String]
+    public let matchedDir: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, status, artist, title, album, links
+        case matchedDir = "matched_dir"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(Int.self, forKey: .id)) ?? 0
+        status = (try? c.decode(String.self, forKey: .status)) ?? "unknown"
+        artist = (try? c.decode(String.self, forKey: .artist)) ?? ""
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        album = (try? c.decode(String.self, forKey: .album)) ?? ""
+        links = (try? c.decode([String: String].self, forKey: .links)) ?? [:]
+        matchedDir = (try? c.decode(String.self, forKey: .matchedDir)) ?? ""
+    }
+}
+
 public struct RipStatus: Decodable, Equatable {
     public let state: String
     public let album: String

@@ -213,6 +213,7 @@ struct ShelfTab: View {
                 .padding(.horizontal, 14).padding(.bottom, 10)
             }
             if player.member != nil {
+                SpotButton(t: t)
                 FindField(text: $find, prompt: "search the shelf", t: t)
             }
             if player.member == nil {
