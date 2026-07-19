@@ -14,12 +14,28 @@ struct RootView: View {
                          dance: dance && player.status == .playing ? player.dancePhase : nil)
     }
 
+    /// Robust sheet opener. A sheet presented while a context menu (or a prior
+    /// dismissal) is mid-animation gets silently dropped — but the flag stays
+    /// true, leaving an invisible sheet that eats every touch. Reset-then-present
+    /// heals the stuck state instead of re-asserting it.
+    func openPlayer() {
+        if showPlayer {
+            showPlayer = false
+            Task {
+                try? await Task.sleep(for: .milliseconds(120))
+                showPlayer = true
+            }
+        } else {
+            showPlayer = true
+        }
+    }
+
     /// Pre-26 fallback: the pill lives INSIDE each tab, above the tab bar —
     /// a screen-level inset covers the tab buttons.
     @ViewBuilder func withMini<V: View>(_ v: V) -> some View {
         v.safeAreaInset(edge: .bottom) {
             if player.status != .idle {
-                MiniPlayer(t: t) { showPlayer = true }
+                MiniPlayer(t: t) { openPlayer() }
             }
         }
     }
@@ -29,23 +45,23 @@ struct RootView: View {
             if #available(iOS 26.0, *) {
                 // the native mini-player slot above the tab bar (what Music uses)
                 TabView {
-                    TunerTab(t: t, openPlayer: { showPlayer = true })
+                    TunerTab(t: t, openPlayer: openPlayer)
                         .tabItem { Label("Tuner", systemImage: "dial.medium") }
-                    ShelfTab(t: t, openPlayer: { showPlayer = true })
+                    ShelfTab(t: t, openPlayer: openPlayer)
                         .tabItem { Label("Shelf", systemImage: "square.stack") }
                     YouTab(t: t)
                         .tabItem { Label("You", systemImage: "circle.circle") }
                 }
                 .tabViewBottomAccessory {
                     if player.status != .idle {
-                        MiniPlayer(t: t, bare: true) { showPlayer = true }
+                        MiniPlayer(t: t, bare: true) { openPlayer() }
                     }
                 }
             } else {
                 TabView {
-                    withMini(TunerTab(t: t, openPlayer: { showPlayer = true }))
+                    withMini(TunerTab(t: t, openPlayer: openPlayer))
                         .tabItem { Label("Tuner", systemImage: "dial.medium") }
-                    withMini(ShelfTab(t: t, openPlayer: { showPlayer = true }))
+                    withMini(ShelfTab(t: t, openPlayer: openPlayer))
                         .tabItem { Label("Shelf", systemImage: "square.stack") }
                     withMini(YouTab(t: t))
                         .tabItem { Label("You", systemImage: "circle.circle") }
@@ -401,17 +417,26 @@ struct ChannelPeekModifier: ViewModifier {
     let t: IOSTheme
     let openPlayer: () -> Void
 
+    /// A sheet presented while the context menu is still dismissing gets
+    /// dropped by UIKit — wait out the menu's exit animation first.
+    func openLater() {
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            openPlayer()
+        }
+    }
+
     func body(content: Content) -> some View {
         content.contextMenu {
             Button {
                 tapHaptic()
                 player.tune(ch)
-                openPlayer()
+                openLater()
             } label: { Label("Tune in — Radio", systemImage: "dot.radiowaves.left.and.right") }
             Button {
                 tapHaptic()
                 player.playTape(ch)
-                openPlayer()
+                openLater()
             } label: { Label("Play this tape", systemImage: "recordingtape") }
         } preview: {
             ChannelPeek(ch: ch, t: t)
