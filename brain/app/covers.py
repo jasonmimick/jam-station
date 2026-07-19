@@ -111,15 +111,34 @@ def _has_generic(folder: str) -> bool:
         return False
 
 
-def _tracklist(mbid: str) -> dict:
+def _tracklist(mbid: str, folder: str) -> dict:
     """{position: title} from the release's recordings — the real song names MusicBrainz has
-    even when macOS labelled every track 'Audio Track'."""
+    even when macOS labelled every track 'Audio Track'.
+
+    Multi-disc releases repeat positions 1..N on EVERY medium, and 'first medium wins' once
+    named an entire disc 2 with disc 1's songs. So when there's more than one medium, pick
+    the one whose track lengths actually line up with the files on disk (256k CBR makes a
+    file's duration size*8/256000 to ~0.1s). No medium fits the file count -> first medium,
+    the old behaviour."""
     try:
         data = json.load(_get(f"https://musicbrainz.org/ws/2/release/{mbid}?inc=recordings&fmt=json"))
     except Exception:
         return {}
+    media = data.get("media") or []
+    if len(media) > 1:
+        durs = [os.path.getsize(os.path.join(folder, f)) * 8 / 256000
+                for f in sorted(os.listdir(folder)) if f.lower().endswith(".mp3")]
+
+        def misfit(m: dict) -> float:
+            lens = [(t.get("length") or 0) / 1000 for t in m.get("tracks", [])]
+            if len(lens) != len(durs) or not all(lens):
+                return float("inf")
+            return sum(abs(a - b) for a, b in zip(lens, durs))
+
+        best = min(media, key=misfit)
+        media = [best] if misfit(best) != float("inf") else media[:1]
     titles = {}
-    for medium in data.get("media", []):
+    for medium in media:
         for t in medium.get("tracks", []):
             try:
                 pos = int(t.get("position") or t.get("number"))
@@ -153,6 +172,12 @@ def _retitle(folder: str, titles: dict) -> None:
 def _enrich_one(folder: str, name: str) -> None:
     meta_p = os.path.join(folder, "_album.json")
     cover_p = os.path.join(folder, "_cover.jpg")
+    # Folder mtime IS "date added" in the gallery — enrichment writing art/renaming tracks
+    # must not bump a week-old album to the top of "recently added". Save it, restore it.
+    try:
+        folder_mtime = os.stat(folder).st_mtime
+    except OSError:
+        folder_mtime = None
     try:
         meta = json.load(open(meta_p)) if os.path.exists(meta_p) else {}
     except Exception:
@@ -181,7 +206,7 @@ def _enrich_one(folder: str, name: str) -> None:
         meta["itunes"] = True
         time.sleep(0.3)
     if meta.get("mbid") and _has_generic(folder):     # give the tracks their real names
-        titles = _tracklist(meta["mbid"])
+        titles = _tracklist(meta["mbid"], folder)
         time.sleep(1.1)
         if titles:
             _retitle(folder, titles)
@@ -193,6 +218,11 @@ def _enrich_one(folder: str, name: str) -> None:
         os.replace(meta_p + ".tmp", meta_p)
     except Exception:
         pass
+    if folder_mtime is not None:
+        try:
+            os.utime(folder, (folder_mtime, folder_mtime))
+        except OSError:
+            pass
 
 
 def _enrich_all() -> None:
