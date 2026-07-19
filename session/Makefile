@@ -40,6 +40,8 @@ mac:
 	mkdir -p $(APP)/Contents/MacOS
 	cp .build/release/SessionMac $(APP)/Contents/MacOS/Session
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
+	mkdir -p $(APP)/Contents/Resources
+	cp Resources/Session.icns $(APP)/Contents/Resources/Session.icns
 	codesign --force --sign - $(APP)
 
 run: mac
