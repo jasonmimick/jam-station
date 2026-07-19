@@ -57,6 +57,51 @@ def _search_release(artist: str, album: str) -> dict | None:
     return {"mbid": r.get("id"), "year": (r.get("date") or "")[:4]}
 
 
+# ── genres: coarse, owner-curated buckets ────────────────────────────────
+# MusicBrainz speaks in dozens of fine-grained tags; the shelf speaks in a
+# record-store's worth of sections. Tags map DOWN into buckets here; the owner
+# can overwrite any album's genres (any label at all) via /api/library/genre,
+# and an owner-set value is never touched again (genres_owner in _album.json).
+BUCKETS = [
+    ("Jazz",       ("jazz", "bebop", "bop", "swing", "big band", "fusion")),
+    ("Blues",      ("blues",)),
+    ("Classical",  ("classical", "baroque", "romantic era", "opera", "symphony", "chamber")),
+    ("Rock",       ("rock", "punk", "metal", "grunge", "psychedelic", "new wave", "indie")),
+    ("Folk",       ("folk", "singer-songwriter", "americana", "bluegrass", "newgrass")),
+    ("Country",    ("country",)),
+    ("Soul/Funk",  ("soul", "funk", "r&b", "rhythm and blues", "motown", "disco")),
+    ("Hip-Hop",    ("hip hop", "hip-hop", "rap")),
+    ("Electronic", ("electronic", "techno", "house", "ambient", "downtempo", "trip hop")),
+    ("Reggae",     ("reggae", "ska", "dub")),
+    ("World",      ("world", "latin", "afrobeat", "klezmer", "gamelan", "celtic", "flamenco")),
+    ("Pop",        ("pop",)),
+]
+
+
+def bucketize(tags: list[str]) -> list[str]:
+    """Fine tags -> coarse shelf sections, order of first match, deduped."""
+    out = []
+    for tag in tags:
+        t = (tag or "").lower()
+        for bucket, needles in BUCKETS:
+            if any(n in t for n in needles) and bucket not in out:
+                out.append(bucket)
+    return out[:3]                                   # a record lives in a few sections, not ten
+
+
+def _genres(mbid: str) -> list[str]:
+    """The release's genre/tag names from MusicBrainz, bucketized. Best-effort."""
+    try:
+        data = json.load(_get(
+            f"https://musicbrainz.org/ws/2/release/{mbid}?inc=genres+tags&fmt=json"))
+    except Exception:
+        return []
+    names = [g.get("name", "") for g in (data.get("genres") or [])]
+    names += [t.get("name", "") for t in sorted(
+        data.get("tags") or [], key=lambda t: -(t.get("count") or 0))]
+    return bucketize(names)
+
+
 def _fetch_cover(mbid: str, dest: str) -> bool:
     # CAA redirects to the actual image on archive.org; urllib follows it.
     for size in ("front-500", "front"):
@@ -182,9 +227,10 @@ def _enrich_one(folder: str, name: str) -> None:
         meta = json.load(open(meta_p)) if os.path.exists(meta_p) else {}
     except Exception:
         meta = {}
-    # skip only when nothing's left to do: cover in hand (or unmatchable) AND no generic titles
+    # skip only when nothing's left to do: cover in hand (or unmatchable), no generic
+    # titles, AND genres resolved (the key existing at all counts — [] means "asked, none")
     cover_done = os.path.exists(cover_p) or meta.get("itunes")   # a cover in hand, or both sources tried
-    if meta.get("tried") and cover_done and not _has_generic(folder):
+    if meta.get("tried") and cover_done and not _has_generic(folder) and "genres" in meta:
         return
 
     artist, album = meta.get("artist"), meta.get("album")
@@ -205,6 +251,10 @@ def _enrich_one(folder: str, name: str) -> None:
         _itunes_cover(artist, album, cover_p)
         meta["itunes"] = True
         time.sleep(0.3)
+    if "genres" not in meta:                          # owner-set genres always carry the key
+        meta["genres"] = _genres(meta["mbid"]) if meta.get("mbid") else []
+        if meta.get("mbid"):
+            time.sleep(1.1)                           # MusicBrainz rate limit
     if meta.get("mbid") and _has_generic(folder):     # give the tracks their real names
         titles = _tracklist(meta["mbid"], folder)
         time.sleep(1.1)

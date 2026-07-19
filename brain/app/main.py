@@ -286,6 +286,45 @@ def api_library_album(request: Request, dir: str):
             "tracks": tracks, "playing": -1}
 
 
+@app.get("/api/library/genres")
+def api_library_genres(request: Request):
+    """The shelf's sections, biggest first. [] for anonymous, same spirit as the catalog."""
+    from .adapters import library
+    if not _is_member(request):
+        return []
+    return library.genre_counts()
+
+
+@app.get("/api/library/mix")
+def api_library_mix(request: Request, genre: str, count: int = 30):
+    """A shuffled tracklist across every album in a section — 'a jazz mix from the shelf'.
+    Show-shaped, so every client plays it through the on-demand machinery it already has."""
+    from .adapters import library
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    tracks = library.build_mix(genre, count)
+    if not tracks:
+        raise HTTPException(404, f"nothing on the shelf under {genre!r}")
+    return {"channel": "mix", "album": f"{genre} Mix", "artist": "the shelf",
+            "tracks": tracks, "playing": -1}
+
+
+class GenreSet(BaseModel):
+    dir: str
+    genres: list[str] = []
+
+
+@app.post("/api/library/genre")
+def api_library_set_genre(body: GenreSet, request: Request):
+    """Owner curation: pin an album's sections (any labels — the buckets are yours)."""
+    from .adapters import library
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    if not library.set_genres(body.dir, body.genres):
+        raise HTTPException(404, "no such album")
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------- spot (photo -> music)
 
 @app.post("/api/spot")

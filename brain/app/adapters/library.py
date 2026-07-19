@@ -26,6 +26,8 @@ def _folder_extra(folder_abs: str, rel_dir: str) -> dict:
                 extra["year"] = m["year"]
             if m.get("mbid"):
                 extra["learn_url"] = "https://musicbrainz.org/release/" + m["mbid"]
+            if m.get("genres") is not None:
+                extra["genres"] = m["genres"]
     except Exception:
         pass
     if os.path.exists(os.path.join(folder_abs, "_cover.jpg")):
@@ -129,3 +131,67 @@ def album_tracks(rel_dir: str) -> list[dict]:
     files = sorted(f for f in os.listdir(full) if f.lower().endswith(config.AUDIO_EXTENSIONS))
     extra = _folder_extra(full, os.path.relpath(full, base))     # year/cover/learn on every track
     return [{**_meta(os.path.join(full, f)), **extra} for f in files]
+
+
+# ── genres: the shelf's sections ─────────────────────────────────────────
+
+def genre_counts() -> list[dict]:
+    """The sections that exist on this shelf, biggest first — whatever the
+    enricher mapped plus whatever the owner curated. Buckets emerge from the
+    records; there is no registry to maintain."""
+    counts: dict[str, int] = {}
+    for alb in list_albums():
+        for g in alb.get("genres") or []:
+            counts[g] = counts.get(g, 0) + 1
+    return [{"name": g, "count": n}
+            for g, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def build_mix(genre: str, count: int = 30) -> list[dict]:
+    """A shuffled tracklist across every album in a section — 'a jazz mix from
+    the shelf'. Show-shaped by the caller, so every client plays it through the
+    machinery it already has."""
+    import random
+    want = (genre or "").strip().lower()
+    tracks: list[dict] = []
+    for alb in list_albums():
+        if any((g or "").lower() == want for g in alb.get("genres") or []):
+            tracks.extend(album_tracks(alb["dir"]))
+    random.shuffle(tracks)
+    return tracks[:max(1, min(count, 100))]
+
+
+def set_genres(rel_dir: str, genres: list[str]) -> bool:
+    """Owner curation: pin an album's sections (any labels at all). Marks the
+    record owner-set so the enricher never second-guesses it. Folder mtime IS
+    'date added' — writing the sidecar must not bump the gallery order."""
+    base = os.path.realpath(config.MUSIC_DIR)
+    full = os.path.realpath(os.path.join(base, rel_dir))
+    if full != base and not full.startswith(base + os.sep):
+        return False
+    if not os.path.isdir(full):
+        return False
+    clean = [g.strip() for g in genres if g and g.strip()][:5]
+    meta_p = os.path.join(full, "_album.json")
+    try:
+        folder_mtime = os.stat(full).st_mtime
+    except OSError:
+        folder_mtime = None
+    try:
+        meta = json.load(open(meta_p)) if os.path.exists(meta_p) else {}
+    except Exception:
+        meta = {}
+    meta["genres"] = clean
+    meta["genres_owner"] = True
+    try:
+        with open(meta_p + ".tmp", "w") as f:
+            json.dump(meta, f)
+        os.replace(meta_p + ".tmp", meta_p)
+    except Exception:
+        return False
+    if folder_mtime is not None:
+        try:
+            os.utime(full, (folder_mtime, folder_mtime))
+        except OSError:
+            pass
+    return True
