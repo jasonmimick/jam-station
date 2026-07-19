@@ -1,9 +1,11 @@
 import SwiftUI
 import SessionCore
 
-/// Tab routing — so the SESSION mark in any header can take you home.
+/// Tab routing + player-panel state. Lives in an observable so views in
+/// separate hosting contexts (the tab-bar accessory) reliably drive it.
 final class Nav: ObservableObject {
     @Published var tab = "home"
+    @Published var playerOpen = false
 }
 
 struct RootView: View {
@@ -13,7 +15,6 @@ struct RootView: View {
     @AppStorage("accent") var accentHex = "#FFD200"
     @AppStorage("theme") var themePref = "auto"
     @AppStorage("dance") var dance = false
-    @State private var showPlayer = false
 
     var t: IOSTheme {
         IOSTheme.current(scheme, accentHex: accentHex,
@@ -25,11 +26,11 @@ struct RootView: View {
     /// the UIKit layer (Apple forums 709354, 692338); an overlay has no
     /// presentation machinery to desync — open/close is just state.
     func openPlayer() {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { showPlayer = true }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { nav.playerOpen = true }
     }
 
     func closePlayer() {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { showPlayer = false }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { nav.playerOpen = false }
     }
 
     /// Pre-26 fallback: the pill lives INSIDE each tab, above the tab bar —
@@ -77,7 +78,7 @@ struct RootView: View {
         .environmentObject(nav)
         .tint(t.accent)
         .overlay {
-            if showPlayer {
+            if nav.playerOpen {
                 PlayerSheet(t: t, close: closePlayer)
                     .transition(.move(edge: .bottom))
                     .zIndex(10)

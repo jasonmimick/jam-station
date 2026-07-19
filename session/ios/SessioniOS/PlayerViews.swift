@@ -31,44 +31,45 @@ struct MiniPlayer: View {
     let open: () -> Void
 
     var body: some View {
-        Button(action: open) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8).fill(t.sunk)
-                    Text(String((player.now.title.isEmpty
-                                 ? (player.current?.name ?? "♪") : player.now.title).prefix(1)))
-                        .font(.system(size: 16, weight: .light)).foregroundStyle(.white)
-                }
-                .frame(width: 40, height: 40)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(player.now.title.isEmpty ? (player.current?.name ?? "Tune in")
-                                                  : player.now.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(t.ink).lineLimit(1)
-                    Text(player.now.artist)
-                        .font(.system(size: 11)).foregroundStyle(t.muted).lineLimit(1)
-                }
-                Spacer()
-                Button {
-                    player.toggle()
-                } label: {
-                    Text(player.isPlaying ? "❚❚" : "▶")
-                        .font(.system(size: 14, weight: .bold))
-                        .frame(width: 40, height: 40)
-                        .background(Circle().fill(t.accent))
-                        .foregroundStyle(t.onAccent)
-                }
-                .buttonStyle(.plain)
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(t.sunk)
+                Text(String((player.now.title.isEmpty
+                             ? (player.current?.name ?? "♪") : player.now.title).prefix(1)))
+                    .font(.system(size: 16, weight: .light)).foregroundStyle(.white)
             }
-            .padding(bare ? 6 : 8)
-            .background(bare ? AnyView(Color.clear)
-                : AnyView(RoundedRectangle(cornerRadius: 14).fill(t.panel)
-                    .shadow(color: .black.opacity(0.5), radius: 16, y: 8)))
-            .overlay(bare ? nil : RoundedRectangle(cornerRadius: 14).stroke(t.line, lineWidth: 1))
-            .padding(.horizontal, bare ? 4 : 10)
-            .padding(.bottom, bare ? 0 : 4)
+            .frame(width: 40, height: 40)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(player.now.title.isEmpty ? (player.current?.name ?? "Tune in")
+                                              : player.now.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(t.ink).lineLimit(1)
+                Text(player.now.artist)
+                    .font(.system(size: 11)).foregroundStyle(t.muted).lineLimit(1)
+            }
+            Spacer()
+            Button {
+                player.toggle()
+            } label: {
+                Text(player.isPlaying ? "❚❚" : "▶")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(t.accent))
+                    .foregroundStyle(t.onAccent)
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(bare ? 6 : 8)
+        .background(bare ? AnyView(Color.clear)
+            : AnyView(RoundedRectangle(cornerRadius: 14).fill(t.panel)
+                .shadow(color: .black.opacity(0.5), radius: 16, y: 8)))
+        .overlay(bare ? nil : RoundedRectangle(cornerRadius: 14).stroke(t.line, lineWidth: 1))
+        .padding(.horizontal, bare ? 4 : 10)
+        .padding(.bottom, bare ? 0 : 4)
+        // a plain tap gesture, not a Button: the tab-bar accessory swallowed
+        // the outer Button's tap, so the pill couldn't reopen the player
+        .contentShape(Rectangle())
+        .onTapGesture { open() }
     }
 }
 
@@ -176,10 +177,9 @@ struct PlayerSheet: View {
 
             HStack(spacing: 34) {
                 Button {
-                    player.prevTrack()
+                    tapHaptic()
+                    player.stepBack()      // radio: step back in time onto the tape
                 } label: { Text("⏮").font(.system(size: 26)) }
-                    .disabled(player.source == .radio)
-                    .opacity(player.source == .radio ? 0.28 : 1)
                 Button {
                     player.toggle()
                 } label: {
@@ -190,7 +190,8 @@ struct PlayerSheet: View {
                         .foregroundStyle(t.onAccent)
                 }
                 Button {
-                    if player.source == .radio { confirmSkip = true } else { player.nextTrack() }
+                    tapHaptic()
+                    if player.source == .radio { confirmSkip = true } else { player.stepForward() }
                 } label: { Text("⏭").font(.system(size: 26)) }
                 Button {
                     tapHaptic()

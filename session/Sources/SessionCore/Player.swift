@@ -342,6 +342,31 @@ public final class Player: ObservableObject {
         if position > 4 { seek(to: 0) }
         else if trackIndex > 0 { playTrack(trackIndex - 1) }
     }
+
+    // ── history stepping: the transport walks time, not just tracks ──────
+    // Radio ⏮ = step back in time onto the tape at the previous track.
+    // Tape ⏭ past the end of a radio show = rejoin the live broadcast.
+
+    public func stepBack() {
+        guard source == .radio else { prevTrack(); return }
+        guard let ch = current else { return }
+        Task {
+            guard let sh = try? await api.show(channel: ch.slug), !sh.tracks.isEmpty else { return }
+            show = sh
+            source = .tape
+            playTrack(max(sh.playing - 1, 0))
+        }
+    }
+
+    public func stepForward() {
+        guard source != .radio else { return }   // radio forward = skip (UI confirms)
+        if let sh = show, trackIndex + 1 >= sh.tracks.count,
+           sh.channel != "favourites", currentAlbum == nil {
+            setSource(.radio)                    // ran off the tape's end → back to LIVE
+        } else {
+            nextTrack()
+        }
+    }
     public func jump(to index: Int) { playTrack(index) }
 
     public func seek(to seconds: Double) {
