@@ -1,0 +1,647 @@
+import SwiftUI
+import SessionCore
+
+// ── the popover ──────────────────────────────────────────────────────────
+
+struct PopoverView: View {
+    @EnvironmentObject var player: Player
+    @Environment(\.colorScheme) var scheme
+    @AppStorage("accent") var accentHex = "#FFD200"
+    @State var showSettings = false
+    @State var confirmSkip = false
+
+    var t: Theme { Theme.current(scheme, accentHex: accentHex) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Masthead(t: t, confirmSkip: $confirmSkip)
+            if showSettings {
+                SettingsPane(t: t)
+            } else {
+                NowPlayingPane(t: t, confirmSkip: $confirmSkip)
+                Divider().overlay(t.line)
+                TunerList(t: t)
+            }
+            FooterBar(t: t, showSettings: $showSettings)
+        }
+        .frame(width: 390)
+        .background(t.board)
+        .onAppear { Task { await player.refreshChannels() } }
+    }
+}
+
+// ── masthead: the signage bar, modes riding in it ────────────────────────
+
+struct Masthead: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    @Binding var confirmSkip: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 2).fill(t.onAccent).frame(width: 26, height: 22)
+                Text("J").font(.system(size: 12, weight: .heavy)).foregroundStyle(t.accent)
+                Rectangle().fill(t.accent.opacity(0.35)).frame(width: 26, height: 1)
+            }
+            Text(stationName)
+                .font(.system(size: 12, weight: .heavy))
+                .tracking(1.6)
+                .foregroundStyle(t.onAccent)
+            Spacer()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(t.accent)
+    }
+
+    var stationName: String {
+        (player.stationBase.host ?? "JAM-STATION")
+            .replacingOccurrences(of: ".runslab.run", with: "")
+            .uppercased()
+    }
+}
+
+// ── now playing: the board, miniaturized ─────────────────────────────────
+
+struct NowPlayingPane: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    @Binding var confirmSkip: Bool
+    @State private var lampOn = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("NOW PLAYING").font(.system(size: 10, weight: .bold)).tracking(2.6)
+                    .foregroundStyle(t.faint)
+                Spacer()
+                statusBadge
+            }
+            HStack(alignment: .top, spacing: 14) {
+                ArtTile(t: t)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(t.ink)
+                        .lineLimit(2)
+                        .id(title)                     // clean swap, not flaps
+                        .transition(.opacity)
+                    if !byline.isEmpty {
+                        Text(byline).font(.system(size: 12.5)).foregroundStyle(t.muted).lineLimit(2)
+                    }
+                    Text(spec)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(t.faint)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 10)
+            .animation(.easeInOut(duration: 0.26), value: title)
+
+            TransportRow(t: t, confirmSkip: $confirmSkip)
+            if player.source != .radio { ScrubRow(t: t) }
+            SourceButton(t: t)
+        }
+        .padding(14)
+    }
+
+    var title: String {
+        switch player.status {
+        case .idle: return "Tune in"
+        case .offAir: return "OFF AIR"
+        default: return player.now.title.isEmpty ? (player.current?.name ?? "—") : player.now.title
+        }
+    }
+    var byline: String {
+        let a = player.now.artist, al = player.now.album
+        if a.isEmpty { return al }
+        return al.isEmpty ? a : "\(a) · \(al)"
+    }
+    var spec: String {
+        switch player.status {
+        case .tuning: return "TUNING IN…"
+        case .idle, .offAir: return " "
+        default:
+            let n = player.show?.tracks.count ?? 0
+            switch player.source {
+            case .radio: return "256 kbps · mp3 · live"
+            case .tape: return "on demand · track \(player.trackIndex + 1)/\(n)"
+            case .cd: return "cd · track \(player.trackIndex + 1)/\(n)"
+            }
+        }
+    }
+
+    @ViewBuilder var statusBadge: some View {
+        switch player.source {
+        case .radio where player.status == .playing:
+            HStack(spacing: 6) {
+                Circle().fill(t.red).frame(width: 7, height: 7).opacity(lampOn ? 1 : 0.25)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 0.75).repeatForever()) { lampOn.toggle() }
+                    }
+                Text("ON AIR").font(.system(size: 10, weight: .bold)).tracking(2)
+            }
+            .foregroundStyle(t.red)
+        case .tape:
+            Text("TAPE").font(.system(size: 10, design: .monospaced)).foregroundStyle(t.faint)
+        case .cd:
+            Text("CD").font(.system(size: 10, design: .monospaced)).foregroundStyle(t.faint)
+        default:
+            EmptyView()
+        }
+    }
+}
+
+/// The Radio/Tape choice as a moment, not a mode switch: while riding the
+/// broadcast you can step off onto your own copy of the show, and back.
+struct SourceButton: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+
+    var body: some View {
+        Button {
+            player.setSource(player.source == .radio ? .tape : .radio)
+        } label: {
+            HStack(spacing: 7) {
+                if player.source == .radio {
+                    Image(systemName: "recordingtape").font(.system(size: 11, weight: .bold))
+                    Text("LISTEN TO THE TAPE").font(.system(size: 10, weight: .heavy)).tracking(1.2)
+                } else {
+                    Circle().fill(t.red).frame(width: 7, height: 7)
+                    Text("BACK TO THE RADIO — LIVE").font(.system(size: 10, weight: .heavy)).tracking(1.2)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .foregroundStyle(player.source == .radio ? t.ink : t.red)
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(player.source == .radio ? t.line : t.red, lineWidth: 2))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 12)
+        .help(player.source == .radio
+              ? "play this show yourself — scrub, jump, rewind; the broadcast rolls on without you"
+              : "rejoin the live broadcast")
+    }
+}
+
+struct ArtTile: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(hex: "#34353b"), Color(hex: "#161719")],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            if let url = artURL {
+                AsyncImage(url: url) { img in
+                    img.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: { monogram }
+            } else { monogram }
+        }
+        .frame(width: 86, height: 86)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .shadow(color: .black.opacity(0.5), radius: 10, y: 6)
+    }
+
+    var artURL: URL? {
+        if player.source == .cd {
+            return player.currentAlbum?.coverURL(base: player.stationBase)
+        }
+        return player.current?.artURL(base: player.stationBase)
+    }
+
+    var monogram: some View {
+        let seed = player.source == .cd ? (player.currentAlbum?.album ?? "♪")
+                                        : (player.current?.name ?? "♪")
+        return Text(String(seed.prefix(1)))
+            .font(.system(size: 32, weight: .ultraLight))
+            .foregroundStyle(.white.opacity(0.94))
+    }
+}
+
+// ── transport: square signage buttons, the yellow go ─────────────────────
+
+struct TransportRow: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    @Binding var confirmSkip: Bool
+
+    var body: some View {
+        HStack(spacing: 9) {
+            SquareButton(label: "◂◂", t: t, disabled: player.source == .radio) {
+                player.prevTrack()
+            }
+            Button {
+                player.toggle()
+            } label: {
+                Text(player.isPlaying ? "❚❚" : "▶")
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 46, height: 46)
+                    .background(t.accent)
+                    .foregroundStyle(t.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            SquareButton(label: "▸▸", t: t) {
+                if player.source == .radio { confirmSkip = true } else { player.nextTrack() }
+            }
+            .confirmationDialog("Skip moves the station for everyone listening.",
+                                isPresented: $confirmSkip, titleVisibility: .visible) {
+                Button("Skip the show") { player.skipRadio() }
+                Button("Stay with it", role: .cancel) {}
+            }
+            Spacer()
+            Image(systemName: "speaker.wave.2").font(.system(size: 11)).foregroundStyle(t.muted)
+            VolumeSlider(t: t).frame(width: 84)
+        }
+        .padding(.top, 14)
+    }
+}
+
+struct SquareButton: View {
+    let label: String
+    let t: Theme
+    var disabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 13, weight: .heavy))
+                .frame(width: 40, height: 40)
+                .foregroundStyle(t.ink)
+                .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 2))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.3 : 1)
+    }
+}
+
+struct VolumeSlider: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    @State private var v: Float = 0.9
+
+    var body: some View {
+        Slider(value: Binding(
+            get: { v },
+            set: { v = $0; player.volume = $0 }
+        ), in: 0...1)
+        .controlSize(.mini)
+        .tint(t.blue)
+        .onAppear { v = player.volume }
+    }
+}
+
+struct ScrubRow: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(mmss(player.position)).font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(t.muted)
+            Slider(value: Binding(
+                get: { player.position },
+                set: { player.position = $0 }
+            ), in: 0...max(player.duration, 1)) { editing in
+                player.isScrubbing = editing
+                if !editing { player.seek(to: player.position) }
+            }
+            .controlSize(.small)
+            .tint(t.blue)
+            Text(mmss(player.duration)).font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(t.muted)
+        }
+        .padding(.top, 10)
+    }
+
+    func mmss(_ s: Double) -> String {
+        let n = Int(s.isFinite ? max(s, 0) : 0)
+        return String(format: "%d:%02d", n / 60, n % 60)
+    }
+}
+
+// ── the tuner: departure rows ────────────────────────────────────────────
+
+struct TunerList: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    /// MenuBarExtra windows collapse a ScrollView's maxHeight to 0, so the popover
+    /// pins a fixed height; the main window passes nil and fills its pane.
+    var fixedHeight: CGFloat? = 320
+    @State private var find = ""
+
+    var channels: [Channel] {
+        find.isEmpty ? player.channels
+        : player.channels.filter { $0.name.localizedCaseInsensitiveContains(find) }
+    }
+    var albums: [Album] {
+        find.isEmpty ? player.albums
+        : player.albums.filter {
+            $0.album.localizedCaseInsensitiveContains(find)
+            || $0.artist.localizedCaseInsensitiveContains(find)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("TUNER").font(.system(size: 9, weight: .heavy)).tracking(2.2)
+                    .foregroundStyle(t.faint)
+                Spacer()
+                TextField("find", text: $find)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .frame(width: 110)
+                    .background(t.sunk)
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
+            }
+            .padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 6)
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(channels) { ch in
+                        ChannelRow(ch: ch, t: t)
+                    }
+                    if !albums.isEmpty {
+                        Text("THE SHELF — CD")
+                            .font(.system(size: 9, weight: .heavy)).tracking(1.8)
+                            .foregroundStyle(t.accent)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+                            .overlay(alignment: .top) { Rectangle().fill(t.line).frame(height: 1) }
+                        ForEach(albums) { al in
+                            AlbumRow(al: al, t: t)
+                        }
+                    }
+                }
+            }
+            .frame(height: fixedHeight)
+            .frame(maxHeight: fixedHeight == nil ? .infinity : nil)
+        }
+    }
+}
+
+struct ChannelRow: View {
+    @EnvironmentObject var player: Player
+    let ch: Channel
+    let t: Theme
+    @State private var hover = false
+
+    var tuned: Bool { player.current?.slug == ch.slug }
+
+    var body: some View {
+        Button {
+            player.tune(ch)
+        } label: {
+            HStack(spacing: 8) {
+                Text(tuned ? "▸" : " ")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(t.accent)
+                    .frame(width: 12)
+                Text(ch.name)
+                    .font(.system(size: 13, weight: tuned ? .heavy : .semibold, design: .monospaced))
+                    .foregroundStyle(ch.playable ? t.ink : t.faint)
+                if ch.isPrivate {
+                    Text("PRIV").font(.system(size: 8, weight: .heavy)).tracking(1)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .overlay(Rectangle().stroke(t.accent.opacity(0.75), lineWidth: 1))
+                        .foregroundStyle(t.accent.opacity(0.75))
+                }
+                Spacer()
+                if !ch.playable {
+                    Text("NO MUSIC").font(.system(size: 9, weight: .heavy)).tracking(1.2)
+                        .foregroundStyle(t.faint)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(tuned ? t.sunk : (hover ? t.sunk.opacity(0.6) : .clear))
+            .overlay(alignment: .leading) {
+                if tuned { Rectangle().fill(t.accent).frame(width: 3) }
+            }
+            .contentShape(Rectangle())   // whole row clickable, not just the glyphs
+        }
+        .buttonStyle(.plain)
+        .disabled(!ch.playable)
+        .onHover { hover = $0 }
+    }
+}
+
+struct AlbumRow: View {
+    @EnvironmentObject var player: Player
+    let al: Album
+    let t: Theme
+    @State private var hover = false
+
+    var playing: Bool { player.source == .cd && player.currentAlbum?.dir == al.dir }
+
+    var body: some View {
+        Button {
+            player.playAlbum(al)
+        } label: {
+            HStack(spacing: 8) {
+                Text(playing ? "▸" : "♫")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(t.accent)
+                    .frame(width: 12)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(al.album)
+                        .font(.system(size: 12.5, weight: playing ? .heavy : .semibold))
+                        .foregroundStyle(t.ink)
+                        .lineLimit(1)
+                    Text(al.artist + (al.year.map { " · \($0)" } ?? ""))
+                        .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
+                }
+                Spacer()
+                Text("\(al.trackCount) TRK")
+                    .font(.system(size: 8, weight: .heavy)).tracking(1)
+                    .foregroundStyle(t.faint)
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .overlay(Rectangle().stroke(t.line, lineWidth: 1))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(playing ? t.sunk : (hover ? t.sunk.opacity(0.6) : .clear))
+            .overlay(alignment: .leading) {
+                if playing { Rectangle().fill(t.accent).frame(width: 3) }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+    }
+}
+
+// ── footer + settings ────────────────────────────────────────────────────
+
+struct FooterBar: View {
+    let t: Theme
+    @Binding var showSettings: Bool
+    @Environment(\.openWindow) var openWindow
+
+    var body: some View {
+        HStack {
+            Button {
+                openWindow(id: "main")
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "macwindow").font(.system(size: 10))
+                    Text("OPEN SESSION").font(.system(size: 9, weight: .heavy)).tracking(1)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 6)
+                .foregroundStyle(t.muted)
+                .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 2))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("the full window — Dock icon and all")
+            Spacer()
+            Button {
+                showSettings.toggle()
+            } label: {
+                Image(systemName: showSettings ? "xmark" : "gearshape")
+                    .font(.system(size: 11))
+                    .frame(width: 26, height: 26)
+                    .foregroundStyle(t.muted)
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 2))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Button {
+                NSApp.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+                    .font(.system(size: 11))
+                    .frame(width: 26, height: 26)
+                    .foregroundStyle(t.muted)
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 2))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Quit Session")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .overlay(alignment: .top) { Rectangle().fill(t.line).frame(height: 1) }
+    }
+}
+
+struct SettingsPane: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    @AppStorage("accent") var accentHex = "#FFD200"
+    @State private var stationText = ""
+    @State private var codeText = ""
+    @State private var authError = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("MEMBERS").font(.system(size: 9, weight: .heavy)).tracking(2.2)
+                    .foregroundStyle(t.faint)
+                if let name = player.member {
+                    HStack {
+                        Text("signed in — \(name)")
+                            .font(.system(size: 12)).foregroundStyle(t.ink)
+                        Spacer()
+                        Button {
+                            Task { await player.signOut() }
+                        } label: {
+                            Text("SIGN OUT").font(.system(size: 10, weight: .heavy)).tracking(1)
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .foregroundStyle(t.muted)
+                                .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 2))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        SecureField("passcode or passphrase", text: $codeText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, design: .monospaced))
+                            .padding(8)
+                            .background(t.sunk)
+                            .overlay(RoundedRectangle(cornerRadius: 2)
+                                .stroke(authError ? t.red : t.line, lineWidth: 1))
+                            .onSubmit { submitCode() }
+                        Button {
+                            submitCode()
+                        } label: {
+                            Text("ENTER").font(.system(size: 10, weight: .heavy)).tracking(1)
+                                .padding(.horizontal, 10).padding(.vertical, 8)
+                                .background(t.accent).foregroundStyle(t.onAccent)
+                                .clipShape(RoundedRectangle(cornerRadius: 2))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Text(authError ? "that code or passphrase isn't valid"
+                                   : "unlocks the shelf (CD) and private channels")
+                        .font(.system(size: 10))
+                        .foregroundStyle(authError ? t.red : t.faint)
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("STATION").font(.system(size: 9, weight: .heavy)).tracking(2.2)
+                    .foregroundStyle(t.faint)
+                TextField("https://…", text: $stationText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, design: .monospaced))
+                    .padding(8)
+                    .background(t.sunk)
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
+                    .onSubmit {
+                        if let url = URL(string: stationText), url.scheme != nil {
+                            player.stationBase = url
+                        }
+                    }
+                Text("the station Session is tuned to — presets come later")
+                    .font(.system(size: 10)).foregroundStyle(t.faint)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("SIGNAGE COLOUR").font(.system(size: 9, weight: .heavy)).tracking(2.2)
+                    .foregroundStyle(t.faint)
+                HStack(spacing: 8) {
+                    ForEach(ACCENTS, id: \.hex) { a in
+                        Button {
+                            accentHex = a.hex
+                        } label: {
+                            ZStack {
+                                Circle().fill(Color(hex: a.hex)).frame(width: 22, height: 22)
+                                if accentHex.uppercased() == a.hex.uppercased() {
+                                    Text("✓").font(.system(size: 11, weight: .heavy))
+                                        .foregroundStyle(Theme.luminance(a.hex) > 0.45
+                                                         ? Color(hex: "#12120C") : .white)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help(a.name)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { stationText = player.stationBase.absoluteString }
+    }
+
+    func submitCode() {
+        let code = codeText.trimmingCharacters(in: .whitespaces)
+        guard !code.isEmpty else { return }
+        Task {
+            do {
+                try await player.signIn(code: code)
+                authError = false
+                codeText = ""
+            } catch {
+                authError = true
+            }
+        }
+    }
+}

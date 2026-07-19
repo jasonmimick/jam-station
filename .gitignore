@@ -10,3 +10,5 @@ music/*
 !music/jazz/.gitkeep
 .DS_Store
 graphify-out/
+session/.build/
+session/dist/
