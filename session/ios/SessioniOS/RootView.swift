@@ -147,7 +147,7 @@ struct ChannelCard: View {
                     .aspectRatio(1, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .opacity(ch.playable ? 1 : 0.45)
-                    if tuned {
+                    if tuned && player.isPlaying && player.source == .radio {
                         Text("ON AIR")
                             .font(.system(size: 8, weight: .heavy)).tracking(1)
                             .padding(.horizontal, 6).padding(.vertical, 3)
