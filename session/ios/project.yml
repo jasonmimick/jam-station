@@ -20,6 +20,7 @@ targets:
         INFOPLIST_FILE: SessioniOS/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: run.jam-station.session.ios
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 72GFWM4D2B   # Jason's free personal team (euler cert)
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         TARGETED_DEVICE_FAMILY: 1
