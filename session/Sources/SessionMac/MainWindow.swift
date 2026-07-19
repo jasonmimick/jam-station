@@ -13,6 +13,7 @@ struct MainWindowView: View {
     @AppStorage("theme") var themePref = "auto"
     @AppStorage("dance") var dance = false
     @AppStorage("saver") var saverMode = "rotate"
+    @AppStorage("zoom") var zoom = 1.0
     @State var confirmSkip = false
     @State var showSettings = false
     @State var saverOn = false
@@ -24,6 +25,8 @@ struct MainWindowView: View {
     }
 
     var body: some View {
+        // ⌘= / ⌘- / ⌘0 zoom: render at the inverse size, scale up — crisp, no reflow bugs
+        GeometryReader { geo in
         ZStack {
             VStack(spacing: 0) {
                 Masthead(t: t, confirmSkip: $confirmSkip,
@@ -50,6 +53,9 @@ struct MainWindowView: View {
                 }
                 .transition(.opacity)
             }
+        }
+        .frame(width: geo.size.width / zoom, height: geo.size.height / zoom)
+        .scaleEffect(zoom, anchor: .topLeading)
         }
         .background(t.board)
         .frame(minWidth: 760, minHeight: 540)
@@ -117,15 +123,123 @@ struct StagePane: View {
     @EnvironmentObject var player: Player
     let t: Theme
     @Binding var confirmSkip: Bool
+    @State private var tab = "playing"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NowPlayingPane(t: t, confirmSkip: $confirmSkip)
-            Divider().overlay(t.line)
-            Tracklist(t: t)
+            if player.member != nil {
+                HStack(spacing: 8) {
+                    PillTab(label: "PLAYING", on: tab == "playing", t: t) { tab = "playing" }
+                    PillTab(label: "SHELF", on: tab == "shelf", t: t) { tab = "shelf" }
+                    Spacer()
+                }
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .overlay(alignment: .bottom) { Rectangle().fill(t.line).frame(height: 1) }
+            }
+            if tab == "shelf", player.member != nil {
+                ShelfGallery(t: t) { al in
+                    player.browseAlbum(al)
+                    tab = "playing"
+                }
+            } else {
+                NowPlayingPane(t: t, confirmSkip: $confirmSkip)
+                Divider().overlay(t.line)
+                Tracklist(t: t)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(t.board)
+    }
+}
+
+/// The record gallery — the web's CDs view: covers in a grid, search, click to browse.
+struct ShelfGallery: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    let onPick: (Album) -> Void
+    @State private var find = ""
+
+    var albums: [Album] {
+        find.isEmpty ? player.albums
+        : player.albums.filter {
+            $0.album.localizedCaseInsensitiveContains(find)
+            || $0.artist.localizedCaseInsensitiveContains(find)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("THE SHELF").font(.system(size: 10, weight: .heavy)).tracking(2)
+                    .foregroundStyle(t.muted)
+                TextField("search the shelf", text: $find)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .frame(maxWidth: 260)
+                    .background(t.board)
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
+                Spacer()
+                Text("\(albums.count) RECORDS")
+                    .font(.system(size: 9, weight: .heavy)).tracking(1)
+                    .foregroundStyle(t.faint)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 12)
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 18)], spacing: 22) {
+                    ForEach(albums) { al in
+                        Button {
+                            onPick(al)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 0) {
+                                CoverTile(al: al, t: t, corner: 6)
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .shadow(color: .black.opacity(0.45), radius: 12, y: 8)
+                                Text(al.album)
+                                    .font(.system(size: 12.5, weight: .semibold))
+                                    .foregroundStyle(t.ink).lineLimit(1)
+                                    .padding(.top, 9)
+                                Text(al.artist + (al.year.map { " · \($0)" } ?? ""))
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(t.muted).lineLimit(1)
+                                    .padding(.top, 1)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 18).padding(.bottom, 24)
+            }
+        }
+    }
+}
+
+/// One cover: real art when the enricher found it, else the pressed-sleeve
+/// gradient + monogram (hue seeded by the album name, like the web's tiles).
+struct CoverTile: View {
+    @EnvironmentObject var player: Player
+    let al: Album
+    let t: Theme
+    var corner: CGFloat = 5
+
+    var body: some View {
+        ZStack {
+            let hue = Double(abs(al.album.hashValue % 360)) / 360.0
+            LinearGradient(
+                colors: [Color(hue: hue, saturation: 0.30, brightness: 0.34),
+                         Color(hue: hue, saturation: 0.38, brightness: 0.12)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+            Text(String(al.album.prefix(1)))
+                .font(.system(size: 42, weight: .ultraLight))
+                .foregroundStyle(.white.opacity(0.92))
+            if let url = al.coverURL(base: player.stationBase) {
+                AsyncImage(url: url) { img in
+                    img.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: { Color.clear }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: corner))
     }
 }
 

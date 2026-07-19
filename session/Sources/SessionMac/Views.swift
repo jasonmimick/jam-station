@@ -238,6 +238,7 @@ struct ArtTile: View {
     }
 
     var artURL: URL? {
+        if let b = player.browsed { return b.album.coverURL(base: player.stationBase) }
         if player.source == .cd {
             return player.currentAlbum?.coverURL(base: player.stationBase)
         }
@@ -245,8 +246,9 @@ struct ArtTile: View {
     }
 
     var monogram: some View {
-        let seed = player.source == .cd ? (player.currentAlbum?.album ?? "♪")
-                                        : (player.current?.name ?? "♪")
+        let seed = player.browsed?.album.album
+            ?? (player.source == .cd ? (player.currentAlbum?.album ?? "♪")
+                                     : (player.current?.name ?? "♪"))
         return Text(String(seed.prefix(1)))
             .font(.system(size: 32, weight: .ultraLight))
             .foregroundStyle(.white.opacity(0.94))
@@ -502,6 +504,8 @@ struct AlbumRow: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(t.accent)
                     .frame(width: 12)
+                CoverTile(al: al, t: t, corner: 4)
+                    .frame(width: 30, height: 30)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(al.album)
                         .font(.system(size: 12.5, weight: playing ? .heavy : .semibold))
@@ -589,9 +593,13 @@ struct SettingsSheet: View {
     @Environment(\.colorScheme) var scheme
     @Environment(\.dismiss) var dismiss
     @AppStorage("accent") var accentHex = "#FFD200"
+    @AppStorage("theme") var themePref = "auto"
 
     var body: some View {
-        let t = Theme.current(scheme, accentHex: accentHex)
+        // sheets and the ⌘, scene don't inherit the window's scheme — apply ours
+        let effective: ColorScheme = themePref == "dark" ? .dark
+                                   : themePref == "light" ? .light : scheme
+        let t = Theme.current(effective, accentHex: accentHex)
         VStack(spacing: 0) {
             HStack {
                 Text("SETTINGS").font(.system(size: 10, weight: .heavy)).tracking(2.2)
@@ -613,6 +621,7 @@ struct SettingsSheet: View {
         }
         .frame(width: 400)
         .background(t.board)
+        .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
     }
 }
 
