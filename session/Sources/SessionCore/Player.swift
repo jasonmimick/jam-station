@@ -172,6 +172,23 @@ public final class Player: ObservableObject {
         history = (try? await api.history()) ?? []
     }
 
+    // ── sleep timer ──────────────────────────────────────────────────────
+
+    @Published public private(set) var sleepAt: Date?
+    private var sleepTask: Task<Void, Never>?
+
+    public func setSleepTimer(minutes: Int?) {
+        sleepTask?.cancel(); sleepTask = nil; sleepAt = nil
+        guard let m = minutes, m > 0 else { return }
+        sleepAt = Date().addingTimeInterval(Double(m) * 60)
+        sleepTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Double(m) * 60))
+            guard let self, !Task.isCancelled else { return }
+            if self.isPlaying { self.toggle() }
+            self.sleepAt = nil
+        }
+    }
+
     public func signIn(code: String) async throws {
         try await api.signIn(code: code)
         await refreshMembership()

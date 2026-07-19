@@ -70,14 +70,21 @@ struct TunerTab: View {
     @EnvironmentObject var player: Player
     let t: IOSTheme
     let openPlayer: () -> Void
+    @State private var find = ""
+
+    var channels: [Channel] {
+        find.isEmpty ? player.channels
+        : player.channels.filter { $0.name.localizedCaseInsensitiveContains(find) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             SignageHeader(t: t)
+            FindField(text: $find, prompt: "find a channel", t: t)
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12),
                                     GridItem(.flexible(), spacing: 12)], spacing: 16) {
-                    ForEach(player.channels) { ch in
+                    ForEach(channels) { ch in
                         ChannelCard(ch: ch, t: t, openPlayer: openPlayer)
                     }
                 }
@@ -86,6 +93,23 @@ struct TunerTab: View {
         }
         .background(t.board)
         .task { await player.refreshChannels() }
+    }
+}
+
+struct FindField: View {
+    @Binding var text: String
+    let prompt: String
+    let t: IOSTheme
+
+    var body: some View {
+        TextField(prompt, text: $text)
+            .font(.system(size: 14))
+            .padding(.horizontal, 13).padding(.vertical, 9)
+            .background(t.panel)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(t.line, lineWidth: 1))
+            .padding(.horizontal, 14).padding(.bottom, 10)
+            .autocorrectionDisabled()
     }
 }
 
@@ -153,6 +177,15 @@ struct ShelfTab: View {
     @EnvironmentObject var player: Player
     let t: IOSTheme
     let openPlayer: () -> Void
+    @State private var find = ""
+
+    var albums: [Album] {
+        find.isEmpty ? player.albums
+        : player.albums.filter {
+            $0.album.localizedCaseInsensitiveContains(find)
+            || $0.artist.localizedCaseInsensitiveContains(find)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -165,9 +198,22 @@ struct ShelfTab: View {
                     Spacer()
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(t.accent).foregroundStyle(t.onAccent)
+                .background(
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            t.accent
+                            t.onAccent.opacity(0.14)
+                                .frame(width: g.size.width *
+                                       CGFloat(rip.total > 0 ? Double(rip.track) / Double(rip.total) : 0))
+                        }
+                    }
+                )
+                .foregroundStyle(t.onAccent)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal, 14).padding(.bottom, 10)
+            }
+            if player.member != nil {
+                FindField(text: $find, prompt: "search the shelf", t: t)
             }
             if player.member == nil {
                 Spacer()
@@ -180,7 +226,7 @@ struct ShelfTab: View {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12),
                                         GridItem(.flexible(), spacing: 12)], spacing: 16) {
-                        ForEach(player.albums) { al in
+                        ForEach(albums) { al in
                             Button {
                                 player.playAlbum(al)
                                 openPlayer()
@@ -230,6 +276,12 @@ struct YouTab: View {
     @AppStorage("theme") var themePref = "auto"
     @State private var code = ""
     @State private var authError = false
+    @State private var stationText = ""
+    @State private var sleepPick = 0
+
+    func isSleep(_ m: Int) -> Bool {
+        player.sleepAt == nil ? m == 0 : m == sleepPick
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -276,6 +328,43 @@ struct YouTab: View {
                         }
                     }
                 }
+                Section("Sleep timer") {
+                    HStack(spacing: 8) {
+                        ForEach([0, 15, 30, 60], id: \.self) { m in
+                            Button {
+                                sleepPick = m
+                                player.setSleepTimer(minutes: m == 0 ? nil : m)
+                            } label: {
+                                Text(m == 0 ? "OFF" : "\(m)M")
+                                    .font(.system(size: 11, weight: .heavy))
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                                    .background(isSleep(m) ? t.accent : t.sunk)
+                                    .foregroundStyle(isSleep(m) ? t.onAccent : t.muted)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        if let at = player.sleepAt {
+                            Spacer()
+                            Text(at, style: .timer)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(t.muted)
+                        }
+                    }
+                }
+                Section("Station") {
+                    TextField("https://…", text: $stationText)
+                        .font(.system(size: 13, design: .monospaced))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .onSubmit {
+                            if let url = URL(string: stationText), url.scheme != nil {
+                                player.stationBase = url
+                            }
+                        }
+                    Text("the station Session is tuned to — presets come later")
+                        .font(.system(size: 11)).foregroundStyle(t.faint)
+                }
                 Section("Appearance") {
                     Picker("Theme", selection: $themePref) {
                         Text("Auto").tag("auto"); Text("Dark").tag("dark"); Text("Light").tag("light")
@@ -302,6 +391,7 @@ struct YouTab: View {
             .scrollContentBackground(.hidden)
         }
         .background(t.board)
+        .onAppear { stationText = player.stationBase.absoluteString }
     }
 
     func submit() {

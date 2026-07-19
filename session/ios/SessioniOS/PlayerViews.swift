@@ -169,10 +169,56 @@ struct PlayerSheet: View {
             .buttonStyle(.plain)
             .padding(.top, 20)
 
-            Spacer()
+            if let sh = player.show, !sh.tracks.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(sh.album.isEmpty ? "THE SET" : sh.album.uppercased())
+                        .font(.system(size: 9, weight: .heavy)).tracking(1.8)
+                        .foregroundStyle(t.faint)
+                        .padding(.horizontal, 4).padding(.bottom, 6)
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(Array(sh.tracks.enumerated()), id: \.offset) { i, tr in
+                                Button {
+                                    if player.source != .radio { player.jump(to: i) }
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Text(String(format: "%02d", i + 1))
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundStyle(i == playingIndex ? t.accent : t.faint)
+                                        Text(tr.title.isEmpty ? "Track \(i + 1)" : tr.title)
+                                            .font(.system(size: 13,
+                                                          weight: i == playingIndex ? .heavy : .medium))
+                                            .foregroundStyle(i == playingIndex ? t.accent : t.ink)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        if i == playingIndex {
+                                            Text("NOW").font(.system(size: 8, weight: .heavy)).tracking(1)
+                                                .foregroundStyle(t.accent)
+                                        }
+                                    }
+                                    .padding(.vertical, 7).padding(.horizontal, 6)
+                                    .background(i == playingIndex ? t.sunk : .clear)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 190)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 18).padding(.horizontal, 12)
+            }
+
+            Spacer(minLength: 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(t.board)
+    }
+
+    var playingIndex: Int {
+        player.source == .radio ? (player.show?.playing ?? -1) : player.trackIndex
     }
 
     var artURL: URL? {
