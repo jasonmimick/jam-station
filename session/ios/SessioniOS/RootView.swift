@@ -14,32 +14,41 @@ struct RootView: View {
                          dance: dance && player.status == .playing ? player.dancePhase : nil)
     }
 
-    var tabs: some View {
-        TabView {
-            TunerTab(t: t, openPlayer: { showPlayer = true })
-                .tabItem { Label("Tuner", systemImage: "dial.medium") }
-            ShelfTab(t: t, openPlayer: { showPlayer = true })
-                .tabItem { Label("Shelf", systemImage: "square.stack") }
-            YouTab(t: t)
-                .tabItem { Label("You", systemImage: "circle.circle") }
+    /// Pre-26 fallback: the pill lives INSIDE each tab, above the tab bar —
+    /// a screen-level inset covers the tab buttons.
+    @ViewBuilder func withMini<V: View>(_ v: V) -> some View {
+        v.safeAreaInset(edge: .bottom) {
+            if player.status != .idle {
+                MiniPlayer(t: t) { showPlayer = true }
+            }
         }
     }
 
     var body: some View {
         Group {
-            // the native mini-player slot above the tab bar (what Music uses);
-            // pre-26 falls back to a per-screen inset
             if #available(iOS 26.0, *) {
-                tabs.tabViewBottomAccessory {
+                // the native mini-player slot above the tab bar (what Music uses)
+                TabView {
+                    TunerTab(t: t, openPlayer: { showPlayer = true })
+                        .tabItem { Label("Tuner", systemImage: "dial.medium") }
+                    ShelfTab(t: t, openPlayer: { showPlayer = true })
+                        .tabItem { Label("Shelf", systemImage: "square.stack") }
+                    YouTab(t: t)
+                        .tabItem { Label("You", systemImage: "circle.circle") }
+                }
+                .tabViewBottomAccessory {
                     if player.status != .idle {
                         MiniPlayer(t: t, bare: true) { showPlayer = true }
                     }
                 }
             } else {
-                tabs.safeAreaInset(edge: .bottom) {
-                    if player.status != .idle {
-                        MiniPlayer(t: t) { showPlayer = true }
-                    }
+                TabView {
+                    withMini(TunerTab(t: t, openPlayer: { showPlayer = true }))
+                        .tabItem { Label("Tuner", systemImage: "dial.medium") }
+                    withMini(ShelfTab(t: t, openPlayer: { showPlayer = true }))
+                        .tabItem { Label("Shelf", systemImage: "square.stack") }
+                    withMini(YouTab(t: t))
+                        .tabItem { Label("You", systemImage: "circle.circle") }
                 }
             }
         }
@@ -101,8 +110,7 @@ struct TunerTab: View {
             SignageHeader(t: t)
             FindField(text: $find, prompt: "find a channel", t: t)
             ScrollView {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12),
-                                    GridItem(.flexible(), spacing: 12)], spacing: 16) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 11)], spacing: 14) {
                     ForEach(channels) { ch in
                         ChannelCard(ch: ch, t: t, openPlayer: openPlayer)
                     }
@@ -179,7 +187,7 @@ struct ChannelCard: View {
                                      Color(hue: hue, saturation: 0.40, brightness: 0.12)],
                             startPoint: .topLeading, endPoint: .bottomTrailing)
                         Text(String(ch.name.prefix(1)))
-                            .font(.system(size: 38, weight: .ultraLight))
+                            .font(.system(size: 28, weight: .ultraLight))
                             .foregroundStyle(.white.opacity(0.92))
                         if let url = ch.artURL(base: player.stationBase) {
                             NetImage(url: url)
@@ -200,9 +208,9 @@ struct ChannelCard: View {
                 .overlay(RoundedRectangle(cornerRadius: 12)
                     .stroke(tuned ? t.accent : .clear, lineWidth: 3))
                 Text(ch.name)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(t.ink).lineLimit(1)
-                    .padding(.top, 7)
+                    .padding(.top, 6)
                 Text(ch.playable ? (ch.isPrivate ? "PRIVATE" : " ") : "NO MUSIC")
                     .font(.system(size: 10, weight: .bold)).tracking(0.8)
                     .foregroundStyle(ch.playable ? t.accent : t.faint)
@@ -266,8 +274,7 @@ struct ShelfTab: View {
                 Spacer()
             } else {
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12),
-                                        GridItem(.flexible(), spacing: 12)], spacing: 16) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 11)], spacing: 14) {
                         ForEach(albums) { al in
                             Button {
                                 player.playAlbum(al)
@@ -281,7 +288,7 @@ struct ShelfTab: View {
                                                      Color(hue: hue, saturation: 0.38, brightness: 0.12)],
                                             startPoint: .topLeading, endPoint: .bottomTrailing)
                                         Text(String(al.album.prefix(1)))
-                                            .font(.system(size: 36, weight: .ultraLight))
+                                            .font(.system(size: 26, weight: .ultraLight))
                                             .foregroundStyle(.white.opacity(0.92))
                                         if let url = al.coverURL(base: player.stationBase) {
                                             NetImage(url: url)
@@ -290,10 +297,10 @@ struct ShelfTab: View {
                                     .aspectRatio(1, contentMode: .fit)
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
                                     Text(al.album)
-                                        .font(.system(size: 13.5, weight: .semibold))
-                                        .foregroundStyle(t.ink).lineLimit(1).padding(.top, 7)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(t.ink).lineLimit(1).padding(.top, 6)
                                     Text(al.artist)
-                                        .font(.system(size: 11)).foregroundStyle(t.muted).lineLimit(1)
+                                        .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -440,6 +447,31 @@ struct YouTab: View {
                         .labelsHidden()
                         .frame(width: 30)
                     }
+                    HStack(spacing: 10) {
+                        Text("Vary").font(.system(size: 13)).foregroundStyle(t.muted)
+                        Slider(value: Binding(
+                            get: {
+                                var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                                let c = IOSTheme.rgb(accentHex)
+                                UIColor(red: c[0], green: c[1], blue: c[2], alpha: 1)
+                                    .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+                                return Double(h)
+                            },
+                            set: { nh in
+                                var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                                let c = IOSTheme.rgb(accentHex)
+                                UIColor(red: c[0], green: c[1], blue: c[2], alpha: 1)
+                                    .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+                                let out = UIColor(hue: CGFloat(nh), saturation: max(s, 0.55),
+                                                  brightness: max(b, 0.75), alpha: 1)
+                                var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0
+                                out.getRed(&r2, green: &g2, blue: &b2, alpha: &a)
+                                accentHex = String(format: "#%02X%02X%02X",
+                                                   Int(r2 * 255), Int(g2 * 255), Int(b2 * 255))
+                            }
+                        ), in: 0...1)
+                        .tint(t.accent)
+                    }
                     Toggle(isOn: $dance) {
                         Text(dance ? "♪ Dancing — the colour sways with the music"
                                    : "Let it dance")
@@ -465,6 +497,12 @@ struct YouTab: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .safeAreaInset(edge: .bottom) {
+                Text("Session \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") · build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(t.faint)
+                    .padding(.bottom, 4)
+            }
         }
         .background(t.board)
         .onAppear { stationText = player.stationBase.absoluteString }
