@@ -121,6 +121,7 @@ struct TunerTab: View {
     let t: IOSTheme
     let openPlayer: () -> Void
     @State private var find = ""
+    @AppStorage("tunerView") var tunerView = "grid"
 
     var channels: [Channel] {
         find.isEmpty ? player.channels
@@ -130,14 +131,27 @@ struct TunerTab: View {
     var body: some View {
         VStack(spacing: 0) {
             SignageHeader(t: t)
-            FindField(text: $find, prompt: "find a channel", t: t)
+            HStack(spacing: 8) {
+                FindField(text: $find, prompt: "find a channel", t: t, inline: true)
+                ViewToggle(selection: $tunerView, t: t)
+            }
+            .padding(.horizontal, 14).padding(.bottom, 10)
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 11)], spacing: 14) {
-                    ForEach(channels) { ch in
-                        ChannelCard(ch: ch, t: t, openPlayer: openPlayer)
+                if tunerView == "list" {
+                    LazyVStack(spacing: 0) {
+                        ForEach(channels) { ch in
+                            ChannelRowIOS(ch: ch, t: t, openPlayer: openPlayer)
+                        }
                     }
+                    .padding(.bottom, 20)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 11)], spacing: 14) {
+                        ForEach(channels) { ch in
+                            ChannelCard(ch: ch, t: t, openPlayer: openPlayer)
+                        }
+                    }
+                    .padding(.horizontal, 14).padding(.bottom, 20)
                 }
-                .padding(.horizontal, 14).padding(.bottom, 20)
             }
             .refreshable {
                 await player.refreshChannels()
@@ -146,6 +160,101 @@ struct TunerTab: View {
         }
         .background(t.board)
         .task { await player.refreshChannels() }
+    }
+}
+
+/// The shared ▦/☰ pair, styled like the web's vtog.
+struct ViewToggle: View {
+    @Binding var selection: String
+    let t: IOSTheme
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach([("grid", "square.grid.2x2"), ("list", "list.bullet")], id: \.0) { mode, icon in
+                Button {
+                    selection = mode
+                } label: {
+                    Image(systemName: icon)
+                        .font(.system(size: 13))
+                        .frame(width: 38, height: 36)
+                        .background(selection == mode ? t.accent : t.panel)
+                        .foregroundStyle(selection == mode ? t.onAccent : t.muted)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(t.line, lineWidth: 1))
+    }
+}
+
+/// A station as a departure row — thumb, name, state; ▸ marks the tuned one.
+struct ChannelRowIOS: View {
+    @EnvironmentObject var player: Player
+    let ch: Channel
+    let t: IOSTheme
+    let openPlayer: () -> Void
+
+    var tuned: Bool { player.current?.slug == ch.slug }
+
+    var body: some View {
+        Button {
+            guard ch.playable else { return }
+            tapHaptic()
+            player.tune(ch)
+            openPlayer()
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    let hue = Double(abs(ch.name.hashValue % 360)) / 360.0
+                    LinearGradient(
+                        colors: [Color(hue: hue, saturation: 0.30, brightness: 0.36),
+                                 Color(hue: hue, saturation: 0.40, brightness: 0.12)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Text(String(ch.name.prefix(1)))
+                        .font(.system(size: 17, weight: .light))
+                        .foregroundStyle(.white.opacity(0.9))
+                    if let url = ch.artURL(base: player.stationBase) {
+                        NetImage(url: url)
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .opacity(ch.playable ? 1 : 0.45)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ch.name)
+                        .font(.system(size: 14, weight: tuned ? .heavy : .semibold))
+                        .foregroundStyle(ch.playable ? t.ink : t.faint).lineLimit(1)
+                    if !ch.playable {
+                        Text("NO MUSIC").font(.system(size: 9, weight: .heavy)).tracking(1)
+                            .foregroundStyle(t.faint)
+                    } else if ch.isPrivate {
+                        Text("PRIVATE").font(.system(size: 9, weight: .heavy)).tracking(1)
+                            .foregroundStyle(t.accent)
+                    }
+                }
+                Spacer()
+                if tuned && player.isPlaying && player.source == .radio {
+                    Text("ON AIR").font(.system(size: 8, weight: .heavy)).tracking(1)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(t.accent).foregroundStyle(t.onAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                } else if tuned {
+                    Text("▸").font(.system(size: 13, weight: .bold)).foregroundStyle(t.accent)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            .background(tuned ? t.sunk : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!ch.playable)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(t.line).frame(height: 1).padding(.leading, 70)
+        }
+        .overlay(alignment: .leading) {
+            if tuned { Rectangle().fill(t.accent).frame(width: 3) }
+        }
     }
 }
 
@@ -323,22 +432,7 @@ struct ShelfTab: View {
                 SpotButton(t: t)
                 HStack(spacing: 8) {
                     FindField(text: $find, prompt: "search the shelf", t: t, inline: true)
-                    HStack(spacing: 0) {
-                        ForEach([("grid", "square.grid.2x2"), ("list", "list.bullet")], id: \.0) { mode, icon in
-                            Button {
-                                shelfView = mode
-                            } label: {
-                                Image(systemName: icon)
-                                    .font(.system(size: 13))
-                                    .frame(width: 38, height: 36)
-                                    .background(shelfView == mode ? t.accent : t.panel)
-                                    .foregroundStyle(shelfView == mode ? t.onAccent : t.muted)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(t.line, lineWidth: 1))
+                    ViewToggle(selection: $shelfView, t: t)
                 }
                 .padding(.horizontal, 14).padding(.bottom, 10)
             }
