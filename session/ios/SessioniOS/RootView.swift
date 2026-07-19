@@ -70,14 +70,13 @@ struct SignageHeader: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 2).fill(t.accent).frame(width: 24, height: 20)
-                Text("J").font(.system(size: 11, weight: .heavy)).foregroundStyle(t.onAccent)
-                Rectangle().fill(t.onAccent.opacity(0.3)).frame(width: 24, height: 1)
-            }
-            Text(stationName)
-                .font(.system(size: 13, weight: .heavy)).tracking(1.5)
+            DialMark(t: t)
+            Text("SESSION")
+                .font(.system(size: 13, weight: .heavy)).tracking(2)
                 .foregroundStyle(t.ink)
+            Text("· \(stationName)")
+                .font(.system(size: 10, weight: .bold)).tracking(1)
+                .foregroundStyle(t.faint)
             Spacer()
             if player.member != nil {
                 Circle().stroke(t.live, lineWidth: 1.5).frame(width: 10, height: 10)
@@ -87,8 +86,31 @@ struct SignageHeader: View {
     }
 
     var stationName: String {
-        (player.stationBase.host ?? "JAM-STATION")
+        (player.stationBase.host ?? "jam-station")
             .replacingOccurrences(of: ".runslab.run", with: "").uppercased()
+    }
+}
+
+/// The app's mark — the Dial, matching the home-screen icon.
+struct DialMark: View {
+    let t: IOSTheme
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4).fill(Color(hexStr: "#1C1C20"))
+            HStack(spacing: 3) {
+                ForEach(0..<3, id: \.self) { _ in
+                    Capsule().fill(Color(hexStr: "#5A5A62")).frame(width: 1.6, height: 5)
+                }
+            }
+            .offset(x: -3, y: -4)
+            Capsule().fill(t.accent).frame(width: 2.6, height: 16).offset(x: 6)
+            Circle().fill(Color(hexStr: "#F0402F")).frame(width: 4.5, height: 4.5)
+                .offset(x: 6, y: -8)
+            Capsule().fill(t.accent.opacity(0.85)).frame(width: 14, height: 2)
+                .offset(x: -2, y: 6)
+        }
+        .frame(width: 26, height: 22)
     }
 }
 

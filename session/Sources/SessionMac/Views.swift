@@ -48,14 +48,21 @@ struct Masthead: View {
     var body: some View {
         HStack(spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 2).fill(t.onAccent).frame(width: 26, height: 22)
-                Text("J").font(.system(size: 12, weight: .heavy)).foregroundStyle(t.accent)
-                Rectangle().fill(t.accent.opacity(0.35)).frame(width: 26, height: 1)
+                RoundedRectangle(cornerRadius: 3).fill(Color(hex: "#1C1C20"))
+                    .frame(width: 26, height: 22)
+                Capsule().fill(t.accent).frame(width: 2.6, height: 15).offset(x: 6)
+                Circle().fill(Color(hex: "#F0402F")).frame(width: 4.5, height: 4.5)
+                    .offset(x: 6, y: -7.5)
+                Capsule().fill(t.accent.opacity(0.85)).frame(width: 13, height: 2)
+                    .offset(x: -2, y: 5.5)
             }
-            Text(stationName)
+            Text("SESSION")
                 .font(.system(size: 12, weight: .heavy))
-                .tracking(1.6)
+                .tracking(2)
                 .foregroundStyle(t.onAccent)
+            Text("· \(stationName)")
+                .font(.system(size: 9, weight: .bold)).tracking(1)
+                .foregroundStyle(t.onAccent.opacity(0.6))
             Spacer()
             if let onSaver {
                 Button(action: onSaver) {
