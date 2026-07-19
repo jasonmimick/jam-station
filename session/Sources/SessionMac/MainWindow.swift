@@ -161,6 +161,7 @@ struct ShelfGallery: View {
     let t: Theme
     let onPick: (Album) -> Void
     @State private var find = ""
+    @AppStorage("shelfView") var shelfView = "grid"
 
     var albums: [Album] {
         find.isEmpty ? player.albums
@@ -182,37 +183,89 @@ struct ShelfGallery: View {
                     .frame(maxWidth: 260)
                     .background(t.board)
                     .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
+                HStack(spacing: 0) {
+                    ForEach([("grid", "▦"), ("list", "☰")], id: \.0) { mode, glyph in
+                        Button {
+                            shelfView = mode
+                        } label: {
+                            Text(glyph).font(.system(size: 12))
+                                .frame(width: 30, height: 26)
+                                .background(shelfView == mode ? t.accent : t.panel)
+                                .foregroundStyle(shelfView == mode ? t.onAccent : t.muted)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(t.line, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
                 Spacer()
                 Text("\(albums.count) RECORDS")
                     .font(.system(size: 9, weight: .heavy)).tracking(1)
                     .foregroundStyle(t.faint)
             }
             .padding(.horizontal, 18).padding(.vertical, 12)
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 18)], spacing: 22) {
-                    ForEach(albums) { al in
-                        Button {
-                            onPick(al)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 0) {
-                                CoverTile(al: al, t: t, corner: 6)
-                                    .aspectRatio(1, contentMode: .fit)
-                                    .shadow(color: .black.opacity(0.45), radius: 12, y: 8)
-                                Text(al.album)
-                                    .font(.system(size: 12.5, weight: .semibold))
-                                    .foregroundStyle(t.ink).lineLimit(1)
-                                    .padding(.top, 9)
-                                Text(al.artist + (al.year.map { " · \($0)" } ?? ""))
-                                    .font(.system(size: 10.5))
-                                    .foregroundStyle(t.muted).lineLimit(1)
-                                    .padding(.top, 1)
+            if shelfView == "list" {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(albums) { al in
+                            Button {
+                                onPick(al)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    CoverTile(al: al, t: t, corner: 5)
+                                        .frame(width: 44, height: 44)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(al.album)
+                                            .font(.system(size: 13.5, weight: .semibold))
+                                            .foregroundStyle(t.ink).lineLimit(1)
+                                        Text(al.artist + (al.year.map { " · \($0)" } ?? ""))
+                                            .font(.system(size: 11.5))
+                                            .foregroundStyle(t.muted).lineLimit(1)
+                                    }
+                                    Spacer()
+                                    Text("\(al.trackCount) TRK")
+                                        .font(.system(size: 9, weight: .heavy)).tracking(1)
+                                        .foregroundStyle(t.faint)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 7)
+                                .contentShape(Rectangle())
                             }
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            .overlay(alignment: .bottom) {
+                                Rectangle().fill(t.line).frame(height: 1).padding(.leading, 70)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.bottom, 24)
                 }
-                .padding(.horizontal, 18).padding(.bottom, 24)
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 18)], spacing: 22) {
+                        ForEach(albums) { al in
+                            Button {
+                                onPick(al)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    CoverTile(al: al, t: t, corner: 6)
+                                        .aspectRatio(1, contentMode: .fit)
+                                        .shadow(color: .black.opacity(0.45), radius: 12, y: 8)
+                                    Text(al.album)
+                                        .font(.system(size: 12.5, weight: .semibold))
+                                        .foregroundStyle(t.ink).lineLimit(1)
+                                        .padding(.top, 9)
+                                    Text(al.artist + (al.year.map { " · \($0)" } ?? ""))
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(t.muted).lineLimit(1)
+                                        .padding(.top, 1)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 18).padding(.bottom, 24)
+                }
             }
         }
     }

@@ -179,6 +179,7 @@ struct FindField: View {
     @Binding var text: String
     let prompt: String
     let t: IOSTheme
+    var inline = false      // true: no outer padding (caller composes a row)
 
     var body: some View {
         TextField(prompt, text: $text)
@@ -187,7 +188,8 @@ struct FindField: View {
             .background(t.panel)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(t.line, lineWidth: 1))
-            .padding(.horizontal, 14).padding(.bottom, 10)
+            .padding(.horizontal, inline ? 0 : 14)
+            .padding(.bottom, inline ? 0 : 10)
             .autocorrectionDisabled()
     }
 }
@@ -255,6 +257,7 @@ struct ShelfTab: View {
     let t: IOSTheme
     let openPlayer: () -> Void
     @State private var find = ""
+    @AppStorage("shelfView") var shelfView = "grid"
 
     var albums: [Album] {
         find.isEmpty ? player.albums
@@ -291,7 +294,26 @@ struct ShelfTab: View {
             }
             if player.member != nil {
                 SpotButton(t: t)
-                FindField(text: $find, prompt: "search the shelf", t: t)
+                HStack(spacing: 8) {
+                    FindField(text: $find, prompt: "search the shelf", t: t, inline: true)
+                    HStack(spacing: 0) {
+                        ForEach([("grid", "square.grid.2x2"), ("list", "list.bullet")], id: \.0) { mode, icon in
+                            Button {
+                                shelfView = mode
+                            } label: {
+                                Image(systemName: icon)
+                                    .font(.system(size: 13))
+                                    .frame(width: 38, height: 36)
+                                    .background(shelfView == mode ? t.accent : t.panel)
+                                    .foregroundStyle(shelfView == mode ? t.onAccent : t.muted)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(t.line, lineWidth: 1))
+                }
+                .padding(.horizontal, 14).padding(.bottom, 10)
             }
             if player.member == nil {
                 Spacer()
@@ -301,6 +323,55 @@ struct ShelfTab: View {
                     .multilineTextAlignment(.center).padding(.horizontal, 40).padding(.top, 4)
                 Spacer()
             } else {
+                if shelfView == "list" {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(albums) { al in
+                                Button {
+                                    player.playAlbum(al)
+                                    openPlayer()
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        ZStack {
+                                            let hue = Double(abs(al.album.hashValue % 360)) / 360.0
+                                            LinearGradient(
+                                                colors: [Color(hue: hue, saturation: 0.30, brightness: 0.34),
+                                                         Color(hue: hue, saturation: 0.38, brightness: 0.12)],
+                                                startPoint: .topLeading, endPoint: .bottomTrailing)
+                                            Text(String(al.album.prefix(1)))
+                                                .font(.system(size: 17, weight: .light))
+                                                .foregroundStyle(.white.opacity(0.9))
+                                            if let url = al.coverURL(base: player.stationBase) {
+                                                NetImage(url: url)
+                                            }
+                                        }
+                                        .frame(width: 44, height: 44)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(al.album)
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundStyle(t.ink).lineLimit(1)
+                                            Text(al.artist + (al.year.map { " · \($0)" } ?? ""))
+                                                .font(.system(size: 11.5))
+                                                .foregroundStyle(t.muted).lineLimit(1)
+                                        }
+                                        Spacer()
+                                        Text("\(al.trackCount)")
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundStyle(t.faint)
+                                    }
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .overlay(alignment: .bottom) {
+                                    Rectangle().fill(t.line).frame(height: 1).padding(.leading, 70)
+                                }
+                            }
+                        }
+                        .padding(.bottom, 20)
+                    }
+                } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 11)], spacing: 14) {
                         ForEach(albums) { al in
@@ -335,6 +406,7 @@ struct ShelfTab: View {
                         }
                     }
                     .padding(.horizontal, 14).padding(.bottom, 20)
+                }
                 }
             }
         }
