@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Session",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     targets: [
         .target(name: "SessionCore"),
         .executableTarget(name: "SessionMac", dependencies: ["SessionCore"]),

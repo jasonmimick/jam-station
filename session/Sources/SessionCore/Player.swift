@@ -442,6 +442,8 @@ public final class Player: ObservableObject {
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        #if os(macOS)
         MPNowPlayingInfoCenter.default().playbackState = status == .playing ? .playing : .paused
+        #endif
     }
 }

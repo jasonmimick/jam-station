@@ -1,0 +1,26 @@
+# xcodegen spec — `xcodegen generate` here rebuilds SessioniOS.xcodeproj.
+# The .xcodeproj is disposable; THIS file is the source of truth.
+name: SessioniOS
+options:
+  bundleIdPrefix: run.jam-station
+packages:
+  Session:
+    path: ..
+targets:
+  Session:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [SessioniOS]
+    dependencies:
+      - package: Session
+        product: SessionCore
+    settings:
+      base:
+        INFOPLIST_FILE: SessioniOS/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: run.jam-station.session.ios
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        TARGETED_DEVICE_FAMILY: 1
+        SWIFT_VERSION: 5.9

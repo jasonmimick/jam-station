@@ -12,3 +12,4 @@ music/*
 graphify-out/
 session/.build/
 session/dist/
+session/ios/SessioniOS.xcodeproj/
