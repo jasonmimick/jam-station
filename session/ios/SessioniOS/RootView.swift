@@ -20,20 +20,16 @@ struct RootView: View {
                          dance: dance && player.status == .playing ? player.dancePhase : nil)
     }
 
-    /// Robust sheet opener. A sheet presented while a context menu (or a prior
-    /// dismissal) is mid-animation gets silently dropped — but the flag stays
-    /// true, leaving an invisible sheet that eats every touch. Reset-then-present
-    /// heals the stuck state instead of re-asserting it.
+    /// The player is a plain SwiftUI overlay (state → transform), NOT a UIKit
+    /// sheet. Presenting sheets from context menus / mid-dismissal is broken at
+    /// the UIKit layer (Apple forums 709354, 692338); an overlay has no
+    /// presentation machinery to desync — open/close is just state.
     func openPlayer() {
-        if showPlayer {
-            showPlayer = false
-            Task {
-                try? await Task.sleep(for: .milliseconds(120))
-                showPlayer = true
-            }
-        } else {
-            showPlayer = true
-        }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { showPlayer = true }
+    }
+
+    func closePlayer() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { showPlayer = false }
     }
 
     /// Pre-26 fallback: the pill lives INSIDE each tab, above the tab bar —
@@ -80,22 +76,11 @@ struct RootView: View {
         }
         .environmentObject(nav)
         .tint(t.accent)
-        .sheet(isPresented: $showPlayer) {
-            PlayerSheet(t: t)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        .task {
-            // watchdog: if the flag says a sheet is up but iOS presents nothing,
-            // the presentation was dropped — heal without needing a tap to land
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1.5))
-                if showPlayer {
-                    let scene = UIApplication.shared.connectedScenes
-                        .compactMap { $0 as? UIWindowScene }.first
-                    let presented = scene?.keyWindow?.rootViewController?.presentedViewController
-                    if presented == nil { showPlayer = false }
-                }
+        .overlay {
+            if showPlayer {
+                PlayerSheet(t: t, close: closePlayer)
+                    .transition(.move(edge: .bottom))
+                    .zIndex(10)
             }
         }
         .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
@@ -450,26 +435,17 @@ struct ChannelPeekModifier: ViewModifier {
     let t: IOSTheme
     let openPlayer: () -> Void
 
-    /// A sheet presented while the context menu is still dismissing gets
-    /// dropped by UIKit — wait out the menu's exit animation first.
-    func openLater() {
-        Task {
-            try? await Task.sleep(for: .milliseconds(600))
-            openPlayer()
-        }
-    }
-
     func body(content: Content) -> some View {
         content.contextMenu {
             Button {
                 tapHaptic()
                 player.tune(ch)
-                openLater()
+                openPlayer()
             } label: { Label("Tune in — Radio", systemImage: "dot.radiowaves.left.and.right") }
             Button {
                 tapHaptic()
                 player.playTape(ch)
-                openLater()
+                openPlayer()
             } label: { Label("Play this tape", systemImage: "recordingtape") }
         } preview: {
             ChannelPeek(ch: ch, t: t)

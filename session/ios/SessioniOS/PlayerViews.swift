@@ -72,37 +72,56 @@ struct MiniPlayer: View {
     }
 }
 
-/// The full player sheet — big art, transport, source button, tape scrubbing.
+/// The full player — a pure SwiftUI overlay panel (the web's #now, native).
+/// No UIKit presentation: the grab handle and a downward drag close it.
 struct PlayerSheet: View {
     @EnvironmentObject var player: Player
     let t: IOSTheme
+    let close: () -> Void
     @AppStorage("saver") var saverMode = "rotate"
     @State private var confirmSkip = false
     @State private var showSaver = false
+    @State private var dragY: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                if !chipText.isEmpty {
-                    Text(chipText)
-                        .font(.system(size: 11, weight: .heavy)).tracking(1.5)
-                        .padding(.horizontal, 14).padding(.vertical, 7)
-                        .overlay(Capsule().stroke(t.line, lineWidth: 1))
-                        .foregroundStyle(t.muted)
+            VStack(spacing: 10) {
+                Capsule().fill(t.line).frame(width: 40, height: 5)
+                    .padding(.top, 12)
+                HStack {
+                    Spacer()
+                    if !chipText.isEmpty {
+                        Text(chipText)
+                            .font(.system(size: 11, weight: .heavy)).tracking(1.5)
+                            .padding(.horizontal, 14).padding(.vertical, 7)
+                            .overlay(Capsule().stroke(t.line, lineWidth: 1))
+                            .foregroundStyle(t.muted)
+                    }
+                    Spacer()
+                    Button {
+                        showSaver = true
+                    } label: {
+                        Text("▓").font(.system(size: 13, weight: .bold))
+                            .frame(width: 32, height: 32)
+                            .foregroundStyle(t.muted)
+                            .overlay(Circle().stroke(t.line, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
                 }
-                Spacer()
-                Button {
-                    showSaver = true
-                } label: {
-                    Text("▓").font(.system(size: 13, weight: .bold))
-                        .frame(width: 32, height: 32)
-                        .foregroundStyle(t.muted)
-                        .overlay(Circle().stroke(t.line, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 18)
             }
-            .padding(.horizontal, 18).padding(.top, 18)
+            .contentShape(Rectangle())
+            .onTapGesture { close() }
+            .gesture(
+                DragGesture()
+                    .onChanged { v in
+                        if v.translation.height > 0 { dragY = v.translation.height }
+                    }
+                    .onEnded { v in
+                        if v.translation.height > 110 { close() }
+                        dragY = 0
+                    }
+            )
             .fullScreenCover(isPresented: $showSaver) {
                 SaverView(t: t, mode: saverMode) { showSaver = false }
             }
@@ -259,7 +278,9 @@ struct PlayerSheet: View {
             Spacer(minLength: 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(t.board)
+        .background(t.board.ignoresSafeArea())
+        .offset(y: max(dragY, 0))
+        .animation(.interactiveSpring, value: dragY)
     }
 
     var playingIndex: Int {
