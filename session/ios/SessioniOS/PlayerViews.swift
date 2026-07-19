@@ -55,8 +55,8 @@ struct PlayerSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let ch = player.current {
-                Text("◉ \(ch.name.uppercased())")
+            if !chipText.isEmpty {
+                Text(chipText)
                     .font(.system(size: 11, weight: .heavy)).tracking(1.5)
                     .padding(.horizontal, 14).padding(.vertical, 7)
                     .overlay(Capsule().stroke(t.line, lineWidth: 1))
@@ -74,9 +74,7 @@ struct PlayerSheet: View {
                     .font(.system(size: 64, weight: .ultraLight))
                     .foregroundStyle(.white.opacity(0.92))
                 if let url = artURL {
-                    AsyncImage(url: url) { img in
-                        img.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: { Color.clear }
+                    NetImage(url: url)
                 }
             }
             .frame(width: 260, height: 260)
@@ -219,6 +217,17 @@ struct PlayerSheet: View {
 
     var playingIndex: Int {
         player.source == .radio ? (player.show?.playing ?? -1) : player.trackIndex
+    }
+
+    /// What Session is playing FROM — the channel on radio/tape, the record on CD.
+    var chipText: String {
+        switch player.source {
+        case .cd: return "💿 " + (player.currentAlbum?.album ?? player.now.album).uppercased()
+        case .tape:
+            if player.show?.channel == "favourites" { return "♥ FAVOURITES" }
+            return "◉ " + (player.current?.name ?? "").uppercased()
+        case .radio: return "◉ " + (player.current?.name ?? "").uppercased()
+        }
     }
 
     var artURL: URL? {

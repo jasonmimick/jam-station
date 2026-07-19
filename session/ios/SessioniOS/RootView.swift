@@ -10,21 +10,26 @@ struct RootView: View {
 
     var t: IOSTheme { IOSTheme.current(scheme, accentHex: accentHex) }
 
-    var body: some View {
-        TabView {
-            TunerTab(t: t, openPlayer: { showPlayer = true })
-                .tabItem { Label("Tuner", systemImage: "dial.medium") }
-            ShelfTab(t: t, openPlayer: { showPlayer = true })
-                .tabItem { Label("Shelf", systemImage: "square.stack") }
-            YouTab(t: t)
-                .tabItem { Label("You", systemImage: "circle.circle") }
-        }
-        .tint(t.accent)
-        .safeAreaInset(edge: .bottom) {
+    /// The mini pill lives INSIDE each tab, above the tab bar — inserting it at
+    /// the screen edge covered the tab buttons and ate scroll gestures.
+    @ViewBuilder func withMini<V: View>(_ v: V) -> some View {
+        v.safeAreaInset(edge: .bottom) {
             if player.status != .idle {
                 MiniPlayer(t: t) { showPlayer = true }
             }
         }
+    }
+
+    var body: some View {
+        TabView {
+            withMini(TunerTab(t: t, openPlayer: { showPlayer = true }))
+                .tabItem { Label("Tuner", systemImage: "dial.medium") }
+            withMini(ShelfTab(t: t, openPlayer: { showPlayer = true }))
+                .tabItem { Label("Shelf", systemImage: "square.stack") }
+            withMini(YouTab(t: t))
+                .tabItem { Label("You", systemImage: "circle.circle") }
+        }
+        .tint(t.accent)
         .sheet(isPresented: $showPlayer) {
             PlayerSheet(t: t)
                 .presentationDetents([.large])
@@ -96,6 +101,30 @@ struct TunerTab: View {
     }
 }
 
+/// Image loader that goes through URLSession.shared — AsyncImage does not
+/// reliably send the session cookie, and the members-only /music covers 403
+/// without it.
+struct NetImage: View {
+    let url: URL?
+    @State private var img: UIImage?
+
+    var body: some View {
+        Group {
+            if let img {
+                Image(uiImage: img).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                Color.clear
+            }
+        }
+        .task(id: url) {
+            guard let url else { return }
+            if let (d, r) = try? await URLSession.shared.data(from: url),
+               (r as? HTTPURLResponse)?.statusCode == 200,
+               let ui = UIImage(data: d) { img = ui }
+        }
+    }
+}
+
 struct FindField: View {
     @Binding var text: String
     let prompt: String
@@ -139,9 +168,7 @@ struct ChannelCard: View {
                             .font(.system(size: 38, weight: .ultraLight))
                             .foregroundStyle(.white.opacity(0.92))
                         if let url = ch.artURL(base: player.stationBase) {
-                            AsyncImage(url: url) { img in
-                                img.resizable().aspectRatio(contentMode: .fill)
-                            } placeholder: { Color.clear }
+                            NetImage(url: url)
                         }
                     }
                     .aspectRatio(1, contentMode: .fit)
@@ -243,9 +270,7 @@ struct ShelfTab: View {
                                             .font(.system(size: 36, weight: .ultraLight))
                                             .foregroundStyle(.white.opacity(0.92))
                                         if let url = al.coverURL(base: player.stationBase) {
-                                            AsyncImage(url: url) { img in
-                                                img.resizable().aspectRatio(contentMode: .fill)
-                                            } placeholder: { Color.clear }
+                                            NetImage(url: url)
                                         }
                                     }
                                     .aspectRatio(1, contentMode: .fit)

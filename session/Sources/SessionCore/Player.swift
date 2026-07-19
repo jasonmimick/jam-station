@@ -311,9 +311,16 @@ public final class Player: ObservableObject {
 
     // ── internals ────────────────────────────────────────────────────────
 
+    /// AVPlayer does NOT attach the app's cookies by itself — and the members-only
+    /// /music files (CD source, private streams) 403 without the session cookie.
+    private func makeItem(url: URL) -> AVPlayerItem {
+        let opts = [AVURLAssetHTTPCookiesKey: HTTPCookieStorage.shared.cookies ?? []]
+        return AVPlayerItem(asset: AVURLAsset(url: url, options: opts))
+    }
+
     private func playRadio() {
         guard let ch = current else { return }
-        let item = AVPlayerItem(url: api.streamURL(slug: ch.slug))
+        let item = makeItem(url: api.streamURL(slug: ch.slug))
         watch(item)
         player.replaceCurrentItem(with: item)
         player.play()
@@ -329,7 +336,7 @@ public final class Player: ObservableObject {
         let t = sh.tracks[index]
         now = NowPlaying(title: t.title, artist: t.artist, album: t.album, url: t.url)
         position = 0; duration = 0
-        let item = AVPlayerItem(url: url)
+        let item = makeItem(url: url)
         watch(item)
         player.replaceCurrentItem(with: item)
         player.play()
