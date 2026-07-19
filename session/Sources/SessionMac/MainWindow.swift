@@ -37,12 +37,12 @@ struct MainWindowView: View {
                 }
                 HSplitView {
                     TunerList(t: t, fixedHeight: nil, browseAlbums: true)
-                        .frame(minWidth: 220, idealWidth: 270, maxWidth: 380)
+                        .frame(minWidth: 190, idealWidth: 270, maxWidth: 380)
                         .background(t.panel)
                     StagePane(t: t, confirmSkip: $confirmSkip)
-                        .frame(minWidth: 420, maxWidth: .infinity)
+                        .frame(minWidth: 360, maxWidth: .infinity)
                     RightPane(t: t)
-                        .frame(minWidth: 240, idealWidth: 300, maxWidth: 380)
+                        .frame(minWidth: 210, idealWidth: 300, maxWidth: 380)
                         .background(t.panel)
                 }
             }
@@ -54,11 +54,14 @@ struct MainWindowView: View {
                 .transition(.opacity)
             }
         }
-        .frame(width: geo.size.width / zoom, height: geo.size.height / zoom)
+        .frame(width: max(geo.size.width, 1) / zoom, height: max(geo.size.height, 1) / zoom)
         .scaleEffect(zoom, anchor: .topLeading)
         }
         .background(t.board)
-        .frame(minWidth: 760, minHeight: 540)
+        // the scaled-down layout must never dip below the panes' combined minimums
+        // (190+360+210) or NSSplitView's constraints go unsatisfiable and AppKit traps —
+        // so the window's own minimum grows with the zoom
+        .frame(minWidth: 800 * max(1, zoom), minHeight: 540 * max(1, zoom))
         .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
         .onContinuousHover { _ in
             lastActive = Date()
