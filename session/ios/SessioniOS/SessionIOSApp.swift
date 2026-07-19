@@ -27,9 +27,10 @@ struct IOSTheme {
     let accent: Color, onAccent: Color
     let red: Color, live: Color
 
-    static func current(_ scheme: ColorScheme, accentHex: String) -> IOSTheme {
-        let accent = Color(hexStr: accentHex)
-        let onAccent = luminance(accentHex) > 0.45 ? Color(hexStr: "#12120C") : .white
+    static func current(_ scheme: ColorScheme, accentHex: String, dance: Double? = nil) -> IOSTheme {
+        let hex = dance.map { hueShifted(accentHex, by: sin($0) * 26) } ?? accentHex
+        let accent = Color(hexStr: hex)
+        let onAccent = luminance(hex) > 0.45 ? Color(hexStr: "#12120C") : .white
         if scheme == .light {
             return IOSTheme(
                 board: .white, panel: Color(hexStr: "#F4F4F4"),
@@ -45,6 +46,19 @@ struct IOSTheme {
             ink: .white, muted: Color(hexStr: "#8C8C94"), faint: Color(hexStr: "#5A5A62"),
             accent: accent, onAccent: onAccent,
             red: Color(hexStr: "#F0402F"), live: Color(hexStr: "#2FD16A"))
+    }
+
+    static func hueShifted(_ hex: String, by degrees: Double) -> String {
+        let c = rgb(hex)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(red: c[0], green: c[1], blue: c[2], alpha: 1)
+            .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        h = (h + degrees / 360).truncatingRemainder(dividingBy: 1)
+        if h < 0 { h += 1 }
+        let out = UIColor(hue: h, saturation: s, brightness: b, alpha: 1)
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0
+        out.getRed(&r2, green: &g2, blue: &b2, alpha: &a)
+        return String(format: "#%02X%02X%02X", Int(r2 * 255), Int(g2 * 255), Int(b2 * 255))
     }
 
     static func luminance(_ hex: String) -> Double {

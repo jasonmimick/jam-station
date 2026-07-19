@@ -6,28 +6,42 @@ struct RootView: View {
     @Environment(\.colorScheme) var scheme
     @AppStorage("accent") var accentHex = "#FFD200"
     @AppStorage("theme") var themePref = "auto"
+    @AppStorage("dance") var dance = false
     @State private var showPlayer = false
 
-    var t: IOSTheme { IOSTheme.current(scheme, accentHex: accentHex) }
+    var t: IOSTheme {
+        IOSTheme.current(scheme, accentHex: accentHex,
+                         dance: dance && player.status == .playing ? player.dancePhase : nil)
+    }
 
-    /// The mini pill lives INSIDE each tab, above the tab bar — inserting it at
-    /// the screen edge covered the tab buttons and ate scroll gestures.
-    @ViewBuilder func withMini<V: View>(_ v: V) -> some View {
-        v.safeAreaInset(edge: .bottom) {
-            if player.status != .idle {
-                MiniPlayer(t: t) { showPlayer = true }
-            }
+    var tabs: some View {
+        TabView {
+            TunerTab(t: t, openPlayer: { showPlayer = true })
+                .tabItem { Label("Tuner", systemImage: "dial.medium") }
+            ShelfTab(t: t, openPlayer: { showPlayer = true })
+                .tabItem { Label("Shelf", systemImage: "square.stack") }
+            YouTab(t: t)
+                .tabItem { Label("You", systemImage: "circle.circle") }
         }
     }
 
     var body: some View {
-        TabView {
-            withMini(TunerTab(t: t, openPlayer: { showPlayer = true }))
-                .tabItem { Label("Tuner", systemImage: "dial.medium") }
-            withMini(ShelfTab(t: t, openPlayer: { showPlayer = true }))
-                .tabItem { Label("Shelf", systemImage: "square.stack") }
-            withMini(YouTab(t: t))
-                .tabItem { Label("You", systemImage: "circle.circle") }
+        Group {
+            // the native mini-player slot above the tab bar (what Music uses);
+            // pre-26 falls back to a per-screen inset
+            if #available(iOS 26.0, *) {
+                tabs.tabViewBottomAccessory {
+                    if player.status != .idle {
+                        MiniPlayer(t: t, bare: true) { showPlayer = true }
+                    }
+                }
+            } else {
+                tabs.safeAreaInset(edge: .bottom) {
+                    if player.status != .idle {
+                        MiniPlayer(t: t) { showPlayer = true }
+                    }
+                }
+            }
         }
         .tint(t.accent)
         .sheet(isPresented: $showPlayer) {
@@ -300,6 +314,8 @@ struct YouTab: View {
     let t: IOSTheme
     @AppStorage("accent") var accentHex = "#FFD200"
     @AppStorage("theme") var themePref = "auto"
+    @AppStorage("dance") var dance = false
+    @AppStorage("saver") var saverMode = "rotate"
     @State private var code = ""
     @State private var authError = false
     @State private var stationText = ""
@@ -408,6 +424,40 @@ struct YouTab: View {
                                                              ? Color(hexStr: "#12120C") : .white)
                                     }
                                 }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        ColorPicker("", selection: Binding(
+                            get: { Color(hexStr: accentHex) },
+                            set: { c in
+                                let ui = UIColor(c)
+                                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                                ui.getRed(&r, green: &g, blue: &b, alpha: &a)
+                                accentHex = String(format: "#%02X%02X%02X",
+                                                   Int(r * 255), Int(g * 255), Int(b * 255))
+                            }
+                        ), supportsOpacity: false)
+                        .labelsHidden()
+                        .frame(width: 30)
+                    }
+                    Toggle(isOn: $dance) {
+                        Text(dance ? "♪ Dancing — the colour sways with the music"
+                                   : "Let it dance")
+                            .font(.system(size: 13))
+                    }
+                    .tint(t.accent)
+                    HStack(spacing: 8) {
+                        Text("Saver").font(.system(size: 13)).foregroundStyle(t.muted)
+                        ForEach(["bars", "ring", "scope", "rotate"], id: \.self) { m in
+                            Button {
+                                saverMode = m
+                            } label: {
+                                Text(m.uppercased())
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .padding(.horizontal, 9).padding(.vertical, 6)
+                                    .background(saverMode == m ? t.accent : t.sunk)
+                                    .foregroundStyle(saverMode == m ? t.onAccent : t.muted)
+                                    .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)
                         }

@@ -5,6 +5,7 @@ import SessionCore
 struct MiniPlayer: View {
     @EnvironmentObject var player: Player
     let t: IOSTheme
+    var bare = false           // true inside tabViewBottomAccessory (system draws the chrome)
     let open: () -> Void
 
     var body: some View {
@@ -37,11 +38,13 @@ struct MiniPlayer: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(8)
-            .background(RoundedRectangle(cornerRadius: 14).fill(t.panel)
-                .shadow(color: .black.opacity(0.5), radius: 16, y: 8))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(t.line, lineWidth: 1))
-            .padding(.horizontal, 10).padding(.bottom, 4)
+            .padding(bare ? 6 : 8)
+            .background(bare ? AnyView(Color.clear)
+                : AnyView(RoundedRectangle(cornerRadius: 14).fill(t.panel)
+                    .shadow(color: .black.opacity(0.5), radius: 16, y: 8)))
+            .overlay(bare ? nil : RoundedRectangle(cornerRadius: 14).stroke(t.line, lineWidth: 1))
+            .padding(.horizontal, bare ? 4 : 10)
+            .padding(.bottom, bare ? 0 : 4)
         }
         .buttonStyle(.plain)
     }
@@ -51,17 +54,35 @@ struct MiniPlayer: View {
 struct PlayerSheet: View {
     @EnvironmentObject var player: Player
     let t: IOSTheme
+    @AppStorage("saver") var saverMode = "rotate"
     @State private var confirmSkip = false
+    @State private var showSaver = false
 
     var body: some View {
         VStack(spacing: 0) {
-            if !chipText.isEmpty {
-                Text(chipText)
-                    .font(.system(size: 11, weight: .heavy)).tracking(1.5)
-                    .padding(.horizontal, 14).padding(.vertical, 7)
-                    .overlay(Capsule().stroke(t.line, lineWidth: 1))
-                    .foregroundStyle(t.muted)
-                    .padding(.top, 18)
+            HStack {
+                Spacer()
+                if !chipText.isEmpty {
+                    Text(chipText)
+                        .font(.system(size: 11, weight: .heavy)).tracking(1.5)
+                        .padding(.horizontal, 14).padding(.vertical, 7)
+                        .overlay(Capsule().stroke(t.line, lineWidth: 1))
+                        .foregroundStyle(t.muted)
+                }
+                Spacer()
+                Button {
+                    showSaver = true
+                } label: {
+                    Text("▓").font(.system(size: 13, weight: .bold))
+                        .frame(width: 32, height: 32)
+                        .foregroundStyle(t.muted)
+                        .overlay(Circle().stroke(t.line, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 18).padding(.top, 18)
+            .fullScreenCover(isPresented: $showSaver) {
+                SaverView(t: t, mode: saverMode) { showSaver = false }
             }
             ZStack {
                 let seed = player.currentAlbum?.album ?? player.current?.name ?? "♪"
@@ -267,5 +288,108 @@ struct PlayerSheet: View {
     func mmss(_ s: Double) -> String {
         let n = Int(s.isFinite ? max(s, 0) : 0)
         return String(format: "%d:%02d", n / 60, n % 60)
+    }
+}
+
+/// The screensaver, phone edition — Bars · Ring · Scope, keeps the display awake.
+struct SaverView: View {
+    @EnvironmentObject var player: Player
+    let t: IOSTheme
+    let mode: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Color.black.ignoresSafeArea()
+            TimelineView(.animation) { tl in
+                let time = tl.date.timeIntervalSinceReferenceDate
+                let shown = mode == "rotate" ? ["bars", "ring", "scope"][Int(time / 30) % 3] : mode
+                Canvas { ctx, size in
+                    switch shown {
+                    case "ring": ring(ctx, size, time)
+                    case "scope": scope(ctx, size, time)
+                    default: bars(ctx, size, time)
+                    }
+                }
+                .ignoresSafeArea()
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                if !player.now.title.isEmpty {
+                    Text(player.now.title)
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(Color(hexStr: "#F2F2EE"))
+                        .shadow(color: t.accent.opacity(0.55), radius: 24)
+                    Text(player.now.artist)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(hexStr: "#F2F2EE").opacity(0.7))
+                }
+                if let ch = player.current, player.source == .radio {
+                    Text("ON AIR · \(ch.name.uppercased())")
+                        .font(.system(size: 10, weight: .heavy)).tracking(2)
+                        .foregroundStyle(t.accent)
+                        .padding(.top, 5)
+                }
+            }
+            .padding(28)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { dismiss() }
+        .statusBarHidden()
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
+    private func level(_ i: Int, _ time: Double) -> Double {
+        let x = Double(i)
+        let v = sin(time * 2.1 + x * 0.55) + sin(time * 3.3 + x * 1.31)
+              + 0.5 * sin(time * 5.7 + x * 2.17)
+        return min(1, max(0.06, abs(v) / 2.5))
+    }
+
+    private func bars(_ ctx: GraphicsContext, _ size: CGSize, _ time: Double) {
+        let n = 40
+        let gap: CGFloat = 4
+        let w = (size.width - gap * CGFloat(n - 1)) / CGFloat(n)
+        for i in 0..<n {
+            let h = size.height * 0.55 * level(i, time)
+            let rect = CGRect(x: CGFloat(i) * (w + gap),
+                              y: (size.height - h) / 2, width: w, height: h)
+            ctx.fill(Path(roundedRect: rect, cornerRadius: 1),
+                     with: .color(t.accent.opacity(0.35 + 0.65 * level(i, time))))
+        }
+    }
+
+    private func ring(_ ctx: GraphicsContext, _ size: CGSize, _ time: Double) {
+        let c = CGPoint(x: size.width / 2, y: size.height / 2)
+        let base = min(size.width, size.height) * 0.2
+        let n = 80
+        for i in 0..<n {
+            let a = Double(i) / Double(n) * 2 * .pi + time * 0.15
+            let amp = base * (0.35 + 0.9 * level(i, time))
+            var p = Path()
+            p.move(to: CGPoint(x: c.x + cos(a) * base, y: c.y + sin(a) * base))
+            p.addLine(to: CGPoint(x: c.x + cos(a) * (base + amp),
+                                  y: c.y + sin(a) * (base + amp)))
+            ctx.stroke(p, with: .color(t.accent.opacity(0.3 + 0.7 * level(i, time))),
+                       lineWidth: 2.5)
+        }
+    }
+
+    private func scope(_ ctx: GraphicsContext, _ size: CGSize, _ time: Double) {
+        var p = Path()
+        let mid = size.height / 2
+        let steps = 200
+        for s in 0...steps {
+            let x = size.width * CGFloat(s) / CGFloat(steps)
+            let ph = Double(s) / 16.0
+            let y = mid + CGFloat((sin(time * 2.4 + ph) + 0.6 * sin(time * 4.1 + ph * 1.7))
+                                  * Double(size.height) * 0.14)
+            if s == 0 { p.move(to: CGPoint(x: x, y: y)) }
+            else { p.addLine(to: CGPoint(x: x, y: y)) }
+        }
+        ctx.stroke(p, with: .color(t.accent), lineWidth: 2)
+        var glow = ctx
+        glow.addFilter(.blur(radius: 6))
+        glow.stroke(p, with: .color(t.accent.opacity(0.5)), lineWidth: 4)
     }
 }
