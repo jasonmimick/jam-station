@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// The station's design system, verbatim from brain/app/static/index.html.
 /// Session invents no look of its own (docs/DESIGN-session-p0.md).
@@ -8,9 +9,11 @@ struct Theme {
     let accent: Color, onAccent: Color
     let blue: Color, red: Color, live: Color
 
-    static func current(_ scheme: ColorScheme, accentHex: String) -> Theme {
-        let accent = Color(hex: accentHex)
-        let onAccent = Theme.luminance(accentHex) > 0.45 ? Color(hex: "#12120C") : .white
+    static func current(_ scheme: ColorScheme, accentHex: String, dance: Double? = nil) -> Theme {
+        // dance: sway the signage hue ±26° with the clock; the on-colour rule still holds
+        let hex = dance.map { Theme.hueShifted(accentHex, by: sin($0) * 26) } ?? accentHex
+        let accent = Color(hex: hex)
+        let onAccent = Theme.luminance(hex) > 0.45 ? Color(hex: "#12120C") : .white
         if scheme == .light {
             return Theme(
                 board: Color(hex: "#FFFFFF"), panel: Color(hex: "#F4F4F4"),
@@ -33,6 +36,19 @@ struct Theme {
             c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
         }
         return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]
+    }
+
+    static func hueShifted(_ hex: String, by degrees: Double) -> String {
+        let c = rgb(hex)
+        let ns = NSColor(calibratedRed: c[0], green: c[1], blue: c[2], alpha: 1)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        h = (h + degrees / 360).truncatingRemainder(dividingBy: 1)
+        if h < 0 { h += 1 }
+        let out = NSColor(calibratedHue: h, saturation: s, brightness: b, alpha: 1)
+        return String(format: "#%02X%02X%02X",
+                      Int(out.redComponent * 255), Int(out.greenComponent * 255),
+                      Int(out.blueComponent * 255))
     }
 
     static func rgb(_ hex: String) -> [Double] {

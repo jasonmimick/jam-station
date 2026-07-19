@@ -10,32 +10,64 @@ struct MainWindowView: View {
     @EnvironmentObject var player: Player
     @Environment(\.colorScheme) var scheme
     @AppStorage("accent") var accentHex = "#FFD200"
+    @AppStorage("theme") var themePref = "auto"
+    @AppStorage("dance") var dance = false
+    @AppStorage("saver") var saverMode = "rotate"
     @State var confirmSkip = false
     @State var showSettings = false
+    @State var saverOn = false
+    @State var lastActive = Date()
 
-    var t: Theme { Theme.current(scheme, accentHex: accentHex) }
+    var t: Theme {
+        Theme.current(scheme, accentHex: accentHex,
+                      dance: dance && player.status == .playing ? player.dancePhase : nil)
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Masthead(t: t, confirmSkip: $confirmSkip, onGear: { showSettings = true })
-            if let rip = player.rip, rip.ripping {
-                RipBar(rip: rip, t: t)
+        ZStack {
+            VStack(spacing: 0) {
+                Masthead(t: t, confirmSkip: $confirmSkip,
+                         onGear: { showSettings = true },
+                         onSaver: { saverOn = true })
+                if let rip = player.rip, rip.ripping {
+                    RipBar(rip: rip, t: t)
+                }
+                HSplitView {
+                    TunerList(t: t, fixedHeight: nil, browseAlbums: true)
+                        .frame(minWidth: 220, idealWidth: 270, maxWidth: 380)
+                        .background(t.panel)
+                    StagePane(t: t, confirmSkip: $confirmSkip)
+                        .frame(minWidth: 420, maxWidth: .infinity)
+                    RightPane(t: t)
+                        .frame(minWidth: 240, idealWidth: 300, maxWidth: 380)
+                        .background(t.panel)
+                }
             }
-            HSplitView {
-                TunerList(t: t, fixedHeight: nil)
-                    .frame(minWidth: 220, idealWidth: 270, maxWidth: 380)
-                    .background(t.panel)
-                StagePane(t: t, confirmSkip: $confirmSkip)
-                    .frame(minWidth: 420, maxWidth: .infinity)
-                RightPane(t: t)
-                    .frame(minWidth: 240, idealWidth: 300, maxWidth: 380)
-                    .background(t.panel)
+            if saverOn {
+                SaverOverlay(t: t, mode: saverMode) {
+                    saverOn = false
+                    lastActive = Date()
+                }
+                .transition(.opacity)
             }
         }
         .background(t.board)
         .frame(minWidth: 760, minHeight: 540)
+        .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
+        .onContinuousHover { _ in
+            lastActive = Date()
+            if saverOn { saverOn = false }
+        }
         .sheet(isPresented: $showSettings) {
             SettingsSheet().environmentObject(player)
+        }
+        .task {   // idle watchdog: 3 quiet minutes in the window → the saver
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                if !saverOn, Date().timeIntervalSince(lastActive) > 180 {
+                    saverOn = true
+                }
+            }
         }
         .onAppear {
             NSApp.setActivationPolicy(.regular)   // show in the Dock while the window lives
@@ -103,17 +135,51 @@ struct Tracklist: View {
     @EnvironmentObject var player: Player
     let t: Theme
 
+    /// A browsed record takes the stage list over; otherwise the playing show.
+    var display: Show? { player.browsed?.show ?? player.show }
+
     var playingIndex: Int {
-        player.source == .radio ? (player.show?.playing ?? -1) : player.trackIndex
+        if let b = player.browsed {
+            // only mark NOW if the browsed record is the one actually playing
+            return (player.source == .cd && player.currentAlbum?.dir == b.album.dir)
+                ? player.trackIndex : -1
+        }
+        return player.source == .radio ? (player.show?.playing ?? -1) : player.trackIndex
     }
 
     var body: some View {
-        if let sh = player.show, !sh.tracks.isEmpty {
+        if let sh = display, !sh.tracks.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text(sh.album.isEmpty ? "THE SET" : sh.album)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(t.ink)
-                    .padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 6)
+                HStack(spacing: 10) {
+                    Text(sh.album.isEmpty ? "THE SET" : sh.album)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(t.ink)
+                    if player.browsed != nil {
+                        Button {
+                            player.playBrowsed(at: 0)
+                        } label: {
+                            Text("▶ PLAY").font(.system(size: 9, weight: .heavy)).tracking(1)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(t.accent).foregroundStyle(t.onAccent)
+                                .clipShape(RoundedRectangle(cornerRadius: 2))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            player.closeBrowse()
+                        } label: {
+                            Text("✕").font(.system(size: 10, weight: .heavy))
+                                .frame(width: 20, height: 20)
+                                .foregroundStyle(t.muted)
+                                .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("back to what's playing")
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 6)
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(Array(sh.tracks.enumerated()), id: \.offset) { i, track in
@@ -285,11 +351,12 @@ struct TrackRow: View {
 
     var isNow: Bool { index == playing }
     var isDone: Bool { index < playing }
-    var clickable: Bool { player.source != .radio }
+    var clickable: Bool { player.browsed != nil || player.source != .radio }
 
     var body: some View {
         Button {
-            if clickable { player.jump(to: index) }
+            if player.browsed != nil { player.playBrowsed(at: index) }
+            else if clickable { player.jump(to: index) }
         } label: {
             HStack(spacing: 12) {
                 Text(isDone ? "✓" : (isNow ? "▶" : " "))

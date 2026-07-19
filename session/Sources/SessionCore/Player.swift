@@ -25,6 +25,9 @@ public final class Player: ObservableObject {
     @Published public private(set) var rip: RipStatus?      // LISTEN AND RIP, live
     @Published public private(set) var favs: [Fav] = []
     @Published public private(set) var history: [HistoryRow] = []
+    /// "Let it dance" clock — advances only while music plays and the toggle is on;
+    /// the UI sways the accent hue with it. (True audio-reactive comes with an engine tap.)
+    @Published public private(set) var dancePhase: Double = 0
     @Published public var position: Double = 0
     @Published public private(set) var duration: Double = 0
     @Published public var isScrubbing = false
@@ -84,6 +87,15 @@ public final class Player: ObservableObject {
         Task {
             await refreshChannels()
             await refreshMembership()
+        }
+        Task { [weak self] in           // the dance clock: 8 Hz, only ticks when wanted
+            while !Task.isCancelled {
+                guard let self else { return }
+                if UserDefaults.standard.bool(forKey: "dance"), self.status == .playing {
+                    self.dancePhase += 0.24
+                }
+                try? await Task.sleep(for: .milliseconds(125))
+            }
         }
         Task { [weak self] in           // the rip bar: cheap poll, always on
             while !Task.isCancelled {
@@ -184,13 +196,36 @@ public final class Player: ObservableObject {
         }
     }
 
+    // ── browsing the shelf: look at a record without dropping the needle ──
+
+    @Published public private(set) var browsed: (album: Album, show: Show)?
+
+    public func browseAlbum(_ album: Album) {
+        Task {
+            guard let sh = try? await api.album(dir: album.dir), !sh.tracks.isEmpty else { return }
+            browsed = (album, sh)
+        }
+    }
+
+    public func closeBrowse() { browsed = nil }
+
+    public func playBrowsed(at index: Int) {
+        guard let b = browsed else { return }
+        currentAlbum = b.album
+        show = b.show
+        source = .cd
+        browsed = nil
+        playTrack(index)
+    }
+
     // ── tune / sources ───────────────────────────────────────────────────
 
     public func tune(_ channel: Channel) {
         guard channel.playable else { return }
         current = channel
         source = .radio
-        show = nil; currentAlbum = nil; trackIndex = -1; position = 0; duration = 0
+        show = nil; currentAlbum = nil; browsed = nil
+        trackIndex = -1; position = 0; duration = 0
         playRadio()
     }
 

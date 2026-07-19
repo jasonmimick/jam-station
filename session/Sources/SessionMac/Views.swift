@@ -7,10 +7,15 @@ struct PopoverView: View {
     @EnvironmentObject var player: Player
     @Environment(\.colorScheme) var scheme
     @AppStorage("accent") var accentHex = "#FFD200"
+    @AppStorage("theme") var themePref = "auto"
+    @AppStorage("dance") var dance = false
     @State var showSettings = false
     @State var confirmSkip = false
 
-    var t: Theme { Theme.current(scheme, accentHex: accentHex) }
+    var t: Theme {
+        Theme.current(scheme, accentHex: accentHex,
+                      dance: dance && player.status == .playing ? player.dancePhase : nil)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +31,7 @@ struct PopoverView: View {
         }
         .frame(width: 390)
         .background(t.board)
+        .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
         .onAppear { Task { await player.refreshChannels() } }
     }
 }
@@ -37,6 +43,7 @@ struct Masthead: View {
     let t: Theme
     @Binding var confirmSkip: Bool
     var onGear: (() -> Void)? = nil
+    var onSaver: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -50,6 +57,18 @@ struct Masthead: View {
                 .tracking(1.6)
                 .foregroundStyle(t.onAccent)
             Spacer()
+            if let onSaver {
+                Button(action: onSaver) {
+                    Text("▓")
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(width: 28, height: 28)
+                        .foregroundStyle(t.onAccent)
+                        .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.onAccent, lineWidth: 2))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("screensaver now (it also starts on its own after 3 idle minutes)")
+            }
             if let onGear {
                 Button(action: onGear) {
                     Image(systemName: "gearshape")
@@ -363,6 +382,9 @@ struct TunerList: View {
     /// MenuBarExtra windows collapse a ScrollView's maxHeight to 0, so the popover
     /// pins a fixed height; the main window passes nil and fills its pane.
     var fixedHeight: CGFloat? = 320
+    /// Window: clicking an album BROWSES it (tracklist in the stage, nothing
+    /// interrupted). Popover: clicking an album just plays it — quick-draw.
+    var browseAlbums = false
     @State private var find = ""
 
     var channels: [Channel] {
@@ -405,7 +427,7 @@ struct TunerList: View {
                             .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
                             .overlay(alignment: .top) { Rectangle().fill(t.line).frame(height: 1) }
                         ForEach(albums) { al in
-                            AlbumRow(al: al, t: t)
+                            AlbumRow(al: al, t: t, browse: browseAlbums)
                         }
                     }
                 }
@@ -465,13 +487,15 @@ struct AlbumRow: View {
     @EnvironmentObject var player: Player
     let al: Album
     let t: Theme
+    var browse = false
     @State private var hover = false
 
     var playing: Bool { player.source == .cd && player.currentAlbum?.dir == al.dir }
+    var browsing: Bool { player.browsed?.album.dir == al.dir }
 
     var body: some View {
         Button {
-            player.playAlbum(al)
+            if browse { player.browseAlbum(al) } else { player.playAlbum(al) }
         } label: {
             HStack(spacing: 8) {
                 Text(playing ? "▸" : "♫")
@@ -494,9 +518,10 @@ struct AlbumRow: View {
                     .overlay(Rectangle().stroke(t.line, lineWidth: 1))
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(playing ? t.sunk : (hover ? t.sunk.opacity(0.6) : .clear))
+            .background(playing || browsing ? t.sunk : (hover ? t.sunk.opacity(0.6) : .clear))
             .overlay(alignment: .leading) {
                 if playing { Rectangle().fill(t.accent).frame(width: 3) }
+                else if browsing { Rectangle().fill(t.blue).frame(width: 3) }
             }
             .contentShape(Rectangle())
         }
@@ -595,6 +620,9 @@ struct SettingsPane: View {
     @EnvironmentObject var player: Player
     let t: Theme
     @AppStorage("accent") var accentHex = "#FFD200"
+    @AppStorage("theme") var themePref = "auto"
+    @AppStorage("dance") var dance = false
+    @AppStorage("saver") var saverMode = "rotate"
     @State private var stationText = ""
     @State private var codeText = ""
     @State private var authError = false
@@ -686,10 +714,61 @@ struct SettingsPane: View {
                     }
                 }
             }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("APPEARANCE").font(.system(size: 9, weight: .heavy)).tracking(2.2)
+                    .foregroundStyle(t.faint)
+                HStack(spacing: 6) {
+                    ForEach(["auto", "dark", "light"], id: \.self) { m in
+                        ChoiceChip(label: m.uppercased(), on: themePref == m, t: t) {
+                            themePref = m
+                        }
+                    }
+                    Spacer()
+                    ChoiceChip(label: dance ? "♪ DANCING" : "LET IT DANCE", on: dance, t: t) {
+                        dance.toggle()
+                    }
+                    .help("the signage colour sways while the music plays")
+                }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("SCREENSAVER").font(.system(size: 9, weight: .heavy)).tracking(2.2)
+                    .foregroundStyle(t.faint)
+                HStack(spacing: 6) {
+                    ForEach(["bars", "ring", "scope", "rotate"], id: \.self) { m in
+                        ChoiceChip(label: m.uppercased(), on: saverMode == m, t: t) {
+                            saverMode = m
+                        }
+                    }
+                }
+                Text("after 3 idle minutes in the window — or ▓ in its masthead, right now")
+                    .font(.system(size: 10)).foregroundStyle(t.faint)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { stationText = player.stationBase.absoluteString }
+    }
+
+    struct ChoiceChip: View {
+        let label: String
+        let on: Bool
+        let t: Theme
+        let action: () -> Void
+
+        var body: some View {
+            Button(action: action) {
+                Text(label)
+                    .font(.system(size: 9, weight: .heavy)).tracking(0.8)
+                    .padding(.horizontal, 9).padding(.vertical, 6)
+                    .foregroundStyle(on ? t.onAccent : t.muted)
+                    .background(on ? t.accent : t.sunk)
+                    .overlay(RoundedRectangle(cornerRadius: 2)
+                        .stroke(on ? t.accent : t.line, lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     func submitCode() {
