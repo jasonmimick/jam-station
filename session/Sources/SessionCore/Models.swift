@@ -81,11 +81,12 @@ public struct Album: Decodable, Identifiable, Equatable {
     public let trackCount: Int
     public let coverPath: String?
     public let year: Int?
+    public let mtime: Double        // folder mtime IS "date added"
 
     public var id: String { dir }
 
     enum CodingKeys: String, CodingKey {
-        case dir, artist, album, year
+        case dir, artist, album, year, mtime
         case trackCount = "tracks"
         case coverPath = "cover_url"
     }
@@ -100,6 +101,7 @@ public struct Album: Decodable, Identifiable, Equatable {
         if let y = try? c.decode(Int.self, forKey: .year) { year = y }
         else if let s = try? c.decode(String.self, forKey: .year) { year = Int(s) }
         else { year = nil }
+        mtime = (try? c.decode(Double.self, forKey: .mtime)) ?? 0
     }
 
     public func coverURL(base: URL) -> URL? {

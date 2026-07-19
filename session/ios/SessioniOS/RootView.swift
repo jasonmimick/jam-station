@@ -1,8 +1,14 @@
 import SwiftUI
 import SessionCore
 
+/// Tab routing — so the SESSION mark in any header can take you home.
+final class Nav: ObservableObject {
+    @Published var tab = "home"
+}
+
 struct RootView: View {
     @EnvironmentObject var player: Player
+    @StateObject private var nav = Nav()
     @Environment(\.colorScheme) var scheme
     @AppStorage("accent") var accentHex = "#FFD200"
     @AppStorage("theme") var themePref = "auto"
@@ -44,13 +50,15 @@ struct RootView: View {
         Group {
             if #available(iOS 26.0, *) {
                 // the native mini-player slot above the tab bar (what Music uses)
-                TabView {
+                TabView(selection: $nav.tab) {
+                    HomeTab(t: t, openPlayer: openPlayer, goTuner: { nav.tab = "tuner" })
+                        .tabItem { Label("Home", systemImage: "house") }.tag("home")
                     TunerTab(t: t, openPlayer: openPlayer)
-                        .tabItem { Label("Tuner", systemImage: "dial.medium") }
+                        .tabItem { Label("Tuner", systemImage: "dial.medium") }.tag("tuner")
                     ShelfTab(t: t, openPlayer: openPlayer)
-                        .tabItem { Label("Shelf", systemImage: "square.stack") }
+                        .tabItem { Label("Shelf", systemImage: "square.stack") }.tag("shelf")
                     YouTab(t: t)
-                        .tabItem { Label("You", systemImage: "circle.circle") }
+                        .tabItem { Label("You", systemImage: "circle.circle") }.tag("you")
                 }
                 .tabViewBottomAccessory {
                     if player.status != .idle {
@@ -58,16 +66,19 @@ struct RootView: View {
                     }
                 }
             } else {
-                TabView {
+                TabView(selection: $nav.tab) {
+                    withMini(HomeTab(t: t, openPlayer: openPlayer, goTuner: { nav.tab = "tuner" }))
+                        .tabItem { Label("Home", systemImage: "house") }.tag("home")
                     withMini(TunerTab(t: t, openPlayer: openPlayer))
-                        .tabItem { Label("Tuner", systemImage: "dial.medium") }
+                        .tabItem { Label("Tuner", systemImage: "dial.medium") }.tag("tuner")
                     withMini(ShelfTab(t: t, openPlayer: openPlayer))
-                        .tabItem { Label("Shelf", systemImage: "square.stack") }
+                        .tabItem { Label("Shelf", systemImage: "square.stack") }.tag("shelf")
                     withMini(YouTab(t: t))
-                        .tabItem { Label("You", systemImage: "circle.circle") }
+                        .tabItem { Label("You", systemImage: "circle.circle") }.tag("you")
                 }
             }
         }
+        .environmentObject(nav)
         .tint(t.accent)
         .sheet(isPresented: $showPlayer) {
             PlayerSheet(t: t)
@@ -82,14 +93,23 @@ struct RootView: View {
 
 struct SignageHeader: View {
     @EnvironmentObject var player: Player
+    @EnvironmentObject var nav: Nav
     let t: IOSTheme
 
     var body: some View {
         HStack(spacing: 8) {
-            DialMark(t: t)
-            Text("SESSION")
-                .font(.system(size: 13, weight: .heavy)).tracking(2)
-                .foregroundStyle(t.ink)
+            Button {
+                nav.tab = "home"        // the mark is the way home
+            } label: {
+                HStack(spacing: 8) {
+                    DialMark(t: t)
+                    Text("SESSION")
+                        .font(.system(size: 13, weight: .heavy)).tracking(2)
+                        .foregroundStyle(t.ink)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             Text("· \(stationName)")
                 .font(.system(size: 10, weight: .bold)).tracking(1)
                 .foregroundStyle(t.faint)
