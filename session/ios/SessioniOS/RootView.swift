@@ -139,6 +139,10 @@ struct TunerTab: View {
                 }
                 .padding(.horizontal, 14).padding(.bottom, 20)
             }
+            .refreshable {
+                await player.refreshChannels()
+                await player.refreshMembership()
+            }
         }
         .background(t.board)
         .task { await player.refreshChannels() }
@@ -227,6 +231,7 @@ struct ChannelCard: View {
     var body: some View {
         Button {
             guard ch.playable else { return }
+            tapHaptic()
             player.tune(ch)
             openPlayer()
         } label: {
@@ -514,6 +519,26 @@ struct YouTab: View {
                             .foregroundStyle(t.accent)
                     }
                 }
+                if !player.history.isEmpty {
+                    Section("On the station lately") {
+                        ForEach(player.history.prefix(15)) { h in
+                            HStack(spacing: 9) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(h.title.isEmpty ? h.album : h.title)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(t.ink).lineLimit(1)
+                                    Text("\(h.channel) · \(h.artist)")
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(t.muted).lineLimit(1)
+                                }
+                                Spacer()
+                                Text(h.when)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(t.faint)
+                            }
+                        }
+                    }
+                }
                 if player.member != nil, !player.favs.isEmpty {
                     Section("Favourites") {
                         ForEach(Array(player.favs.enumerated()), id: \.element.url) { i, f in
@@ -653,6 +678,7 @@ struct YouTab: View {
         }
         .background(t.board)
         .onAppear { stationText = player.stationBase.absoluteString }
+        .task { await player.refreshHistory() }
     }
 
     func submit() {

@@ -1,5 +1,27 @@
 import SwiftUI
+import AVKit
 import SessionCore
+
+func tapHaptic() {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+}
+
+/// The system AirPlay route picker — send the station to speakers, HomePods, the TV.
+struct AirPlayButton: UIViewRepresentable {
+    let tint: UIColor
+
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let v = AVRoutePickerView()
+        v.tintColor = tint
+        v.activeTintColor = tint
+        v.prioritizesVideoDevices = false
+        return v
+    }
+
+    func updateUIView(_ v: AVRoutePickerView, context: Context) {
+        v.tintColor = tint
+    }
+}
 
 /// The floating pill above the tab bar.
 struct MiniPlayer: View {
@@ -152,12 +174,15 @@ struct PlayerSheet: View {
                     if player.source == .radio { confirmSkip = true } else { player.nextTrack() }
                 } label: { Text("⏭").font(.system(size: 26)) }
                 Button {
+                    tapHaptic()
                     player.toggleFavourite()
                 } label: {
                     Text("♥").font(.system(size: 22))
                         .foregroundStyle(player.nowIsFavourite ? t.red : t.faint)
                 }
                 .disabled(player.member == nil || player.now.url.isEmpty)
+                AirPlayButton(tint: UIColor(t.ink))
+                    .frame(width: 30, height: 30)
             }
             .foregroundStyle(t.ink)
             .buttonStyle(.plain)
@@ -169,6 +194,7 @@ struct PlayerSheet: View {
             }
 
             Button {
+                tapHaptic()
                 player.setSource(player.source == .radio ? .tape : .radio)
             } label: {
                 HStack(spacing: 7) {

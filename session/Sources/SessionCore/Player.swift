@@ -117,7 +117,12 @@ public final class Player: ObservableObject {
     public func refreshChannels() async {
         if let chans = try? await api.channels() {
             channels = chans
-            if current == nil { current = chans.first(where: \.playable) }
+            if current == nil {
+                // resume where you left off — the dial remembers its position
+                let last = UserDefaults.standard.string(forKey: "lastChannel")
+                current = chans.first(where: { $0.slug == last && $0.playable })
+                    ?? chans.first(where: \.playable)
+            }
         }
     }
 
@@ -239,6 +244,7 @@ public final class Player: ObservableObject {
 
     public func tune(_ channel: Channel) {
         guard channel.playable else { return }
+        UserDefaults.standard.set(channel.slug, forKey: "lastChannel")
         current = channel
         source = .radio
         show = nil; currentAlbum = nil; browsed = nil
