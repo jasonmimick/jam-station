@@ -21,7 +21,7 @@ public struct StationAPI {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func post(_ path: String, json: [String: String]) async throws -> Data {
+    private func post(_ path: String, json: [String: Any]) async throws -> Data {
         var req = URLRequest(url: base.appendingPathComponent(path))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -123,6 +123,14 @@ public struct StationAPI {
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode(SpotResult.self, from: data)
+    }
+
+    public func spots() async throws -> [SpotResult] {
+        try await get("api/spots")
+    }
+
+    public func deleteSpot(id: Int) async {
+        _ = try? await post("api/spot/delete", json: ["id": id])
     }
 
     // ── the play log ──

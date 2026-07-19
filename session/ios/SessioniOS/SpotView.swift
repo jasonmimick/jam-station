@@ -53,8 +53,72 @@ struct SpotButton: View {
         guard let raw = try? await item.loadTransferable(type: Data.self),
               let img = UIImage(data: raw),
               let jpeg = img.jpegData(compressionQuality: 0.8) else { failed = true; return }
-        do { result = try await player.api.spot(jpeg: jpeg) }
-        catch { failed = true }
+        do {
+            result = try await player.api.spot(jpeg: jpeg)
+            await player.refreshSpots()
+        } catch { failed = true }
+    }
+}
+
+/// The Spotted shelf — every photo you've taken of music in the wild, with its verdict.
+struct SpottedSection: View {
+    @EnvironmentObject var player: Player
+    let t: IOSTheme
+    @State private var opened: SpotResult?
+
+    var body: some View {
+        if !player.spots.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("SPOTTED")
+                    .font(.system(size: 10, weight: .heavy)).tracking(1.8)
+                    .foregroundStyle(t.accent)
+                    .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 6)
+                ForEach(player.spots) { s in
+                    Button {
+                        opened = s
+                    } label: {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Color(hexStr: "#26262b")
+                                Text("📷").font(.system(size: 15))
+                                if let url = s.thumbURL(base: player.stationBase) {
+                                    NetImage(url: url)
+                                }
+                            }
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(s.title.isEmpty ? (s.album.isEmpty ? "Unplaced" : s.album) : s.title)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(t.ink).lineLimit(1)
+                                Text(s.artist)
+                                    .font(.system(size: 11.5)).foregroundStyle(t.muted).lineLimit(1)
+                            }
+                            Spacer()
+                            Circle()
+                                .fill(s.status == "matched" ? t.live
+                                      : s.status == "wishlist" ? t.accent : t.faint)
+                                .frame(width: 9, height: 9)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 7)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            player.deleteSpot(s)
+                        } label: { Label("Delete spot", systemImage: "trash") }
+                    }
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(t.line).frame(height: 1).padding(.leading, 70)
+                    }
+                }
+            }
+            .sheet(item: $opened) { s in
+                SpotResultView(r: s, t: t)
+                    .presentationDetents([.medium])
+            }
+        }
     }
 }
 

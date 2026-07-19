@@ -128,16 +128,29 @@ public final class Player: ObservableObject {
 
     // ── membership & the shelf ───────────────────────────────────────────
 
+    @Published public private(set) var spots: [SpotResult] = []
+
     public func refreshMembership() async {
         member = await api.me()
         if member != nil {
             albums = (try? await api.albums()) ?? []
             favs = (try? await api.favourites()) ?? []
+            spots = (try? await api.spots()) ?? []
             await refreshChannels()               // private channels appear
         } else {
             albums = []
             favs = []
+            spots = []
         }
+    }
+
+    public func refreshSpots() async {
+        spots = (try? await api.spots()) ?? []
+    }
+
+    public func deleteSpot(_ s: SpotResult) {
+        spots.removeAll { $0.id == s.id }
+        Task { await api.deleteSpot(id: s.id) }
     }
 
     // ── favourites: ♥ what's playing, play them back as a set ────────────

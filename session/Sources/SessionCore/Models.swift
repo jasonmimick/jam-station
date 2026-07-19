@@ -176,9 +176,14 @@ public struct SpotResult: Decodable, Equatable, Identifiable {
     public let links: [String: String]
     public let matchedDir: String
 
+    public let coverPath: String?
+    public let shotPath: String?
+
     enum CodingKeys: String, CodingKey {
         case id, status, artist, title, album, links
         case matchedDir = "matched_dir"
+        case coverPath = "cover_url"
+        case shotPath = "image_path"
     }
 
     public init(from decoder: Decoder) throws {
@@ -190,6 +195,14 @@ public struct SpotResult: Decodable, Equatable, Identifiable {
         album = (try? c.decode(String.self, forKey: .album)) ?? ""
         links = (try? c.decode([String: String].self, forKey: .links)) ?? [:]
         matchedDir = (try? c.decode(String.self, forKey: .matchedDir)) ?? ""
+        coverPath = try? c.decode(String.self, forKey: .coverPath)
+        shotPath = try? c.decode(String.self, forKey: .shotPath)
+    }
+
+    /// Best thumbnail: the fetched cover, else your own photo of it.
+    public func thumbURL(base: URL) -> URL? {
+        guard let p = coverPath ?? shotPath else { return nil }
+        return URL(string: p, relativeTo: base)?.absoluteURL
     }
 }
 

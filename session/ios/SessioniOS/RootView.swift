@@ -490,7 +490,8 @@ struct ShelfTab: View {
                                 }
                             }
                         }
-                        .padding(.bottom, 20)
+                        SpottedSection(t: t)
+                            .padding(.bottom, 20)
                     }
                 } else {
                 ScrollView {
@@ -526,7 +527,9 @@ struct ShelfTab: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 14).padding(.bottom, 20)
+                    .padding(.horizontal, 14)
+                    SpottedSection(t: t)
+                        .padding(.bottom, 20)
                 }
                 }
             }
