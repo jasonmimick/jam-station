@@ -85,6 +85,19 @@ struct RootView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
+        .task {
+            // watchdog: if the flag says a sheet is up but iOS presents nothing,
+            // the presentation was dropped — heal without needing a tap to land
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1.5))
+                if showPlayer {
+                    let scene = UIApplication.shared.connectedScenes
+                        .compactMap { $0 as? UIWindowScene }.first
+                    let presented = scene?.keyWindow?.rootViewController?.presentedViewController
+                    if presented == nil { showPlayer = false }
+                }
+            }
+        }
         .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
     }
 }

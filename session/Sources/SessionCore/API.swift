@@ -49,11 +49,13 @@ public struct StationAPI {
     // ── membership (the session cookie lives in HTTPCookieStorage and
     //    persists across launches — no token scheme, same as the web) ──
 
-    public func me() async -> String? {
+    /// THROWS on network failure — a dropped packet is not a sign-out. Only a
+    /// successful response saying "user: null" means anonymous.
+    public func me() async throws -> String? {
         struct Me: Decodable { let user: User? }
         struct User: Decodable { let name: String? }
-        let me: Me? = try? await get("api/me")
-        return me?.user.map { $0.name ?? "member" }
+        let me: Me = try await get("api/me")
+        return me.user.map { $0.name ?? "member" }
     }
 
     /// One box: the brain tries the input as an access code, then a passphrase.

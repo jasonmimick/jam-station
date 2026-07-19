@@ -131,14 +131,17 @@ public final class Player: ObservableObject {
     @Published public private(set) var spots: [SpotResult] = []
 
     public func refreshMembership() async {
-        member = await api.me()
+        // a network hiccup must NOT masquerade as a sign-out and wipe the shelf
+        let result: String?
+        do { result = try await api.me() } catch { return }       // offline: keep current state
+        member = result
         if member != nil {
-            albums = (try? await api.albums()) ?? []
-            favs = (try? await api.favourites()) ?? []
-            spots = (try? await api.spots()) ?? []
+            albums = (try? await api.albums()) ?? albums
+            favs = (try? await api.favourites()) ?? favs
+            spots = (try? await api.spots()) ?? spots
             await refreshChannels()               // private channels appear
         } else {
-            albums = []
+            albums = []                            // server CONFIRMED anonymous
             favs = []
             spots = []
         }
