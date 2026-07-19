@@ -2,9 +2,10 @@
 APP = dist/Session.app
 SIM = iPhone 17 Pro
 PHONE = 922C681A-FA77-51B5-A08C-441FFA0CDADD   # Jason's iPhone ("analog")
+IPAD  = 46662E56-D69F-57CE-8968-CD611C13F9E7   # Jason's iPad ("CompactDisc")
 BUNDLE = run.jam-station.session.ios
 
-.PHONY: mac run clean ios-sim ios-phone
+.PHONY: mac run clean ios-sim ios-phone ios-ipad
 
 # build + run the iOS app in the Simulator on this Mac (the fast loop)
 ios-sim:
@@ -23,6 +24,14 @@ ios-phone:
 	  -destination-timeout 120 -allowProvisioningUpdates \
 	  -derivedDataPath build build | tail -1
 	xcrun devicectl device install app --device $(PHONE) \
+	  ios/build/Build/Products/Debug-iphoneos/Session.app | tail -1
+
+ios-ipad:
+	cd ios && xcodegen generate -q && xcodebuild -project SessioniOS.xcodeproj \
+	  -scheme Session -destination 'platform=iOS,id=$(IPAD)' \
+	  -destination-timeout 120 -allowProvisioningUpdates \
+	  -derivedDataPath build build | tail -1
+	xcrun devicectl device install app --device $(IPAD) \
 	  ios/build/Build/Products/Debug-iphoneos/Session.app | tail -1
 
 mac:
