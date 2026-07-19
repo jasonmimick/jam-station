@@ -198,6 +198,57 @@ struct TunerTab: View {
     }
 }
 
+struct SectionChip: View {
+    let label: String
+    let on: Bool
+    let t: IOSTheme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 11, weight: .heavy)).tracking(0.5)
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(on ? t.accent : t.panel)
+                .foregroundStyle(on ? t.onAccent : t.muted)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(on ? t.accent : t.line, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The record-store sections the owner can pin an album into (long-press a
+/// record). Any custom label works via the API; these are the house buckets.
+let SHELF_SECTIONS = ["Jazz", "Blues", "Classical", "Rock", "Folk", "Country",
+                      "Soul/Funk", "Hip-Hop", "Electronic", "Reggae", "World", "Pop"]
+
+struct AlbumSectionsModifier: ViewModifier {
+    @EnvironmentObject var player: Player
+    let al: Album
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            Menu("Set section" + (al.genres.isEmpty ? "" : " (\(al.genres.joined(separator: ", ")))")) {
+                ForEach(SHELF_SECTIONS, id: \.self) { s in
+                    Button {
+                        player.setAlbumGenres(al, genres: [s])
+                    } label: {
+                        if al.genres.contains(s) {
+                            Label(s, systemImage: "checkmark")
+                        } else {
+                            Text(s)
+                        }
+                    }
+                }
+                Button("No section", role: .destructive) {
+                    player.setAlbumGenres(al, genres: [])
+                }
+            }
+        }
+    }
+}
+
 /// The shared ▦/☰ pair, styled like the web's vtog.
 struct ViewToggle: View {
     @Binding var selection: String
@@ -506,13 +557,15 @@ struct ShelfTab: View {
     let t: IOSTheme
     let openPlayer: () -> Void
     @State private var find = ""
+    @State private var section = ""          // "" = the whole shelf
     @AppStorage("shelfView") var shelfView = "grid"
 
     var albums: [Album] {
-        find.isEmpty ? player.albums
-        : player.albums.filter {
-            $0.album.localizedCaseInsensitiveContains(find)
-            || $0.artist.localizedCaseInsensitiveContains(find)
+        player.albums.filter { al in
+            (section.isEmpty || al.genres.contains(section))
+            && (find.isEmpty
+                || al.album.localizedCaseInsensitiveContains(find)
+                || al.artist.localizedCaseInsensitiveContains(find))
         }
     }
 
@@ -547,7 +600,36 @@ struct ShelfTab: View {
                     FindField(text: $find, prompt: "search the shelf", t: t, inline: true)
                     ViewToggle(selection: $shelfView, t: t)
                 }
-                .padding(.horizontal, 14).padding(.bottom, 10)
+                .padding(.horizontal, 14).padding(.bottom, 8)
+                if !player.genres.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 7) {
+                            SectionChip(label: "ALL", on: section.isEmpty, t: t) { section = "" }
+                            ForEach(player.genres) { g in
+                                SectionChip(label: "\(g.name.uppercased()) · \(g.count)",
+                                            on: section == g.name, t: t) {
+                                    section = section == g.name ? "" : g.name
+                                }
+                            }
+                            if !section.isEmpty {
+                                Button {
+                                    tapHaptic()
+                                    player.playMix(section)
+                                    openPlayer()
+                                } label: {
+                                    Text("▶ \(section.uppercased()) MIX")
+                                        .font(.system(size: 11, weight: .heavy)).tracking(0.8)
+                                        .padding(.horizontal, 12).padding(.vertical, 8)
+                                        .background(t.accent).foregroundStyle(t.onAccent)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                    }
+                    .padding(.bottom, 10)
+                }
             }
             if player.member == nil {
                 Spacer()
@@ -598,6 +680,7 @@ struct ShelfTab: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .modifier(AlbumSectionsModifier(al: al))
                                 .overlay(alignment: .bottom) {
                                     Rectangle().fill(t.line).frame(height: 1).padding(.leading, 70)
                                 }
@@ -638,6 +721,7 @@ struct ShelfTab: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .modifier(AlbumSectionsModifier(al: al))
                         }
                     }
                     .padding(.horizontal, 14)

@@ -294,6 +294,7 @@ struct PlayerSheet: View {
         case .cd: return "💿 " + (player.currentAlbum?.album ?? player.now.album).uppercased()
         case .tape:
             if player.show?.channel == "favourites" { return "♥ FAVOURITES" }
+            if player.show?.channel == "mix" { return "🎛 " + (player.show?.album ?? "MIX").uppercased() }
             return "◉ " + (player.current?.name ?? "").uppercased()
         case .radio: return "◉ " + (player.current?.name ?? "").uppercased()
         }

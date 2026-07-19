@@ -161,13 +161,15 @@ struct ShelfGallery: View {
     let t: Theme
     let onPick: (Album) -> Void
     @State private var find = ""
+    @State private var section = ""
     @AppStorage("shelfView") var shelfView = "grid"
 
     var albums: [Album] {
-        find.isEmpty ? player.albums
-        : player.albums.filter {
-            $0.album.localizedCaseInsensitiveContains(find)
-            || $0.artist.localizedCaseInsensitiveContains(find)
+        player.albums.filter { al in
+            (section.isEmpty || al.genres.contains(section))
+            && (find.isEmpty
+                || al.album.localizedCaseInsensitiveContains(find)
+                || al.artist.localizedCaseInsensitiveContains(find))
         }
     }
 
@@ -205,6 +207,34 @@ struct ShelfGallery: View {
                     .foregroundStyle(t.faint)
             }
             .padding(.horizontal, 18).padding(.vertical, 12)
+            if !player.genres.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        MacChip(label: "ALL", on: section.isEmpty, t: t) { section = "" }
+                        ForEach(player.genres) { g in
+                            MacChip(label: "\(g.name.uppercased()) · \(g.count)",
+                                    on: section == g.name, t: t) {
+                                section = section == g.name ? "" : g.name
+                            }
+                        }
+                        if !section.isEmpty {
+                            Button {
+                                player.playMix(section)
+                            } label: {
+                                Text("▶ \(section.uppercased()) MIX")
+                                    .font(.system(size: 10, weight: .heavy)).tracking(0.8)
+                                    .padding(.horizontal, 11).padding(.vertical, 6)
+                                    .background(t.accent).foregroundStyle(t.onAccent)
+                                    .clipShape(Capsule())
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                }
+                .padding(.bottom, 10)
+            }
             if shelfView == "list" {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -268,6 +298,27 @@ struct ShelfGallery: View {
                 }
             }
         }
+    }
+}
+
+struct MacChip: View {
+    let label: String
+    let on: Bool
+    let t: Theme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 10, weight: .heavy)).tracking(0.5)
+                .padding(.horizontal, 11).padding(.vertical, 6)
+                .background(on ? t.accent : t.panel)
+                .foregroundStyle(on ? t.onAccent : t.muted)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(on ? t.accent : t.line, lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -82,11 +82,12 @@ public struct Album: Decodable, Identifiable, Equatable {
     public let coverPath: String?
     public let year: Int?
     public let mtime: Double        // folder mtime IS "date added"
+    public let genres: [String]     // the shelf's sections this record lives in
 
     public var id: String { dir }
 
     enum CodingKeys: String, CodingKey {
-        case dir, artist, album, year, mtime
+        case dir, artist, album, year, mtime, genres
         case trackCount = "tracks"
         case coverPath = "cover_url"
     }
@@ -102,6 +103,7 @@ public struct Album: Decodable, Identifiable, Equatable {
         else if let s = try? c.decode(String.self, forKey: .year) { year = Int(s) }
         else { year = nil }
         mtime = (try? c.decode(Double.self, forKey: .mtime)) ?? 0
+        genres = (try? c.decode([String].self, forKey: .genres)) ?? []
     }
 
     public func coverURL(base: URL) -> URL? {
@@ -166,6 +168,20 @@ public struct HistoryRow: Decodable, Equatable, Identifiable {
         let date = f.date(from: playedAt) ?? g.date(from: playedAt)
         guard let date else { return String(playedAt.suffix(8).prefix(5)) }
         return date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+public struct GenreCount: Decodable, Equatable, Identifiable {
+    public let name: String
+    public let count: Int
+    public var id: String { name }
+
+    enum CodingKeys: String, CodingKey { case name, count }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        count = (try? c.decode(Int.self, forKey: .count)) ?? 0
     }
 }
 

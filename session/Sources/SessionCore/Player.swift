@@ -129,6 +129,7 @@ public final class Player: ObservableObject {
     // ── membership & the shelf ───────────────────────────────────────────
 
     @Published public private(set) var spots: [SpotResult] = []
+    @Published public private(set) var genres: [GenreCount] = []
 
     public func refreshMembership() async {
         // a network hiccup must NOT masquerade as a sign-out and wipe the shelf
@@ -139,11 +140,13 @@ public final class Player: ObservableObject {
             albums = (try? await api.albums()) ?? albums
             favs = (try? await api.favourites()) ?? favs
             spots = (try? await api.spots()) ?? spots
+            genres = (try? await api.genres()) ?? genres
             await refreshChannels()               // private channels appear
         } else {
             albums = []                            // server CONFIRMED anonymous
             favs = []
             spots = []
+            genres = []
         }
     }
 
@@ -231,6 +234,27 @@ public final class Player: ObservableObject {
             show = sh
             source = .cd
             playTrack(0)
+        }
+    }
+
+    /// "A jazz mix from the shelf": the whole section, shuffled, on the tape deck.
+    public func playMix(_ genre: String) {
+        Task {
+            guard let sh = try? await api.mix(genre: genre), !sh.tracks.isEmpty else { return }
+            currentAlbum = nil
+            browsed = nil
+            show = sh
+            source = .tape
+            playTrack(0)
+        }
+    }
+
+    /// Owner curation: pin a record's sections, then refresh what the shelf knows.
+    public func setAlbumGenres(_ album: Album, genres newGenres: [String]) {
+        Task {
+            await api.setGenres(dir: album.dir, genres: newGenres)
+            albums = (try? await api.albums()) ?? albums
+            genres = (try? await api.genres()) ?? genres
         }
     }
 
@@ -360,8 +384,10 @@ public final class Player: ObservableObject {
 
     public func stepForward() {
         guard source != .radio else { return }   // radio forward = skip (UI confirms)
+        // only a radio show's own tape rejoins the broadcast at its end —
+        // mixes and favourites just stop (there's no "live" to rejoin)
         if let sh = show, trackIndex + 1 >= sh.tracks.count,
-           sh.channel != "favourites", currentAlbum == nil {
+           sh.channel == current?.slug, currentAlbum == nil {
             setSource(.radio)                    // ran off the tape's end → back to LIVE
         } else {
             nextTrack()

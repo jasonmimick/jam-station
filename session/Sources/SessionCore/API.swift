@@ -88,6 +88,21 @@ public struct StationAPI {
         try? await get("api/rip")
     }
 
+    // ── the shelf's sections ──
+
+    public func genres() async throws -> [GenreCount] {
+        try await get("api/library/genres")
+    }
+
+    /// "A jazz mix from the shelf" — Show-shaped, plays on the tape deck as-is.
+    public func mix(genre: String, count: Int = 30) async throws -> Show {
+        try await get("api/library/mix", ["genre": genre, "count": String(count)])
+    }
+
+    public func setGenres(dir: String, genres: [String]) async {
+        _ = try? await post("api/library/genre", json: ["dir": dir, "genres": genres])
+    }
+
     // ── favourites (members; a favourite is only real if it carries a url) ──
 
     public func favourites() async throws -> [Fav] {
