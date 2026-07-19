@@ -11,12 +11,13 @@ struct MainWindowView: View {
     @Environment(\.colorScheme) var scheme
     @AppStorage("accent") var accentHex = "#FFD200"
     @State var confirmSkip = false
+    @State var showSettings = false
 
     var t: Theme { Theme.current(scheme, accentHex: accentHex) }
 
     var body: some View {
         VStack(spacing: 0) {
-            Masthead(t: t, confirmSkip: $confirmSkip)
+            Masthead(t: t, confirmSkip: $confirmSkip, onGear: { showSettings = true })
             if let rip = player.rip, rip.ripping {
                 RipBar(rip: rip, t: t)
             }
@@ -33,6 +34,9 @@ struct MainWindowView: View {
         }
         .background(t.board)
         .frame(minWidth: 760, minHeight: 540)
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet().environmentObject(player)
+        }
         .onAppear {
             NSApp.setActivationPolicy(.regular)   // show in the Dock while the window lives
             NSApp.activate(ignoringOtherApps: true)

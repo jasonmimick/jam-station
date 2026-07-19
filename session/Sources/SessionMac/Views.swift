@@ -36,6 +36,7 @@ struct Masthead: View {
     @EnvironmentObject var player: Player
     let t: Theme
     @Binding var confirmSkip: Bool
+    var onGear: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -49,6 +50,18 @@ struct Masthead: View {
                 .tracking(1.6)
                 .foregroundStyle(t.onAccent)
             Spacer()
+            if let onGear {
+                Button(action: onGear) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(width: 28, height: 28)
+                        .foregroundStyle(t.onAccent)
+                        .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.onAccent, lineWidth: 2))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("settings — station, sign-in, signage colour (⌘,)")
+            }
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
         .background(t.accent)
@@ -542,6 +555,39 @@ struct FooterBar: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .overlay(alignment: .top) { Rectangle().fill(t.line).frame(height: 1) }
+    }
+}
+
+/// Standalone settings (the window's sheet and the ⌘, Settings scene) —
+/// same pane the popover shows inline.
+struct SettingsSheet: View {
+    @Environment(\.colorScheme) var scheme
+    @Environment(\.dismiss) var dismiss
+    @AppStorage("accent") var accentHex = "#FFD200"
+
+    var body: some View {
+        let t = Theme.current(scheme, accentHex: accentHex)
+        VStack(spacing: 0) {
+            HStack {
+                Text("SETTINGS").font(.system(size: 10, weight: .heavy)).tracking(2.2)
+                    .foregroundStyle(t.onAccent)
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(t.onAccent)
+                        .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.onAccent, lineWidth: 2))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(t.accent)
+            SettingsPane(t: t)
+        }
+        .frame(width: 400)
+        .background(t.board)
     }
 }
 

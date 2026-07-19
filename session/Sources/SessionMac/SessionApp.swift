@@ -21,5 +21,10 @@ struct SessionApp: App {
                 .environmentObject(player)
         }
         .defaultSize(width: 1000, height: 660)
+
+        Settings {                       // the standard ⌘, door to the same pane
+            SettingsSheet()
+                .environmentObject(player)
+        }
     }
 }
