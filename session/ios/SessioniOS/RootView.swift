@@ -123,6 +123,34 @@ struct TunerTab: View {
     }
 }
 
+/// A slider whose track IS the choice — the colour spectrum under your finger.
+struct GradientSlider: View {
+    @Binding var value: Double     // 0...1
+    let gradient: [Color]
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(LinearGradient(colors: gradient, startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 22)
+                Circle()
+                    .fill(.white)
+                    .frame(width: 24, height: 24)
+                    .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                    .overlay(Circle().stroke(.black.opacity(0.15), lineWidth: 1))
+                    .offset(x: CGFloat(value) * (geo.size.width - 24))
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { g in
+                value = min(1, max(0, Double((g.location.x - 12) / (geo.size.width - 24))))
+            })
+        }
+        .frame(height: 26)
+    }
+}
+
 /// Image loader that goes through URLSession.shared — AsyncImage does not
 /// reliably send the session cookie, and the members-only /music covers 403
 /// without it.
@@ -332,6 +360,41 @@ struct YouTab: View {
         player.sleepAt == nil ? m == 0 : m == sleepPick
     }
 
+    // ── accent spectrum: hue + tint (white → vivid) over the stored hex ──
+
+    var currentHSB: (h: Double, s: Double, b: Double) {
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        let c = IOSTheme.rgb(accentHex)
+        UIColor(red: c[0], green: c[1], blue: c[2], alpha: 1)
+            .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        return (Double(h), Double(s), Double(b))
+    }
+
+    func setHSB(h: Double, s: Double, b: Double) {
+        let out = UIColor(hue: CGFloat(h), saturation: CGFloat(s), brightness: CGFloat(b), alpha: 1)
+        var r: CGFloat = 0, g: CGFloat = 0, bl: CGFloat = 0, a: CGFloat = 0
+        out.getRed(&r, green: &g, blue: &bl, alpha: &a)
+        accentHex = String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(bl * 255))
+    }
+
+    var hueBinding: Binding<Double> {
+        Binding(
+            get: { currentHSB.h },
+            set: { nh in
+                let c = currentHSB
+                setHSB(h: nh, s: max(c.s, 0.35), b: max(c.b, 0.7))
+            })
+    }
+
+    var tintBinding: Binding<Double> {
+        Binding(
+            get: { currentHSB.s },
+            set: { ns in
+                let c = currentHSB
+                setHSB(h: c.h, s: ns, b: max(c.b, 0.9))
+            })
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             SignageHeader(t: t)
@@ -447,31 +510,21 @@ struct YouTab: View {
                         .labelsHidden()
                         .frame(width: 30)
                     }
-                    HStack(spacing: 10) {
-                        Text("Vary").font(.system(size: 13)).foregroundStyle(t.muted)
-                        Slider(value: Binding(
-                            get: {
-                                var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                                let c = IOSTheme.rgb(accentHex)
-                                UIColor(red: c[0], green: c[1], blue: c[2], alpha: 1)
-                                    .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-                                return Double(h)
-                            },
-                            set: { nh in
-                                var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                                let c = IOSTheme.rgb(accentHex)
-                                UIColor(red: c[0], green: c[1], blue: c[2], alpha: 1)
-                                    .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-                                let out = UIColor(hue: CGFloat(nh), saturation: max(s, 0.55),
-                                                  brightness: max(b, 0.75), alpha: 1)
-                                var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0
-                                out.getRed(&r2, green: &g2, blue: &b2, alpha: &a)
-                                accentHex = String(format: "#%02X%02X%02X",
-                                                   Int(r2 * 255), Int(g2 * 255), Int(b2 * 255))
-                            }
-                        ), in: 0...1)
-                        .tint(t.accent)
+                    VStack(spacing: 10) {
+                        HStack(spacing: 10) {
+                            Text("Hue").font(.system(size: 12)).foregroundStyle(t.muted)
+                                .frame(width: 32, alignment: .leading)
+                            GradientSlider(value: hueBinding, gradient:
+                                (0...12).map { Color(hue: Double($0) / 12, saturation: 0.9, brightness: 1) })
+                        }
+                        HStack(spacing: 10) {
+                            Text("Tint").font(.system(size: 12)).foregroundStyle(t.muted)
+                                .frame(width: 32, alignment: .leading)
+                            GradientSlider(value: tintBinding, gradient:
+                                [.white, Color(hue: currentHSB.h, saturation: 1, brightness: 1)])
+                        }
                     }
+                    .padding(.vertical, 2)
                     Toggle(isOn: $dance) {
                         Text(dance ? "♪ Dancing — the colour sways with the music"
                                    : "Let it dance")
