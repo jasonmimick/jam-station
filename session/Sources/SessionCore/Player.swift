@@ -23,6 +23,8 @@ public final class Player: ObservableObject {
     @Published public private(set) var albums: [Album] = [] // the shelf (empty when anonymous)
     @Published public private(set) var currentAlbum: Album?
     @Published public private(set) var rip: RipStatus?      // LISTEN AND RIP, live
+    @Published public private(set) var favs: [Fav] = []
+    @Published public private(set) var history: [HistoryRow] = []
     @Published public var position: Double = 0
     @Published public private(set) var duration: Double = 0
     @Published public var isScrubbing = false
@@ -113,10 +115,49 @@ public final class Player: ObservableObject {
         member = await api.me()
         if member != nil {
             albums = (try? await api.albums()) ?? []
+            favs = (try? await api.favourites()) ?? []
             await refreshChannels()               // private channels appear
         } else {
             albums = []
+            favs = []
         }
+    }
+
+    // ── favourites: ♥ what's playing, play them back as a set ────────────
+
+    public var nowIsFavourite: Bool {
+        !now.url.isEmpty && favs.contains { $0.url == now.url }
+    }
+
+    public func toggleFavourite() {
+        guard member != nil, !now.url.isEmpty else { return }
+        if nowIsFavourite {
+            let url = now.url
+            favs.removeAll { $0.url == url }
+            Task { await api.removeFavourite(url: url) }
+        } else {
+            let f = Fav(url: now.url, title: now.title, artist: now.artist,
+                        album: now.album, channel: current?.slug ?? "")
+            favs.append(f)
+            Task { await api.addFavourite(f) }
+        }
+    }
+
+    /// Favourites play as a station: the whole list on the tape deck, from here.
+    public func playFavourites(at index: Int) {
+        guard !favs.isEmpty else { return }
+        currentAlbum = nil
+        show = Show(channel: "favourites", album: "Favourites",
+                    tracks: favs.map {
+                        ShowTrack(title: $0.title, artist: $0.artist,
+                                  album: $0.album, url: $0.url)
+                    })
+        source = .tape
+        playTrack(index)
+    }
+
+    public func refreshHistory() async {
+        history = (try? await api.history()) ?? []
     }
 
     public func signIn(code: String) async throws {

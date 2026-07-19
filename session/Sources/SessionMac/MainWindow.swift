@@ -25,7 +25,10 @@ struct MainWindowView: View {
                     .frame(minWidth: 220, idealWidth: 270, maxWidth: 380)
                     .background(t.panel)
                 StagePane(t: t, confirmSkip: $confirmSkip)
-                    .frame(minWidth: 480, maxWidth: .infinity)
+                    .frame(minWidth: 420, maxWidth: .infinity)
+                RightPane(t: t)
+                    .frame(minWidth: 240, idealWidth: 300, maxWidth: 380)
+                    .background(t.panel)
             }
         }
         .background(t.board)
@@ -121,6 +124,150 @@ struct Tracklist: View {
                 .font(.system(size: 12)).foregroundStyle(t.faint)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+/// The right rail: Favourites / History (Shelf lives in the Tuner; You in settings).
+struct RightPane: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    @State private var tab = "favs"
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                PillTab(label: "FAVOURITES", on: tab == "favs", t: t) { tab = "favs" }
+                PillTab(label: "HISTORY", on: tab == "hist", t: t) {
+                    tab = "hist"
+                    Task { await player.refreshHistory() }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .overlay(alignment: .bottom) { Rectangle().fill(t.line).frame(height: 1) }
+
+            if tab == "favs" { FavList(t: t) } else { HistoryList(t: t) }
+        }
+        .onAppear { Task { await player.refreshHistory() } }
+    }
+}
+
+struct PillTab: View {
+    let label: String
+    let on: Bool
+    let t: Theme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold)).tracking(0.5)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .foregroundStyle(on ? t.onAccent : t.muted)
+                .background(Capsule().fill(on ? t.accent : .clear))
+                .overlay(Capsule().stroke(on ? t.accent : t.line, lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct FavList: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+
+    var body: some View {
+        if player.member == nil {
+            EmptyNote(t: t, title: "Sign in to keep favourites",
+                      sub: "♥ a track and it follows you — this list plays as a station.")
+        } else if player.favs.isEmpty {
+            EmptyNote(t: t, title: "Nothing here yet",
+                      sub: "♥ what's playing and it lands on this list.")
+        } else {
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(player.favs.enumerated()), id: \.element.url) { i, f in
+                        Button {
+                            player.playFavourites(at: i)
+                        } label: {
+                            HStack(spacing: 9) {
+                                Text("♥").font(.system(size: 12)).foregroundStyle(t.red)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(f.title.isEmpty ? f.album : f.title)
+                                        .font(.system(size: 12.5, weight: .semibold))
+                                        .foregroundStyle(t.ink).lineLimit(1)
+                                    Text(f.artist)
+                                        .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
+                                }
+                                Spacer()
+                                Text("▶").font(.system(size: 10)).foregroundStyle(t.faint)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(t.line).frame(height: 1).padding(.horizontal, 10)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct HistoryList: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+
+    var body: some View {
+        if player.history.isEmpty {
+            EmptyNote(t: t, title: "Quiet so far", sub: "the station's play log lands here.")
+        } else {
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(player.history) { h in
+                        HStack(spacing: 9) {
+                            Text(h.channel.uppercased())
+                                .font(.system(size: 8, weight: .heavy)).tracking(0.8)
+                                .foregroundStyle(t.muted)
+                                .frame(width: 74, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(h.title.isEmpty ? h.album : h.title)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(t.ink).lineLimit(1)
+                                Text(h.artist)
+                                    .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
+                            }
+                            Spacer()
+                            Text(h.when)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(t.faint)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(t.line).frame(height: 1).padding(.horizontal, 10)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct EmptyNote: View {
+    let t: Theme
+    let title: String
+    let sub: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(t.ink)
+            Text(sub).font(.system(size: 11)).foregroundStyle(t.muted)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

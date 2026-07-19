@@ -56,6 +56,11 @@ public struct ShowTrack: Decodable, Equatable, Identifiable {
 
     enum CodingKeys: String, CodingKey { case title, artist, album, url, served }
 
+    public init(title: String, artist: String, album: String, url: String, served: Bool = false) {
+        self.title = title; self.artist = artist; self.album = album
+        self.url = url; self.served = served
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         title = (try? c.decode(String.self, forKey: .title)) ?? ""
@@ -103,6 +108,65 @@ public struct Album: Decodable, Identifiable, Equatable {
     }
 }
 
+public struct Fav: Codable, Equatable, Identifiable {
+    public let url: String
+    public let title: String
+    public let artist: String
+    public let album: String
+    public let channel: String
+    public var id: String { url }
+
+    public init(url: String, title: String, artist: String, album: String, channel: String) {
+        self.url = url; self.title = title; self.artist = artist
+        self.album = album; self.channel = channel
+    }
+
+    enum CodingKeys: String, CodingKey { case url, title, artist, album, channel }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        url = (try? c.decode(String.self, forKey: .url)) ?? ""
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        artist = (try? c.decode(String.self, forKey: .artist)) ?? ""
+        album = (try? c.decode(String.self, forKey: .album)) ?? ""
+        channel = (try? c.decode(String.self, forKey: .channel)) ?? ""
+    }
+}
+
+public struct HistoryRow: Decodable, Equatable, Identifiable {
+    public let channel: String
+    public let title: String
+    public let artist: String
+    public let album: String
+    public let playedAt: String
+
+    public var id: String { playedAt + title }
+
+    enum CodingKeys: String, CodingKey {
+        case channel, title, artist, album
+        case playedAt = "played_at"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        channel = (try? c.decode(String.self, forKey: .channel)) ?? ""
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        artist = (try? c.decode(String.self, forKey: .artist)) ?? ""
+        album = (try? c.decode(String.self, forKey: .album)) ?? ""
+        playedAt = (try? c.decode(String.self, forKey: .playedAt)) ?? ""
+    }
+
+    /// "2026-07-18T17:03:11…" → "5:03 PM" (fall back to the raw tail)
+    public var when: String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let g = ISO8601DateFormatter()
+        let date = f.date(from: playedAt) ?? g.date(from: playedAt)
+        guard let date else { return String(playedAt.suffix(8).prefix(5)) }
+        return date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
 public struct RipStatus: Decodable, Equatable {
     public let state: String
     public let album: String
@@ -129,6 +193,10 @@ public struct Show: Decodable, Equatable {
     public let playing: Int
 
     enum CodingKeys: String, CodingKey { case channel, album, tracks, playing }
+
+    public init(channel: String, album: String, tracks: [ShowTrack], playing: Int = -1) {
+        self.channel = channel; self.album = album; self.tracks = tracks; self.playing = playing
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)

@@ -86,6 +86,31 @@ public struct StationAPI {
         try? await get("api/rip")
     }
 
+    // ── favourites (members; a favourite is only real if it carries a url) ──
+
+    public func favourites() async throws -> [Fav] {
+        struct Wrap: Decodable { let favourites: [Fav] }
+        let w: Wrap = try await get("api/favourites")
+        return w.favourites
+    }
+
+    public func addFavourite(_ f: Fav) async {
+        _ = try? await post("api/favourites/add", json: [
+            "url": f.url, "title": f.title, "artist": f.artist,
+            "album": f.album, "channel": f.channel,
+        ])
+    }
+
+    public func removeFavourite(url: String) async {
+        _ = try? await post("api/favourites/remove", json: ["url": url])
+    }
+
+    // ── the play log ──
+
+    public func history(limit: Int = 40) async throws -> [HistoryRow] {
+        try await get("api/history", ["limit": String(limit)])
+    }
+
     public func presence(channel: String, aid: String) async {
         _ = try? await post("api/presence", json: ["channel": channel, "aid": aid])
     }

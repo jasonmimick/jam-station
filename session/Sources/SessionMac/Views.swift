@@ -253,6 +253,21 @@ struct TransportRow: View {
                 Button("Skip the show") { player.skipRadio() }
                 Button("Stay with it", role: .cancel) {}
             }
+            Button {
+                player.toggleFavourite()
+            } label: {
+                Text("♥")
+                    .font(.system(size: 15))
+                    .frame(width: 40, height: 40)
+                    .foregroundStyle(player.nowIsFavourite ? t.red : t.faint)
+                    .overlay(RoundedRectangle(cornerRadius: 2)
+                        .stroke(player.nowIsFavourite ? t.red : t.line, lineWidth: 2))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(player.member == nil || player.now.url.isEmpty)
+            .opacity(player.member == nil ? 0.3 : 1)
+            .help(player.member == nil ? "sign in to keep favourites" : "favourite this track")
             Spacer()
             Image(systemName: "speaker.wave.2").font(.system(size: 11)).foregroundStyle(t.muted)
             VolumeSlider(t: t).frame(width: 84)
