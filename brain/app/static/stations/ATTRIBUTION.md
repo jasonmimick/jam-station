@@ -22,3 +22,4 @@ Channel-art photos are Creative Commons; credits below satisfy the BY/BY-SA term
 | ragtime | Haunted | DerekVelasquez | by | https://www.flickr.com/photos/25289766@N07/4625586735 |
 | soul-jazz | Drawbars | ArtBrom | by-sa | https://www.flickr.com/photos/17277074@N00/1246521770 |
 | umphreys | jarre . in>doors . helsinki | miemo | by | https://www.flickr.com/photos/47949918@N00/3537131190 |
+| rain | Light through rain drops | echiner1 | CC BY-SA | https://www.flickr.com/photos/30567804@N00/1602969740 |

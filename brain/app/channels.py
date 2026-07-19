@@ -160,6 +160,20 @@ SEED_CHANNELS = [
         "source": "cc",
         "query": {"items": ["kzz003", "C_1964_04_21", "AM_1973_01_04", "ragtime-cowboy-joe", "ragtimegoblinman00andr.omr", "danceofdaisies00unse_omr", "AM_1988_05_02"]},
     },
+    {
+        # ~13 hours of real rain and storms — field recordings, not synth loops. Every item
+        # carries an explicit CC/PD licenseurl (the cc adapter refuses anything without one);
+        # the aporee pair are short located field recordings that keep the texture honest.
+        "slug": "rain",
+        "name": "Rain & Thunder",
+        "description": "Rain on roofs, night storms, distant thunder — the sleep channel. Curated field recordings, CC and public domain.",
+        "source": "cc",
+        "query": {"items": ["relaxingrainsounds", "naturesounds-soundtheraphy",
+                            "rain-sounds-gentle-rain-thunderstorms", "GOLD_TAPE_46_Thunderstorm_Rain",
+                            "thunderstorm_ms_relax_water", "Thunderstorm_1000",
+                            "3-thunderstorm-at-sea-sounds-for-sleeping-relaxing-thunder-rain-ocean-sea",
+                            "JacquesRicherCountryRain", "aporee_11681_13735", "aporee_4389_5761"]},
+    },
 ]
 
 _topup_locks: dict[str, threading.Lock] = {}

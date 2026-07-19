@@ -249,6 +249,7 @@ struct ChannelRowIOS: View {
         }
         .buttonStyle(.plain)
         .disabled(!ch.playable)
+        .channelPeek(ch: ch, t: t, openPlayer: openPlayer)
         .overlay(alignment: .bottom) {
             Rectangle().fill(t.line).frame(height: 1).padding(.leading, 70)
         }
@@ -383,6 +384,83 @@ struct ChannelCard: View {
             }
         }
         .buttonStyle(.plain)
+        .channelPeek(ch: ch, t: t, openPlayer: openPlayer)
+    }
+}
+
+/// Long-press a channel: peek what's on without tuning, then choose your door.
+extension View {
+    func channelPeek(ch: Channel, t: IOSTheme, openPlayer: @escaping () -> Void) -> some View {
+        modifier(ChannelPeekModifier(ch: ch, t: t, openPlayer: openPlayer))
+    }
+}
+
+struct ChannelPeekModifier: ViewModifier {
+    @EnvironmentObject var player: Player
+    let ch: Channel
+    let t: IOSTheme
+    let openPlayer: () -> Void
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            Button {
+                tapHaptic()
+                player.tune(ch)
+                openPlayer()
+            } label: { Label("Tune in — Radio", systemImage: "dot.radiowaves.left.and.right") }
+            Button {
+                tapHaptic()
+                player.playTape(ch)
+                openPlayer()
+            } label: { Label("Play this tape", systemImage: "recordingtape") }
+        } preview: {
+            ChannelPeek(ch: ch, t: t)
+        }
+    }
+}
+
+struct ChannelPeek: View {
+    @EnvironmentObject var player: Player
+    let ch: Channel
+    let t: IOSTheme
+    @State private var np = NowPlaying.empty
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ZStack {
+                    let hue = Double(abs(ch.name.hashValue % 360)) / 360.0
+                    LinearGradient(
+                        colors: [Color(hue: hue, saturation: 0.30, brightness: 0.36),
+                                 Color(hue: hue, saturation: 0.40, brightness: 0.12)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing)
+                    if let url = ch.artURL(base: player.stationBase) {
+                        NetImage(url: url)
+                    }
+                }
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ch.name).font(.system(size: 15, weight: .bold)).foregroundStyle(t.ink)
+                    Text("NOW PLAYING").font(.system(size: 8, weight: .heavy)).tracking(1.6)
+                        .foregroundStyle(t.faint)
+                }
+            }
+            if np.isEmpty {
+                Text("…").font(.system(size: 13)).foregroundStyle(t.muted)
+            } else {
+                Text(np.title).font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(t.ink).lineLimit(2)
+                Text(np.artist + (np.album.isEmpty ? "" : " · \(np.album)"))
+                    .font(.system(size: 11.5)).foregroundStyle(t.muted).lineLimit(2)
+            }
+        }
+        .padding(16)
+        .frame(width: 280, alignment: .leading)
+        .background(t.board)
+        .task {
+            np = (try? await player.api.nowPlaying(channel: ch.slug)) ?? .empty
+        }
     }
 }
 

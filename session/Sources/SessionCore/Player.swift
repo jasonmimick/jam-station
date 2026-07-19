@@ -265,6 +265,24 @@ public final class Player: ObservableObject {
         playRadio()
     }
 
+    /// Straight onto the tape deck: tune a channel directly into its current
+    /// show, on demand — without joining the broadcast first.
+    public func playTape(_ channel: Channel) {
+        guard channel.playable else { return }
+        UserDefaults.standard.set(channel.slug, forKey: "lastChannel")
+        current = channel
+        browsed = nil; currentAlbum = nil
+        Task {
+            if let sh = try? await api.show(channel: channel.slug), !sh.tracks.isEmpty {
+                show = sh
+                source = .tape
+                playTrack(max(sh.playing, 0))
+            } else {
+                tune(channel)      // nothing on the reel — ride the broadcast
+            }
+        }
+    }
+
     public func setSource(_ s: Source) {
         guard s != source, let ch = current else { return }
         source = s
