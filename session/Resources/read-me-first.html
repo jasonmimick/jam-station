@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Session — Jason's Radio Station, on Your Mac</title>
+<style>
+  body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #12120C;
+         background: #fff; margin: 0; padding: 40px 20px; font-size: 17px; line-height: 1.6; }
+  .page { max-width: 640px; margin: 0 auto; }
+  .mast { background: #FFD200; color: #12120C; border-radius: 6px; padding: 18px 22px;
+          display: flex; align-items: center; gap: 14px; }
+  .mark { width: 40px; height: 34px; background: #12120C; border-radius: 3px; position: relative; flex: 0 0 auto; }
+  .mark::after { content: ""; position: absolute; right: 10px; top: 5px; bottom: 5px; width: 4px;
+                 background: #FFD200; border-radius: 2px; }
+  .mark::before { content: ""; position: absolute; right: 7px; top: 3px; width: 8px; height: 8px;
+                  background: #F0402F; border-radius: 50%; }
+  .mast h1 { margin: 0; font-size: 22px; letter-spacing: .04em; }
+  .mast p { margin: 2px 0 0; font-size: 14px; opacity: .8; }
+  h2 { font-size: 15px; letter-spacing: .18em; text-transform: uppercase; color: #b28f00;
+       margin: 40px 0 10px; }
+  ol { padding-left: 24px; }
+  li { margin-bottom: 14px; }
+  b.ui { background: #f1f1f3; border: 1px solid #ddd; border-radius: 5px; padding: 1px 7px;
+         font-weight: 600; white-space: nowrap; }
+  .tip { background: #fffbe6; border-left: 4px solid #FFD200; padding: 12px 16px;
+         border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 15.5px; }
+  .quiet { color: #6b6b73; font-size: 15px; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e5e8;
+           font-size: 14px; color: #8a8a92; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="mast">
+    <div class="mark"></div>
+    <div>
+      <h1>SESSION</h1>
+      <p>Jason's radio station, on your Mac — live shows, his record shelf, always on the air.</p>
+    </div>
+  </div>
+
+  <p style="margin-top:28px">Hi Dad — this little app tunes your Mac into my radio station.
+  It plays live concert tapes all day (Grateful Dead, jazz, bluegrass…), and every CD I rip
+  lands on its shelf. Nothing to maintain, nothing to pay for. Here's the whole setup —
+  about two minutes.</p>
+
+  <h2>1 · Install it</h2>
+  <ol>
+    <li>Double-click the file I sent — <b class="ui">Session-mac.zip</b>. It unzips into an
+        app called <b class="ui">Session</b>.</li>
+    <li>Drag <b class="ui">Session</b> into your <b class="ui">Applications</b> folder.</li>
+    <li>Double-click it to open. <b>The Mac will refuse the first time</b> — it says it
+        can't verify the developer. That's expected (the developer is your son, and Apple
+        wants $99 to vouch for me). Here's the handshake:
+        <ol style="margin-top:10px">
+          <li>Open <b class="ui"> → System Settings → Privacy &amp; Security</b></li>
+          <li>Scroll down — you'll see a note that "Session" was blocked</li>
+          <li>Click <b class="ui">Open Anyway</b>, then confirm</li>
+        </ol>
+        You only do this once. After that it opens like any app.</li>
+  </ol>
+
+  <h2>2 · Listen</h2>
+  <ol>
+    <li>Session opens as a window, and it also lives in your <b>menu bar</b> — look for the
+        little <b>antenna</b> up by the clock. Click either one.</li>
+    <li>The left side lists the <b>stations</b> — each line shows what's playing on it
+        right now. Click one. That's it — you're on the air.</li>
+    <li>The controls sit along the bottom: play/pause, volume, and a red
+        <b>ON AIR</b> light when you're live.</li>
+  </ol>
+  <div class="tip">Closing the window doesn't stop the music — Session keeps playing from
+  the menu bar. Click the antenna to get it back.</div>
+
+  <h2>3 · The key (optional, but do it)</h2>
+  <p>I sent you an email from the station with a <b>passcode</b>. In Session, click the
+  <b class="ui">⚙ gear</b>, type the passcode into the <b>Members</b> box, and press Enter.
+  That unlocks the family side of the station:</p>
+  <ul>
+    <li><b>The Shelf</b> — my actual CD collection, ripped disc by disc. Click any record
+        and it plays, cover art and all.</li>
+    <li><b>The genre stations</b> — "From the Shelf — Jazz" and friends: pick one and it
+        plays a fresh mix of my records in that style, endlessly.</li>
+    <li><b>Favourites</b> — click the ♥ on anything you like and it's saved to your list.</li>
+  </ul>
+
+  <h2>If something acts up</h2>
+  <ul>
+    <li><b>Music stopped?</b> It usually restarts itself within a few seconds. If not,
+        click pause, then play.</li>
+    <li><b>Something looks stuck?</b> Quit Session (click the antenna → the ⏻ button, or
+        ⌘Q on the window) and open it again.</li>
+    <li><b>All else fails:</b> the station also lives in any web browser at<br>
+        <b>jam-station.runslab.run/dad</b> — big buttons, one click, same music.</li>
+    <li>And you can always just call me.</li>
+  </ul>
+
+  <p class="quiet" style="margin-top:36px">The station broadcasts from the Mac mini in my
+  house. When I rip a new CD, you'll see it appear on the Shelf a few minutes later —
+  the collection literally grows while you listen. When I send you an updated app someday,
+  the "Open Anyway" handshake happens once more; everything else stays put.</p>
+
+  <footer>SESSION · tuned to JAM-STATION · with love from Jason</footer>
+
+</div>
+</body>
+</html>
