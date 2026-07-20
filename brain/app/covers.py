@@ -89,16 +89,33 @@ def bucketize(tags: list[str]) -> list[str]:
     return out[:3]                                   # a record lives in a few sections, not ten
 
 
+def _names(entity: dict) -> list[str]:
+    """genre + tag names off any MB entity, tags sorted by vote count."""
+    names = [g.get("name", "") for g in (entity.get("genres") or [])]
+    names += [t.get("name", "") for t in sorted(
+        entity.get("tags") or [], key=lambda t: -(t.get("count") or 0))]
+    return names
+
+
 def _genres(mbid: str) -> list[str]:
-    """The release's genre/tag names from MusicBrainz, bucketized. Best-effort."""
+    """Genres for a release, bucketized — falling back UP the MB data model.
+    Releases are rarely tagged directly; the release-group usually is, and the
+    ARTIST almost always is (a Miles Davis record is jazz because Miles is)."""
     try:
         data = json.load(_get(
-            f"https://musicbrainz.org/ws/2/release/{mbid}?inc=genres+tags&fmt=json"))
+            f"https://musicbrainz.org/ws/2/release/{mbid}"
+            "?inc=genres+tags+release-groups+artist-credits&fmt=json"))
     except Exception:
         return []
-    names = [g.get("name", "") for g in (data.get("genres") or [])]
-    names += [t.get("name", "") for t in sorted(
-        data.get("tags") or [], key=lambda t: -(t.get("count") or 0))]
+    out = bucketize(_names(data))
+    if out:
+        return out
+    out = bucketize(_names(data.get("release-group") or {}))
+    if out:
+        return out
+    names: list[str] = []
+    for ac in data.get("artist-credit") or []:
+        names += _names(ac.get("artist") or {})
     return bucketize(names)
 
 
