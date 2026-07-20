@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>run.jam.inbox</string>
+  <!-- The contributor inbox: a folder dropped into ~/jam-inbox (by the owner, or a family
+       member over Tailscale) becomes a station. jam-inbox.sh runs its own 20s poll loop, so
+       KeepAlive (long-running), not StartInterval. Needs docker on PATH — the script exports it. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/jason/business/jam-station/tools/jam-inbox.sh</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>20</integer>
+  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/jam-inbox.log</string>
+  <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/jam-inbox.log</string>
+</dict>
+</plist>
