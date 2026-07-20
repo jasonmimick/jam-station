@@ -28,3 +28,6 @@ Channel-art photos are Creative Commons; credits below satisfy the BY/BY-SA term
 | jazzhop | Groovy Round Thing | Kurayba | by-sa | https://www.flickr.com/photos/48503330@N08/31613237751 |
 | night | Fireflies in the meadow | rwwild | by | https://www.flickr.com/photos/183697404@N06/53817968318 |
 | ocean | Brighton Marina Concrete Sea Defences and Moonlight Reflections | Dominic's pics | by | https://www.flickr.com/photos/64097751@N00/4753358253 |
+| ambient | Aurora borealis night sky silhouettes | rawpixel / Wikimedia Commons | cc0 | https://www.rawpixel.com/image/3285190/free-photo-image-background-northern-lights-aurora-borealis |
+| dubtechno | Deep blue sea | A.Cahlenstein Photography | by | https://www.flickr.com/photos/65296735@N08/19757342859 |
+| electronica | Erwin Redl Piece at MOCA Geffen | electron beat | by | https://www.flickr.com/photos/24389338@N00/56941402 |
