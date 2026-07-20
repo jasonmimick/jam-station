@@ -46,7 +46,10 @@ public final class Player: ObservableObject {
     }
 
     public private(set) var api: StationAPI
-    private let player = AVPlayer()
+    // AVQueuePlayer: the next tracks are enqueued and PRE-BUFFERING while the
+    // current one plays — near-gapless advances, instant skips (the cold-start
+    // per track was painfully audible on cellular in the car).
+    private let player = AVQueuePlayer()
     private var timeObserver: Any?
     private var pollTask: Task<Void, Never>?
     private var presenceTask: Task<Void, Never>?
@@ -361,7 +364,16 @@ public final class Player: ObservableObject {
         }
     }
 
-    public func nextTrack() { if let sh = show, trackIndex + 1 < sh.tracks.count { playTrack(trackIndex + 1) } }
+    public func nextTrack() {
+        guard let sh = show, trackIndex + 1 < sh.tracks.count else { return }
+        if player.items().count > 1 {
+            player.advanceToNextItem()      // already buffered — instant
+            advancedInQueue()
+            player.playImmediately(atRate: 1.0)
+        } else {
+            playTrack(trackIndex + 1)
+        }
+    }
     public func prevTrack() {
         if position > 4 { seek(to: 0) }
         else if trackIndex > 0 { playTrack(trackIndex - 1) }
@@ -413,33 +425,62 @@ public final class Player: ObservableObject {
         guard let ch = current else { return }
         let item = makeItem(url: api.streamURL(slug: ch.slug))
         watch(item)
-        player.replaceCurrentItem(with: item)
+        player.removeAllItems()
+        player.insert(item, after: nil)
         player.play()
         status = .tuning
         startPolling()
         pushNowPlayingInfo()
     }
 
-    private func playTrack(_ index: Int) {
+    private func queueItem(at index: Int) -> AVPlayerItem? {
         guard let sh = show, sh.tracks.indices.contains(index),
-              let url = api.trackURL(sh.tracks[index].url) else { return }
+              let url = api.trackURL(sh.tracks[index].url) else { return nil }
+        return makeItem(url: url)
+    }
+
+    private func playTrack(_ index: Int) {
+        guard let sh = show, sh.tracks.indices.contains(index) else { return }
         trackIndex = index
         let t = sh.tracks[index]
         now = NowPlaying(title: t.title, artist: t.artist, album: t.album, url: t.url)
         position = 0; duration = 0
-        let item = makeItem(url: url)
-        watch(item)
-        player.replaceCurrentItem(with: item)
-        player.play()
+        player.removeAllItems()
+        for i in index..<min(index + 3, sh.tracks.count) {   // current + 2 pre-buffering
+            if let item = queueItem(at: i) {
+                if i == index { watch(item) }
+                player.insert(item, after: player.items().last)
+            }
+        }
+        player.playImmediately(atRate: 1.0)
         status = .tuning
         startPolling()
         pushNowPlayingInfo()
     }
 
+    /// The queue advanced (naturally or by skip) — sync state, top up lookahead.
+    private func advancedInQueue() {
+        guard source != .radio, let sh = show, trackIndex + 1 < sh.tracks.count else {
+            status = .paused
+            pushNowPlayingInfo()
+            return
+        }
+        trackIndex += 1
+        let t = sh.tracks[trackIndex]
+        now = NowPlaying(title: t.title, artist: t.artist, album: t.album, url: t.url)
+        position = 0; duration = 0
+        if let cur = player.currentItem { watch(cur) }
+        let lookahead = trackIndex + 2
+        if lookahead < sh.tracks.count, player.items().count < 3,
+           let item = queueItem(at: lookahead) {
+            player.insert(item, after: player.items().last)
+        }
+        pushNowPlayingInfo()
+    }
+
     private func trackEnded() {
-        guard source != .radio, let sh = show else { return }
-        if trackIndex + 1 < sh.tracks.count { playTrack(trackIndex + 1) }
-        else { status = .paused }
+        guard source != .radio else { return }
+        advancedInQueue()      // AVQueuePlayer already moved on; follow it
     }
 
     private var itemObservation: NSKeyValueObservation?
