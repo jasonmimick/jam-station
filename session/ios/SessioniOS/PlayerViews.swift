@@ -213,26 +213,8 @@ struct PlayerSheet: View {
                 Button("Stay with it", role: .cancel) {}
             }
 
-            Button {
-                tapHaptic()
-                player.setSource(player.source == .radio ? .tape : .radio)
-            } label: {
-                HStack(spacing: 7) {
-                    if player.source == .radio {
-                        Image(systemName: "recordingtape")
-                        Text("LISTEN TO THE TAPE")
-                    } else {
-                        Circle().fill(t.red).frame(width: 7, height: 7)
-                        Text("BACK TO THE RADIO — LIVE")
-                    }
-                }
-                .font(.system(size: 11, weight: .heavy)).tracking(1)
-                .padding(.horizontal, 20).padding(.vertical, 11)
-                .foregroundStyle(player.source == .radio ? t.ink : t.red)
-                .overlay(Capsule().stroke(player.source == .radio ? t.line : t.red, lineWidth: 2))
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 20)
+            SourceFlip(t: t)
+                .padding(.top, 18)
 
             if let sh = player.show, !sh.tracks.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
@@ -337,6 +319,44 @@ struct PlayerSheet: View {
     func mmss(_ s: Double) -> String {
         let n = Int(s.isFinite ? max(s, 0) : 0)
         return String(format: "%d:%02d", n / 60, n % 60)
+    }
+}
+
+/// The receiver's input switch — radio | tape, a flick of the thumb.
+struct SourceFlip: View {
+    @EnvironmentObject var player: Player
+    let t: IOSTheme
+
+    var body: some View {
+        HStack(spacing: 0) {
+            seg("dot.radiowaves.left.and.right", label: "RADIO", on: player.source == .radio) {
+                player.setSource(.radio)
+            }
+            seg("recordingtape", label: "TAPE", on: player.source != .radio) {
+                player.setSource(.tape)
+            }
+        }
+        .overlay(Capsule().stroke(t.line, lineWidth: 1.5))
+        .clipShape(Capsule())
+    }
+
+    func seg(_ icon: String, label: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            tapHaptic()
+            action()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 12, weight: .bold))
+                if on {
+                    Text(label).font(.system(size: 10, weight: .heavy)).tracking(1)
+                }
+            }
+            .padding(.horizontal, on ? 16 : 14).padding(.vertical, 10)
+            .background(on ? t.accent : .clear)
+            .foregroundStyle(on ? t.onAccent : t.muted)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -292,8 +292,7 @@ struct TransportBar: View {
                 .frame(maxWidth: .infinity)
             }
 
-            SourceButton(t: t)
-                .frame(width: 210)
+            SourceSwitch(t: t)
             Image(systemName: "speaker.wave.2").font(.system(size: 10)).foregroundStyle(t.muted)
             VolumeSlider(t: t).frame(width: 70)
         }

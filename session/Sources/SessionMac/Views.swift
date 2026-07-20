@@ -139,7 +139,6 @@ struct NowPlayingPane: View {
 
             TransportRow(t: t, confirmSkip: $confirmSkip)
             if player.source != .radio { ScrubRow(t: t) }
-            SourceButton(t: t)
         }
         .padding(14)
     }
@@ -191,37 +190,37 @@ struct NowPlayingPane: View {
     }
 }
 
-/// The Radio/Tape choice as a moment, not a mode switch: while riding the
-/// broadcast you can step off onto your own copy of the show, and back.
-struct SourceButton: View {
+/// The receiver's input switch, compact: radio | tape, active side lit.
+struct SourceSwitch: View {
     @EnvironmentObject var player: Player
     let t: Theme
 
     var body: some View {
-        Button {
-            player.setSource(player.source == .radio ? .tape : .radio)
-        } label: {
-            HStack(spacing: 7) {
-                if player.source == .radio {
-                    Image(systemName: "recordingtape").font(.system(size: 11, weight: .bold))
-                    Text("LISTEN TO THE TAPE").font(.system(size: 10, weight: .heavy)).tracking(1.2)
-                } else {
-                    Circle().fill(t.red).frame(width: 7, height: 7)
-                    Text("BACK TO THE RADIO — LIVE").font(.system(size: 10, weight: .heavy)).tracking(1.2)
-                }
+        HStack(spacing: 0) {
+            seg("dot.radiowaves.left.and.right", on: player.source == .radio,
+                help: "the live broadcast — what everyone hears") {
+                player.setSource(.radio)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .foregroundStyle(player.source == .radio ? t.ink : t.red)
-            .overlay(RoundedRectangle(cornerRadius: 2)
-                .stroke(player.source == .radio ? t.line : t.red, lineWidth: 2))
-            .contentShape(Rectangle())
+            seg("recordingtape", on: player.source != .radio,
+                help: "your own copy of the show — scrub, jump, rewind") {
+                player.setSource(.tape)
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 3).stroke(t.line, lineWidth: 2))
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+
+    func seg(_ icon: String, on: Bool, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .bold))
+                .frame(width: 34, height: 26)
+                .background(on ? t.accent : .clear)
+                .foregroundStyle(on ? t.onAccent : t.muted)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.top, 12)
-        .help(player.source == .radio
-              ? "play this show yourself — scrub, jump, rewind; the broadcast rolls on without you"
-              : "rejoin the live broadcast")
+        .help(help)
     }
 }
 
@@ -310,6 +309,7 @@ struct TransportRow: View {
             .disabled(player.member == nil || player.now.url.isEmpty)
             .opacity(player.member == nil ? 0.3 : 1)
             .help(player.member == nil ? "sign in to keep favourites" : "favourite this track")
+            SourceSwitch(t: t)
             Spacer()
             Image(systemName: "speaker.wave.2").font(.system(size: 11)).foregroundStyle(t.muted)
             VolumeSlider(t: t).frame(width: 84)
