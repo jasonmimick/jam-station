@@ -41,7 +41,7 @@ brain/app/spot.py            photograph music in the wild, vision API identifies
 brain/app/adapters/          one module per audio source (archive.py, library.py, phishin.py, cc.py)
 brain/app/db.py              Postgres via a ?->%s facade — no ORM, keep it that way
 brain/app/static/index.html  the whole desktop UI (single file, vanilla JS, no build step)
-brain/app/static/mobile.html the phone app, same rules, served by user-agent
+brain/app/static/mobile.html the mobile-web FUNNEL (see Clients), served by user-agent
 brain/tests/                 pytest; conftest mocks archive.org AND isolates the DB (see below)
 session/                     "Session" — native SwiftUI clients (SessionCore + macOS app + ios/)
 session/Makefile             make run (mac) · make ios-sim · make ios-phone · make ios-ipad
@@ -125,8 +125,8 @@ release-group → artist fallback), owner-pinned via `POST /api/library/genre`.
 show-shaped shuffled mix. Sections ≥3 records become **`shelf-*` stations
 automatically** (`sync_genre_channels`) — and these are **mix-only**: no icecast
 mount, every client "tunes" them by playing the mix through its own on-demand
-machinery (web: `tuneMix`/`MIX` prefix; a `/stream/shelf-*` request is always 404 and
-that's correct). `GET /api/dial` gives now-playing for every broadcast channel in one
+machinery (web: `tuneMix`/`MIX` prefix; a `/stream/shelf-*` request always fails —
+403 for anonymous, 404 for members — and that's correct). `GET /api/dial` gives now-playing for every broadcast channel in one
 call — clients poll it instead of hammering `/api/nowplaying` per channel.
 
 ## Gotchas
