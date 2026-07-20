@@ -43,6 +43,8 @@ brain/app/db.py              Postgres via a ?->%s facade — no ORM, keep it tha
 brain/app/static/index.html  the whole desktop UI (single file, vanilla JS, no build step)
 brain/app/static/mobile.html the phone app, same rules, served by user-agent
 brain/tests/                 pytest; conftest mocks archive.org AND isolates the DB (see below)
+session/                     "Session" — native SwiftUI clients (SessionCore + macOS app + ios/)
+session/Makefile             make run (mac) · make ios-sim · make ios-phone · make ios-ipad
 liquidsoap/radio.liq         radio engine config (liquidsoap 2.2.x)
 tools/                       host-side CD pipeline: rip-cd.sh, cd-watch.sh, cd-tick.sh, cd-name.py
 tools/mini/, tools/euler/    launchd plists + helpers (watcher, backups, jam-cdd FDA helper)
@@ -136,6 +138,19 @@ with zero credentials — the mini has real SMTP secrets set on `jam-brain`.
   `mobile.html` by user-agent. Don't reintroduce a breakpoint that rearranges `.app`.
 - Phish is not on the Archive (band policy) — that's what `adapters/phishin.py` is for.
   Commercial 70s fusion/bebop isn't either; it needs the owner's ripped library.
+- **Session (native apps)**: design in `docs/DESIGN-session*.md`; reuses the web's
+  design system verbatim. Device installs go through `session/Makefile` targets
+  which VERIFY by reading the device's own app listing (a `| tail` pipe once
+  masked a failed build and re-installed a stale bundle for a whole day —
+  never trust an install without the `App installed` line + build number).
+  Free-team signing: builds expire after 7 days; team id lives in
+  `session/ios/project.yml`. Engine + image loaders must attach cookies
+  explicitly (AVURLAssetHTTPCookiesKey / URLSession.shared) — AVPlayer and
+  AsyncImage do NOT send them, and members-only /music 403s silently.
+- **Genres**: `_album.json` carries `genres` (+ `genres_owner` pins curation);
+  covers.py maps MB tags→buckets falling back release→release-group→artist;
+  genre channels (`shelf-*`) are MIX-ONLY — on the dial but never mounted by
+  liquidsoap; clients play them as instant on-demand mixes via /api/library/mix.
 - liquidsoap is pinned to `savonet/liquidsoap:v2.2.5`. Its scripting language breaks
   between minor versions — if you bump the pin, re-run `--check` and expect churn.
 - `liquidsoap --check` also RUNS top-level code; with no brain reachable the script
