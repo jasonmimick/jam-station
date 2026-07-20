@@ -269,15 +269,34 @@ public final class Player: ObservableObject {
     /// "A jazz mix from the shelf": the whole section, shuffled, on the tape deck.
     private var lastMixGenre: String?
 
-    public func playMix(_ genre: String) {
+    public func playMix(_ genre: String, label: String? = nil) {
         Task {
             guard let sh = try? await api.mix(genre: genre), !sh.tracks.isEmpty else { return }
             currentAlbum = nil
             browsed = nil
             lastMixGenre = genre
-            show = sh
-            source = .tape
-            playTrack(0)
+            let title = label ?? sh.album
+            // Seamless handoff: if a song is already playing on-demand, it KEEPS
+            // playing — the station's lineup queues up behind it. No cut.
+            if source != .radio, status == .playing || status == .paused,
+               let curShow = show, curShow.tracks.indices.contains(trackIndex) {
+                let cur = curShow.tracks[trackIndex]
+                show = Show(channel: "mix", album: title, tracks: [cur] + sh.tracks)
+                trackIndex = 0
+                source = .tape
+                // rebuild the lookahead behind the untouched current item
+                for item in player.items().dropFirst() { player.remove(item) }
+                for i in 1...min(2, sh.tracks.count) {
+                    if let item = queueItem(at: i) {
+                        player.insert(item, after: player.items().last)
+                    }
+                }
+                pushNowPlayingInfo()
+            } else {
+                show = Show(channel: "mix", album: title, tracks: sh.tracks)
+                source = .tape
+                playTrack(0)
+            }
         }
     }
 
@@ -356,7 +375,7 @@ public final class Player: ObservableObject {
         // a genre station is mix-only: the song changes NOW and the lineup
         // queues behind it — no live stream to join mid-song
         if let g = channel.mixGenre {
-            playMix(g)
+            playMix(g, label: channel.name)   // wears the station's name
             return
         }
         source = .radio
