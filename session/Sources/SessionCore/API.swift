@@ -38,6 +38,11 @@ public struct StationAPI {
         try await get("api/nowplaying", ["channel": channel])
     }
 
+    /// What every channel is on, in one call.
+    public func dial() async throws -> [String: NowPlaying] {
+        try await get("api/dial")
+    }
+
     public func show(channel: String) async throws -> Show {
         try await get("api/show", ["channel": channel])
     }

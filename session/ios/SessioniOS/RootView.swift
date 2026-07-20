@@ -315,7 +315,13 @@ struct TunerTab: View {
             }
         }
         .background(t.board)
-        .task { await player.refreshChannels() }
+        .task {
+            await player.refreshChannels()
+            while !Task.isCancelled {           // the dial stays current while you look at it
+                await player.refreshDial()
+                try? await Task.sleep(for: .seconds(20))
+            }
+        }
     }
 }
 
@@ -432,7 +438,10 @@ struct ChannelRowIOS: View {
                     Text(ch.name)
                         .font(.system(size: 14, weight: tuned ? .heavy : .semibold))
                         .foregroundStyle(ch.playable ? t.ink : t.faint).lineLimit(1)
-                    if !ch.playable {
+                    if let np = player.dialNow[ch.slug], !np.isEmpty {
+                        Text(np.title + (np.artist.isEmpty ? "" : " — \(np.artist)"))
+                            .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
+                    } else if !ch.playable {
                         Text("NO MUSIC").font(.system(size: 9, weight: .heavy)).tracking(1)
                             .foregroundStyle(t.faint)
                     } else if ch.isPrivate {
@@ -545,6 +554,16 @@ struct ChannelCard: View {
 
     var tuned: Bool { player.current?.slug == ch.slug }
 
+    var onNow: Bool { !(player.dialNow[ch.slug]?.isEmpty ?? true) }
+
+    /// The card's one line: what's PLAYING on the channel beats a status word.
+    var cardSub: String {
+        if let np = player.dialNow[ch.slug], !np.isEmpty { return np.title }
+        if !ch.playable { return "NO MUSIC" }
+        if ch.isPrivate { return "PRIVATE" }
+        return " "
+    }
+
     var body: some View {
         Button {
             guard ch.playable else { return }
@@ -585,9 +604,11 @@ struct ChannelCard: View {
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(t.ink).lineLimit(1)
                     .padding(.top, 6)
-                Text(ch.playable ? (ch.isPrivate ? "PRIVATE" : " ") : "NO MUSIC")
-                    .font(.system(size: 10, weight: .bold)).tracking(0.8)
-                    .foregroundStyle(ch.playable ? t.accent : t.faint)
+                Text(cardSub)
+                    .font(.system(size: 10, weight: onNow ? .medium : .bold))
+                    .tracking(onNow ? 0 : 0.8)
+                    .foregroundStyle(onNow ? t.muted : (ch.playable ? t.accent : t.faint))
+                    .lineLimit(1)
             }
         }
         .buttonStyle(.plain)

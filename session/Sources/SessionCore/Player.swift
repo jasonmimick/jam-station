@@ -151,6 +151,11 @@ public final class Player: ObservableObject {
 
     @Published public private(set) var spots: [SpotResult] = []
     @Published public private(set) var genres: [GenreCount] = []
+    @Published public private(set) var dialNow: [String: NowPlaying] = [:]
+
+    public func refreshDial() async {
+        dialNow = (try? await api.dial()) ?? dialNow
+    }
 
     public func refreshMembership() async {
         // a network hiccup must NOT masquerade as a sign-out and wipe the shelf

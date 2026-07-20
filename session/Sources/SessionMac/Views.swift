@@ -486,6 +486,12 @@ struct TunerList: View {
             .frame(height: fixedHeight)
             .frame(maxHeight: fixedHeight == nil ? .infinity : nil)
         }
+        .task {
+            while !Task.isCancelled {           // the dial stays current while shown
+                await player.refreshDial()
+                try? await Task.sleep(for: .seconds(20))
+            }
+        }
     }
 }
 
@@ -508,9 +514,15 @@ struct ChannelRow: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(t.accent)
                     .frame(width: 12)
-                Text(ch.name)
-                    .font(.system(size: 13, weight: tuned ? .heavy : .semibold, design: .monospaced))
-                    .foregroundStyle(ch.playable ? t.ink : t.faint)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ch.name)
+                        .font(.system(size: 13, weight: tuned ? .heavy : .semibold, design: .monospaced))
+                        .foregroundStyle(ch.playable ? t.ink : t.faint)
+                    if let np = player.dialNow[ch.slug], !np.isEmpty {
+                        Text(np.title + (np.artist.isEmpty ? "" : " — \(np.artist)"))
+                            .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
+                    }
+                }
                 if ch.isPrivate {
                     Text("PRIV").font(.system(size: 8, weight: .heavy)).tracking(1)
                         .padding(.horizontal, 4).padding(.vertical, 1)
