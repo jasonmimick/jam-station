@@ -63,6 +63,11 @@
     background:transparent; color:var(--on-yellow); font-size:15px; line-height:1;
     display:inline-flex; align-items:center; justify-content:center; }
   .icon:hover { background:var(--on-yellow); color:var(--yellow); }
+  /* Signed in: the ☺ button becomes a name chip so "who am I" is unmistakable. */
+  .icon.me { width:auto; min-width:34px; padding:0 11px; gap:6px; font-size:12.5px; font-weight:700;
+    letter-spacing:.01em; max-width:180px; }
+  .icon.me .meh { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .icon.me .medot { flex:none; font-size:9px; }
 
   /* the accent picker — a little popover of signage colours hanging off the masthead */
   .hdr-r { position:relative; }
@@ -1966,8 +1971,17 @@ S.user = null;
 
 async function loadMe() {
   try { S.user = (await (await fetch("/api/me")).json()).user; } catch { S.user = null; }
-  $("who").textContent = S.user ? "●" : "☺";
-  $("who").title = S.user ? `Signed in as ${S.user.email} — click to sign out` : "sign in";
+  if (S.user) {
+    const handle = (S.user.email || "").split("@")[0] || "you";
+    $("who").classList.add("me");
+    $("who").innerHTML = `<span class="medot">●</span><span class="meh"></span>`;
+    $("who").querySelector(".meh").textContent = handle;   // textContent = no HTML injection from the email
+    $("who").title = `Signed in as ${S.user.email} — click for your account`;
+  } else {
+    $("who").classList.remove("me");
+    $("who").textContent = "☺";
+    $("who").title = "sign in";
+  }
   if (S.user) { await pullFavs(); await loadCatalog(); loadSpots(); } else { S.albums = []; S.spots = []; }
   renderStations();
 }
