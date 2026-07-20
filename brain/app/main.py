@@ -61,6 +61,14 @@ def dad(request: Request):
     return FileResponse(os.path.join(STATIC, "dad.html"), headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/guide")
+def guide(request: Request):
+    """The contributor how-to (Tailscale → jam-inbox). Public — it's just instructions, and
+    the whole point is a family member can open the link and follow it. Self-referential:
+    lives on the station it teaches you to contribute to."""
+    return FileResponse(os.path.join(STATIC, "guide.html"), headers={"Cache-Control": "no-cache"})
+
+
 # Installable on a phone: a home-screen icon and a full-screen player instead of
 # browser chrome. He listens walking around; this makes it feel like an app.
 @app.get("/manifest.json")
