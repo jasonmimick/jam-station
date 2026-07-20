@@ -2,10 +2,15 @@ import SwiftUI
 import AppKit
 import SessionCore
 
-/// P1 pulled forward: the desktop Session. Left pane = the Tuner (with search),
-/// stage = board + transport + the set list, rip bar on top when a disc is going.
-/// While this window is open the app is a regular Dock citizen; close it and
-/// Session slips back to being a menu-bar app (the music keeps playing).
+/// The desktop Session, Option A: sidebar + content + a persistent transport
+/// bar (the Music-app shape). Favourites and History are destinations you
+/// visit, not permanent rails; the genre sections sit in the sidebar with
+/// MIX / TUNE IN one click away; the transport never leaves the bottom edge.
+enum MacDest: Hashable {
+    case stage, dial, shelf, favs, history, you
+    case genre(String)
+}
+
 struct MainWindowView: View {
     @EnvironmentObject var player: Player
     @Environment(\.colorScheme) var scheme
@@ -14,6 +19,7 @@ struct MainWindowView: View {
     @AppStorage("dance") var dance = false
     @AppStorage("saver") var saverMode = "rotate"
     @AppStorage("zoom") var zoom = 1.0
+    @State var dest: MacDest = .stage
     @State var confirmSkip = false
     @State var showSettings = false
     @State var saverOn = false
@@ -25,43 +31,39 @@ struct MainWindowView: View {
     }
 
     var body: some View {
-        // ⌘= / ⌘- / ⌘0 zoom: render at the inverse size, scale up — crisp, no reflow bugs
         GeometryReader { geo in
-        ZStack {
-            VStack(spacing: 0) {
-                Masthead(t: t, confirmSkip: $confirmSkip,
-                         onGear: { showSettings = true },
-                         onSaver: { saverOn = true })
-                if let rip = player.rip, rip.ripping {
-                    RipBar(rip: rip, t: t)
+            ZStack {
+                VStack(spacing: 0) {
+                    Masthead(t: t, confirmSkip: $confirmSkip,
+                             onGear: { showSettings = true },
+                             onSaver: { saverOn = true })
+                    if let rip = player.rip, rip.ripping {
+                        RipBar(rip: rip, t: t)
+                    }
+                    HStack(spacing: 0) {
+                        Sidebar(dest: $dest, t: t)
+                            .frame(width: 214)
+                            .background(t.panel)
+                        Rectangle().fill(t.line).frame(width: 1)
+                        content
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(t.board)
+                    }
+                    TransportBar(t: t, confirmSkip: $confirmSkip) { dest = .stage }
                 }
-                HSplitView {
-                    TunerList(t: t, fixedHeight: nil, browseAlbums: true)
-                        .frame(minWidth: 190, idealWidth: 270, maxWidth: 380)
-                        .background(t.panel)
-                    StagePane(t: t, confirmSkip: $confirmSkip)
-                        .frame(minWidth: 360, maxWidth: .infinity)
-                    RightPane(t: t)
-                        .frame(minWidth: 210, idealWidth: 300, maxWidth: 380)
-                        .background(t.panel)
+                if saverOn {
+                    SaverOverlay(t: t, mode: saverMode) {
+                        saverOn = false
+                        lastActive = Date()
+                    }
+                    .transition(.opacity)
                 }
             }
-            if saverOn {
-                SaverOverlay(t: t, mode: saverMode) {
-                    saverOn = false
-                    lastActive = Date()
-                }
-                .transition(.opacity)
-            }
-        }
-        .frame(width: max(geo.size.width, 1) / zoom, height: max(geo.size.height, 1) / zoom)
-        .scaleEffect(zoom, anchor: .topLeading)
+            .frame(width: max(geo.size.width, 1) / zoom, height: max(geo.size.height, 1) / zoom)
+            .scaleEffect(zoom, anchor: .topLeading)
         }
         .background(t.board)
-        // the scaled-down layout must never dip below the panes' combined minimums
-        // (190+360+210) or NSSplitView's constraints go unsatisfiable and AppKit traps —
-        // so the window's own minimum grows with the zoom
-        .frame(minWidth: 800 * max(1, zoom), minHeight: 540 * max(1, zoom))
+        .frame(minWidth: 860 * max(1, zoom), minHeight: 560 * max(1, zoom))
         .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
         .onContinuousHover { _ in
             lastActive = Date()
@@ -70,7 +72,7 @@ struct MainWindowView: View {
         .sheet(isPresented: $showSettings) {
             SettingsSheet().environmentObject(player)
         }
-        .task {   // idle watchdog: 3 quiet minutes in the window → the saver
+        .task {   // idle → the saver
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 if !saverOn, Date().timeIntervalSince(lastActive) > 180 {
@@ -79,16 +81,235 @@ struct MainWindowView: View {
             }
         }
         .onAppear {
-            NSApp.setActivationPolicy(.regular)   // show in the Dock while the window lives
+            NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
         }
         .onDisappear {
-            NSApp.setActivationPolicy(.accessory) // back to a pure menu-bar app
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    @ViewBuilder var content: some View {
+        switch dest {
+        case .stage:
+            VStack(alignment: .leading, spacing: 0) {
+                NowPlayingPane(t: t, confirmSkip: $confirmSkip)
+                Divider().overlay(t.line)
+                Tracklist(t: t)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        case .dial:
+            TunerList(t: t, fixedHeight: nil, browseAlbums: true)
+        case .shelf:
+            ShelfGallery(t: t, initialSection: "") { al in
+                player.browseAlbum(al)
+                dest = .stage
+            }
+        case .genre(let g):
+            ShelfGallery(t: t, initialSection: g) { al in
+                player.browseAlbum(al)
+                dest = .stage
+            }
+            .id(g)      // fresh state per section
+        case .favs:
+            FavList(t: t)
+        case .history:
+            HistoryList(t: t)
+                .task { await player.refreshHistory() }
+        case .you:
+            ScrollView { SettingsPane(t: t) }
         }
     }
 }
 
-/// LISTEN AND RIP, first-class: the web's #ripBar, native.
+// ── the sidebar ──────────────────────────────────────────────────────────
+
+struct Sidebar: View {
+    @EnvironmentObject var player: Player
+    @Binding var dest: MacDest
+    let t: Theme
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                SideItem(label: "Now Playing", glyph: "▶", sel: dest == .stage, t: t) { dest = .stage }
+                SideItem(label: "The Dial", glyph: "◉", sel: dest == .dial, t: t) { dest = .dial }
+                SideItem(label: "The Shelf", glyph: "▤", sel: dest == .shelf, t: t) { dest = .shelf }
+                if player.member != nil {
+                    SideItem(label: "Favourites", glyph: "♥", sel: dest == .favs, t: t,
+                             glyphColor: t.red) { dest = .favs }
+                }
+                SideItem(label: "History", glyph: "⏱", sel: dest == .history, t: t) { dest = .history }
+                SideItem(label: "You", glyph: "◎", sel: dest == .you, t: t) { dest = .you }
+
+                if !player.genres.isEmpty {
+                    Text("FROM THE SHELF")
+                        .font(.system(size: 9, weight: .heavy)).tracking(1.8)
+                        .foregroundStyle(t.accent)
+                        .padding(.horizontal, 14).padding(.top, 16).padding(.bottom, 4)
+                    ForEach(player.genres) { g in
+                        SideItem(label: g.name, glyph: "♫", sel: dest == .genre(g.name), t: t,
+                                 badge: "\(g.count)") { dest = .genre(g.name) }
+                    }
+                }
+            }
+            .padding(.vertical, 10)
+        }
+    }
+}
+
+struct SideItem: View {
+    let label: String
+    let glyph: String
+    let sel: Bool
+    let t: Theme
+    var glyphColor: Color? = nil
+    var badge: String? = nil
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Text(glyph).font(.system(size: 12))
+                    .foregroundStyle(glyphColor ?? (sel ? t.accent : t.faint))
+                    .frame(width: 16)
+                Text(label)
+                    .font(.system(size: 13, weight: sel ? .heavy : .semibold))
+                    .foregroundStyle(t.ink)
+                    .lineLimit(1)
+                Spacer()
+                if let badge {
+                    Text(badge).font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(t.faint)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(sel ? t.sunk : (hover ? t.sunk.opacity(0.6) : .clear))
+            .overlay(alignment: .leading) {
+                if sel { Rectangle().fill(t.accent).frame(width: 3) }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .padding(.horizontal, 6)
+    }
+}
+
+// ── the transport bar: the music never leaves the bottom edge ────────────
+
+struct TransportBar: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    @Binding var confirmSkip: Bool
+    let goStage: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: goStage) {
+                HStack(spacing: 10) {
+                    ArtTile(t: t, size: 40)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(player.now.title.isEmpty ? (player.current?.name ?? "Tune in")
+                                                      : player.now.title)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(t.ink).lineLimit(1)
+                        Text(player.now.artist)
+                            .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
+                    }
+                    .frame(width: 170, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            SquareButton(label: "◂◂", t: t, small: true) { player.stepBack() }
+            Button {
+                player.toggle()
+            } label: {
+                Text(player.isPlaying ? "❚❚" : "▶")
+                    .font(.system(size: 13, weight: .bold))
+                    .frame(width: 36, height: 36)
+                    .background(t.accent).foregroundStyle(t.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            SquareButton(label: "▸▸", t: t, small: true) {
+                if player.source == .radio { confirmSkip = true } else { player.stepForward() }
+            }
+            .confirmationDialog("Skip moves the station for everyone listening.",
+                                isPresented: $confirmSkip, titleVisibility: .visible) {
+                Button("Skip the show") { player.skipRadio() }
+                Button("Stay with it", role: .cancel) {}
+            }
+            Button {
+                player.toggleFavourite()
+            } label: {
+                Text("♥").font(.system(size: 13))
+                    .frame(width: 30, height: 30)
+                    .foregroundStyle(player.nowIsFavourite ? t.red : t.faint)
+                    .overlay(RoundedRectangle(cornerRadius: 2)
+                        .stroke(player.nowIsFavourite ? t.red : t.line, lineWidth: 2))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(player.member == nil || player.now.url.isEmpty)
+            .opacity(player.member == nil ? 0.3 : 1)
+
+            if player.source == .radio {
+                if player.status == .playing {
+                    HStack(spacing: 6) {
+                        Circle().fill(t.red).frame(width: 7, height: 7)
+                        Text("ON AIR · \((player.current?.name ?? "").uppercased())")
+                            .font(.system(size: 9, weight: .heavy)).tracking(1.4)
+                    }
+                    .foregroundStyle(t.red)
+                    .frame(maxWidth: .infinity)
+                } else {
+                    Text(player.status == .tuning ? "TUNING IN…" : " ")
+                        .font(.system(size: 9, weight: .heavy)).tracking(1.4)
+                        .foregroundStyle(t.muted)
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Text(mmss(player.position)).font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(t.muted)
+                    Slider(value: Binding(
+                        get: { player.position },
+                        set: { player.position = $0 }
+                    ), in: 0...max(player.duration, 1)) { editing in
+                        player.isScrubbing = editing
+                        if !editing { player.seek(to: player.position) }
+                    }
+                    .controlSize(.mini)
+                    .tint(t.blue)
+                    Text(mmss(player.duration)).font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(t.muted)
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            SourceButton(t: t)
+                .frame(width: 210)
+            Image(systemName: "speaker.wave.2").font(.system(size: 10)).foregroundStyle(t.muted)
+            VolumeSlider(t: t).frame(width: 70)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
+        .background(t.panel)
+        .overlay(alignment: .top) { Rectangle().fill(t.line).frame(height: 1) }
+    }
+
+    func mmss(_ s: Double) -> String {
+        let n = Int(s.isFinite ? max(s, 0) : 0)
+        return String(format: "%d:%02d", n / 60, n % 60)
+    }
+}
+
+// ── LISTEN AND RIP, first-class ──────────────────────────────────────────
+
 struct RipBar: View {
     let rip: RipStatus
     let t: Theme
@@ -122,47 +343,21 @@ struct RipBar: View {
     }
 }
 
-struct StagePane: View {
-    @EnvironmentObject var player: Player
-    let t: Theme
-    @Binding var confirmSkip: Bool
-    @State private var tab = "playing"
+// ── the shelf gallery (content view; section preselectable) ──────────────
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if player.member != nil {
-                HStack(spacing: 8) {
-                    PillTab(label: "PLAYING", on: tab == "playing", t: t) { tab = "playing" }
-                    PillTab(label: "SHELF", on: tab == "shelf", t: t) { tab = "shelf" }
-                    Spacer()
-                }
-                .padding(.horizontal, 14).padding(.vertical, 9)
-                .overlay(alignment: .bottom) { Rectangle().fill(t.line).frame(height: 1) }
-            }
-            if tab == "shelf", player.member != nil {
-                ShelfGallery(t: t) { al in
-                    player.browseAlbum(al)
-                    tab = "playing"
-                }
-            } else {
-                NowPlayingPane(t: t, confirmSkip: $confirmSkip)
-                Divider().overlay(t.line)
-                Tracklist(t: t)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(t.board)
-    }
-}
-
-/// The record gallery — the web's CDs view: covers in a grid, search, click to browse.
 struct ShelfGallery: View {
     @EnvironmentObject var player: Player
     let t: Theme
     let onPick: (Album) -> Void
+    @State var section: String
     @State private var find = ""
-    @State private var section = ""
     @AppStorage("shelfView") var shelfView = "grid"
+
+    init(t: Theme, initialSection: String, onPick: @escaping (Album) -> Void) {
+        self.t = t
+        self.onPick = onPick
+        _section = State(initialValue: initialSection)
+    }
 
     var albums: [Album] {
         player.albums.filter { al in
@@ -173,7 +368,6 @@ struct ShelfGallery: View {
         }
     }
 
-    /// The broadcast twin of a section — 'From the Shelf — Jazz' on the dial.
     func shelfChannel(for s: String) -> Channel? {
         let slug = "shelf-" + s.lowercased()
             .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
@@ -184,13 +378,40 @@ struct ShelfGallery: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("THE SHELF").font(.system(size: 10, weight: .heavy)).tracking(2)
-                    .foregroundStyle(t.muted)
-                TextField("search the shelf", text: $find)
+                Text(section.isEmpty ? "THE SHELF" : section.uppercased())
+                    .font(.system(size: 12, weight: .heavy)).tracking(2)
+                    .foregroundStyle(t.ink)
+                if !section.isEmpty {
+                    Button {
+                        player.playMix(section)
+                    } label: {
+                        Text("▶ \(section.uppercased()) MIX")
+                            .font(.system(size: 10, weight: .heavy)).tracking(0.8)
+                            .padding(.horizontal, 11).padding(.vertical, 6)
+                            .background(t.accent).foregroundStyle(t.onAccent)
+                            .clipShape(Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    if let ch = shelfChannel(for: section) {
+                        Button {
+                            player.tune(ch)
+                        } label: {
+                            Text("((( TUNE IN")
+                                .font(.system(size: 10, weight: .heavy)).tracking(0.8)
+                                .padding(.horizontal, 11).padding(.vertical, 6)
+                                .foregroundStyle(t.red)
+                                .overlay(Capsule().stroke(t.red, lineWidth: 1.5))
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                TextField("search", text: $find)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .padding(.horizontal, 10).padding(.vertical, 6)
-                    .frame(maxWidth: 260)
+                    .frame(maxWidth: 200)
                     .background(t.board)
                     .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
                 HStack(spacing: 0) {
@@ -215,47 +436,6 @@ struct ShelfGallery: View {
                     .foregroundStyle(t.faint)
             }
             .padding(.horizontal, 18).padding(.vertical, 12)
-            if !player.genres.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        MacChip(label: "ALL", on: section.isEmpty, t: t) { section = "" }
-                        ForEach(player.genres) { g in
-                            MacChip(label: "\(g.name.uppercased()) · \(g.count)",
-                                    on: section == g.name, t: t) {
-                                section = section == g.name ? "" : g.name
-                            }
-                        }
-                        if !section.isEmpty {
-                            Button {
-                                player.playMix(section)
-                            } label: {
-                                Text("▶ \(section.uppercased()) MIX")
-                                    .font(.system(size: 10, weight: .heavy)).tracking(0.8)
-                                    .padding(.horizontal, 11).padding(.vertical, 6)
-                                    .background(t.accent).foregroundStyle(t.onAccent)
-                                    .clipShape(Capsule())
-                                    .contentShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            if let ch = shelfChannel(for: section) {
-                                Button {
-                                    player.tune(ch)
-                                } label: {
-                                    Text("((( TUNE IN")
-                                        .font(.system(size: 10, weight: .heavy)).tracking(0.8)
-                                        .padding(.horizontal, 11).padding(.vertical, 6)
-                                        .foregroundStyle(t.red)
-                                        .overlay(Capsule().stroke(t.red, lineWidth: 1.5))
-                                        .contentShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 18)
-                }
-                .padding(.bottom, 10)
-            }
             if shelfView == "list" {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -275,6 +455,11 @@ struct ShelfGallery: View {
                                             .foregroundStyle(t.muted).lineLimit(1)
                                     }
                                     Spacer()
+                                    if !al.genres.isEmpty {
+                                        Text(al.genres.joined(separator: " · "))
+                                            .font(.system(size: 9, weight: .bold)).tracking(0.5)
+                                            .foregroundStyle(t.faint)
+                                    }
                                     Text("\(al.trackCount) TRK")
                                         .font(.system(size: 9, weight: .heavy)).tracking(1)
                                         .foregroundStyle(t.faint)
@@ -322,27 +507,6 @@ struct ShelfGallery: View {
     }
 }
 
-struct MacChip: View {
-    let label: String
-    let on: Bool
-    let t: Theme
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 10, weight: .heavy)).tracking(0.5)
-                .padding(.horizontal, 11).padding(.vertical, 6)
-                .background(on ? t.accent : t.panel)
-                .foregroundStyle(on ? t.onAccent : t.muted)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(on ? t.accent : t.line, lineWidth: 1))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 /// One cover: real art when the enricher found it, else the pressed-sleeve
 /// gradient + monogram (hue seeded by the album name, like the web's tiles).
 struct CoverTile: View {
@@ -371,18 +535,127 @@ struct CoverTile: View {
     }
 }
 
-/// The set list — the schedule rows from the web's center pane.
-/// Radio: read-only (✓ played · NOW · coming up). Tape/CD: click a row to jump.
+// ── favourites & history as destinations ─────────────────────────────────
+
+struct FavList: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+
+    var body: some View {
+        if player.member == nil {
+            EmptyNote(t: t, title: "Sign in to keep favourites",
+                      sub: "♥ a track and it follows you — this list plays as a station.")
+        } else if player.favs.isEmpty {
+            EmptyNote(t: t, title: "Nothing here yet",
+                      sub: "♥ what's playing and it lands on this list.")
+        } else {
+            ScrollView {
+                VStack(spacing: 0) {
+                    Text("FAVOURITES — plays as a station, top to bottom")
+                        .font(.system(size: 10, weight: .heavy)).tracking(1.5)
+                        .foregroundStyle(t.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                    ForEach(Array(player.favs.enumerated()), id: \.element.url) { i, f in
+                        Button {
+                            player.playFavourites(at: i)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Text("♥").font(.system(size: 13)).foregroundStyle(t.red)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(f.title.isEmpty ? f.album : f.title)
+                                        .font(.system(size: 13.5, weight: .semibold))
+                                        .foregroundStyle(t.ink).lineLimit(1)
+                                    Text(f.artist)
+                                        .font(.system(size: 11)).foregroundStyle(t.muted).lineLimit(1)
+                                }
+                                Spacer()
+                                Text("▶").font(.system(size: 11)).foregroundStyle(t.faint)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(t.line).frame(height: 1).padding(.horizontal, 12)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct HistoryList: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+
+    var body: some View {
+        if player.history.isEmpty {
+            EmptyNote(t: t, title: "Quiet so far", sub: "the station's play log lands here.")
+        } else {
+            ScrollView {
+                VStack(spacing: 0) {
+                    Text("ON THE STATION LATELY")
+                        .font(.system(size: 10, weight: .heavy)).tracking(1.5)
+                        .foregroundStyle(t.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                    ForEach(player.history) { h in
+                        HStack(spacing: 10) {
+                            Text(h.channel.uppercased())
+                                .font(.system(size: 8, weight: .heavy)).tracking(0.8)
+                                .foregroundStyle(t.muted)
+                                .frame(width: 90, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(h.title.isEmpty ? h.album : h.title)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(t.ink).lineLimit(1)
+                                Text(h.artist)
+                                    .font(.system(size: 11)).foregroundStyle(t.muted).lineLimit(1)
+                            }
+                            Spacer()
+                            Text(h.when)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(t.faint)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 7)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(t.line).frame(height: 1).padding(.horizontal, 12)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct EmptyNote: View {
+    let t: Theme
+    let title: String
+    let sub: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(t.ink)
+            Text(sub).font(.system(size: 11)).foregroundStyle(t.muted)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// ── the set list ─────────────────────────────────────────────────────────
+
 struct Tracklist: View {
     @EnvironmentObject var player: Player
     let t: Theme
 
-    /// A browsed record takes the stage list over; otherwise the playing show.
     var display: Show? { player.browsed?.show ?? player.show }
 
     var playingIndex: Int {
         if let b = player.browsed {
-            // only mark NOW if the browsed record is the one actually playing
             return (player.source == .cd && player.currentAlbum?.dir == b.album.dir)
                 ? player.trackIndex : -1
         }
@@ -436,150 +709,6 @@ struct Tracklist: View {
                 .font(.system(size: 12)).foregroundStyle(t.faint)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-}
-
-/// The right rail: Favourites / History (Shelf lives in the Tuner; You in settings).
-struct RightPane: View {
-    @EnvironmentObject var player: Player
-    let t: Theme
-    @State private var tab = "favs"
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                PillTab(label: "FAVOURITES", on: tab == "favs", t: t) { tab = "favs" }
-                PillTab(label: "HISTORY", on: tab == "hist", t: t) {
-                    tab = "hist"
-                    Task { await player.refreshHistory() }
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .overlay(alignment: .bottom) { Rectangle().fill(t.line).frame(height: 1) }
-
-            if tab == "favs" { FavList(t: t) } else { HistoryList(t: t) }
-        }
-        .onAppear { Task { await player.refreshHistory() } }
-    }
-}
-
-struct PillTab: View {
-    let label: String
-    let on: Bool
-    let t: Theme
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 10, weight: .bold)).tracking(0.5)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .foregroundStyle(on ? t.onAccent : t.muted)
-                .background(Capsule().fill(on ? t.accent : .clear))
-                .overlay(Capsule().stroke(on ? t.accent : t.line, lineWidth: 1))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct FavList: View {
-    @EnvironmentObject var player: Player
-    let t: Theme
-
-    var body: some View {
-        if player.member == nil {
-            EmptyNote(t: t, title: "Sign in to keep favourites",
-                      sub: "♥ a track and it follows you — this list plays as a station.")
-        } else if player.favs.isEmpty {
-            EmptyNote(t: t, title: "Nothing here yet",
-                      sub: "♥ what's playing and it lands on this list.")
-        } else {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(player.favs.enumerated()), id: \.element.url) { i, f in
-                        Button {
-                            player.playFavourites(at: i)
-                        } label: {
-                            HStack(spacing: 9) {
-                                Text("♥").font(.system(size: 12)).foregroundStyle(t.red)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(f.title.isEmpty ? f.album : f.title)
-                                        .font(.system(size: 12.5, weight: .semibold))
-                                        .foregroundStyle(t.ink).lineLimit(1)
-                                    Text(f.artist)
-                                        .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
-                                }
-                                Spacer()
-                                Text("▶").font(.system(size: 10)).foregroundStyle(t.faint)
-                            }
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(t.line).frame(height: 1).padding(.horizontal, 10)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct HistoryList: View {
-    @EnvironmentObject var player: Player
-    let t: Theme
-
-    var body: some View {
-        if player.history.isEmpty {
-            EmptyNote(t: t, title: "Quiet so far", sub: "the station's play log lands here.")
-        } else {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(player.history) { h in
-                        HStack(spacing: 9) {
-                            Text(h.channel.uppercased())
-                                .font(.system(size: 8, weight: .heavy)).tracking(0.8)
-                                .foregroundStyle(t.muted)
-                                .frame(width: 74, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(h.title.isEmpty ? h.album : h.title)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(t.ink).lineLimit(1)
-                                Text(h.artist)
-                                    .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
-                            }
-                            Spacer()
-                            Text(h.when)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(t.faint)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(t.line).frame(height: 1).padding(.horizontal, 10)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct EmptyNote: View {
-    let t: Theme
-    let title: String
-    let sub: String
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(t.ink)
-            Text(sub).font(.system(size: 11)).foregroundStyle(t.muted)
-                .multilineTextAlignment(.center)
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

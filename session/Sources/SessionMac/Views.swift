@@ -228,6 +228,7 @@ struct SourceButton: View {
 struct ArtTile: View {
     @EnvironmentObject var player: Player
     let t: Theme
+    var size: CGFloat = 86
 
     var body: some View {
         ZStack {
@@ -239,7 +240,7 @@ struct ArtTile: View {
                 } placeholder: { monogram }
             } else { monogram }
         }
-        .frame(width: 86, height: 86)
+        .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .shadow(color: .black.opacity(0.5), radius: 10, y: 6)
     }
@@ -257,7 +258,7 @@ struct ArtTile: View {
             ?? (player.source == .cd ? (player.currentAlbum?.album ?? "♪")
                                      : (player.current?.name ?? "♪"))
         return Text(String(seed.prefix(1)))
-            .font(.system(size: 32, weight: .ultraLight))
+            .font(.system(size: size * 0.37, weight: .ultraLight))
             .foregroundStyle(.white.opacity(0.94))
     }
 }
@@ -321,13 +322,14 @@ struct SquareButton: View {
     let label: String
     let t: Theme
     var disabled = false
+    var small = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 13, weight: .heavy))
-                .frame(width: 40, height: 40)
+                .font(.system(size: small ? 11 : 13, weight: .heavy))
+                .frame(width: small ? 30 : 40, height: small ? 30 : 40)
                 .foregroundStyle(t.ink)
                 .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 2))
                 .contentShape(Rectangle())

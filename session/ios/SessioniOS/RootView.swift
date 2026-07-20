@@ -6,6 +6,7 @@ import SessionCore
 final class Nav: ObservableObject {
     @Published var tab = "home"
     @Published var playerOpen = false
+    @Published var shelfSection: String?   // a genre handoff to the Shelf view
 }
 
 struct RootView: View {
@@ -45,7 +46,10 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if #available(iOS 26.0, *) {
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                // iPad: the Mac shape — sidebar + content, no tab bar
+                PadRoot(t: t, openPlayer: openPlayer)
+            } else if #available(iOS 26.0, *) {
                 // the native mini-player slot above the tab bar (what Music uses)
                 TabView(selection: $nav.tab) {
                     HomeTab(t: t, openPlayer: openPlayer, goTuner: { nav.tab = "tuner" })
@@ -85,6 +89,123 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
+    }
+}
+
+// ── iPad: sidebar + content (the Mac shape) ──────────────────────────────
+
+struct PadRoot: View {
+    @EnvironmentObject var player: Player
+    @EnvironmentObject var nav: Nav
+    let t: IOSTheme
+    let openPlayer: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            PadSidebar(t: t)
+                .frame(width: 250)
+                .background(t.panel)
+            Rectangle().fill(t.line).frame(width: 1)
+            Group {
+                switch nav.tab {
+                case "tuner": TunerTab(t: t, openPlayer: openPlayer)
+                case "shelf": ShelfTab(t: t, openPlayer: openPlayer)
+                case "you": YouTab(t: t)
+                default: HomeTab(t: t, openPlayer: openPlayer, goTuner: { nav.tab = "tuner" })
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .safeAreaInset(edge: .bottom) {
+                if player.status != .idle {
+                    MiniPlayer(t: t) { openPlayer() }
+                }
+            }
+        }
+        .background(t.board)
+    }
+}
+
+struct PadSidebar: View {
+    @EnvironmentObject var player: Player
+    @EnvironmentObject var nav: Nav
+    let t: IOSTheme
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    DialMark(t: t)
+                    Text("SESSION")
+                        .font(.system(size: 13, weight: .heavy)).tracking(2)
+                        .foregroundStyle(t.ink)
+                }
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 12)
+                PadSideItem(label: "Home", glyph: "house", sel: nav.tab == "home", t: t) {
+                    nav.tab = "home"
+                }
+                PadSideItem(label: "The Dial", glyph: "dial.medium", sel: nav.tab == "tuner", t: t) {
+                    nav.tab = "tuner"
+                }
+                PadSideItem(label: "The Shelf", glyph: "square.stack", sel: nav.tab == "shelf", t: t) {
+                    nav.shelfSection = ""
+                    nav.tab = "shelf"
+                }
+                PadSideItem(label: "You", glyph: "circle.circle", sel: nav.tab == "you", t: t) {
+                    nav.tab = "you"
+                }
+                if !player.genres.isEmpty {
+                    Text("FROM THE SHELF")
+                        .font(.system(size: 10, weight: .heavy)).tracking(1.8)
+                        .foregroundStyle(t.accent)
+                        .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 4)
+                    ForEach(player.genres) { g in
+                        PadSideItem(label: g.name, glyph: "music.note", sel: false, t: t,
+                                    badge: "\(g.count)") {
+                            nav.shelfSection = g.name
+                            nav.tab = "shelf"
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 20)
+        }
+    }
+}
+
+struct PadSideItem: View {
+    let label: String
+    let glyph: String
+    let sel: Bool
+    let t: IOSTheme
+    var badge: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: glyph)
+                    .font(.system(size: 14))
+                    .foregroundStyle(sel ? t.accent : t.faint)
+                    .frame(width: 22)
+                Text(label)
+                    .font(.system(size: 15, weight: sel ? .heavy : .semibold))
+                    .foregroundStyle(t.ink)
+                    .lineLimit(1)
+                Spacer()
+                if let badge {
+                    Text(badge).font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(t.faint)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(sel ? t.sunk : .clear)
+            .overlay(alignment: .leading) {
+                if sel { Rectangle().fill(t.accent).frame(width: 3) }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
     }
 }
 
@@ -555,6 +676,7 @@ struct ChannelPeek: View {
 struct ShelfTab: View {
     @EnvironmentObject var player: Player
     let t: IOSTheme
+    @EnvironmentObject var nav: Nav
     let openPlayer: () -> Void
     @State private var find = ""
     @State private var section = ""          // "" = the whole shelf
@@ -762,6 +884,12 @@ struct ShelfTab: View {
             }
         }
         .background(t.board)
+        .onChange(of: nav.shelfSection) { _, s in
+            if let s { section = s; nav.shelfSection = nil }
+        }
+        .onAppear {
+            if let s = nav.shelfSection { section = s; nav.shelfSection = nil }
+        }
     }
 }
 
