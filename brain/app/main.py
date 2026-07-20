@@ -10,7 +10,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, StreamingResponse)
 from pydantic import BaseModel
 
-from . import admin, auth, channels, config, covers, db, dj, presence, spot
+from . import admin, auth, channels, config, covers, db, dj, engineer, presence, spot
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
@@ -491,6 +491,13 @@ def api_admin_status(request: Request):
     if not _is_owner(request):
         raise HTTPException(404, "not found")
     return admin.status()
+
+
+@app.post("/api/admin/chat")
+def api_admin_chat(body: ChatBody, request: Request):
+    if not _is_owner(request):
+        raise HTTPException(404, "not found")
+    return {"reply": engineer.chat(body.messages)}
 
 
 @app.get("/api/listeners")

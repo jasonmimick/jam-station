@@ -32,21 +32,28 @@
     border-radius:6px; padding:10px 12px; font-size:13px; }
   #engineer form { display:flex; gap:8px; }
   #engineer input { flex:1; padding:10px 12px; border-radius:6px; border:1px solid var(--line);
-    background:var(--sunk); color:var(--muted); }
-  #engineer button { padding:10px 16px; border:0; border-radius:6px; background:var(--sunk);
-    color:var(--muted); border:1px solid var(--line); }
+    background:var(--sunk); color:var(--ink); outline:none; }
+  #engineer input:focus { border-color:var(--yellow); }
+  #engineer button { padding:10px 16px; border:0; border-radius:6px; background:var(--yellow);
+    color:#12120C; font-weight:800; cursor:pointer; }
+  #engineer button:disabled { opacity:.5; }
+  #elog { display:flex; flex-direction:column; gap:8px; max-height:340px; overflow-y:auto; }
+  #elog .msg.me { border-left-color:var(--line); color:var(--muted); }
+  #elog .msg.thinking { color:var(--muted); font-style:italic; }
 </style>
 </head>
 <body>
   <header><span>jam-station · <b>engineer's booth</b></span><span class="lbl" id="stamp">—</span></header>
   <main id="cards"><p class="sub" style="padding:8px">Reading the meters…</p></main>
   <section class="card wide" style="margin:0 22px 22px" id="engineer">
-    <h2><span class="dot"></span>Station Engineer</h2>
-    <div class="msg">Not on duty yet. This becomes a maintenance chat — the DJ's tool loop
-      with ops tools instead of music tools: report status, skip or flush a queue, resync
-      the shelf stations, kick the cover enricher, read the brain's logs. The cards above
-      are already its eyes.</div>
-    <form onsubmit="return false"><input disabled placeholder="…coming soon"><button disabled>Send</button></form>
+    <h2><span class="dot ok"></span>Station Engineer</h2>
+    <div id="elog">
+      <div class="msg">On duty. I can read the meters, skip or flush a queue, force a
+        top-up, resync the shelf stations, kick the cover enricher, and pull the play log.
+        Host-side work (containers, backups, the tunnel) I'll diagnose and hand you the
+        exact command.</div>
+    </div>
+    <form id="eform"><input id="einput" placeholder='"why is dubtechno silent?" · "flush the jam queue"' autocomplete="off"><button id="esend">Send</button></form>
   </section>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -77,6 +84,36 @@ async function refresh() {
 }
 refresh();
 setInterval(refresh, 15000);
+
+/* the engineer — same wire shape as the DJ chat, different door */
+const esc2 = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const emsgs = [];
+function elogAdd(cls, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + cls; d.textContent = text;
+  $("elog").appendChild(d); $("elog").scrollTop = $("elog").scrollHeight;
+  return d;
+}
+$("eform").onsubmit = async (e) => {
+  e.preventDefault();
+  const q = $("einput").value.trim(); if (!q) return;
+  $("einput").value = ""; $("esend").disabled = true;
+  emsgs.push({ role: "user", content: q });
+  elogAdd("me", q);
+  const spin = elogAdd("thinking", "checking the meters…");
+  try {
+    const r = await fetch("/api/admin/chat", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: emsgs }) });
+    const reply = r.ok ? (await r.json()).reply : "The engineer's line is dead (" + r.status + ").";
+    spin.remove();
+    emsgs.push({ role: "assistant", content: reply });
+    elogAdd("", reply);
+    refresh();                       // an action may have changed the meters
+  } catch {
+    spin.remove(); elogAdd("", "The engineer's line is dead — is the brain up?");
+  }
+  $("esend").disabled = false; $("einput").focus();
+};
 </script>
 </body>
 </html>
