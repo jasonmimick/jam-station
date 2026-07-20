@@ -195,6 +195,32 @@ def ensure_seeded() -> None:
         )
 
 
+# A section earns a broadcast channel once it holds this many records.
+GENRE_CHANNEL_MIN = 3
+
+
+def sync_genre_channels() -> None:
+    """Sections become stations: 'From the Shelf — Jazz' etc, PRIVATE library
+    channels derived from the crate itself. They appear when a section grows
+    past GENRE_CHANNEL_MIN records and retire when it shrinks — the music
+    volume is the source of truth, never a toggle. liquidsoap self-reloads on
+    the channel-list change, so a new section simply comes on air."""
+    import re as _re
+    counts = {g["name"]: g["count"] for g in library.genre_counts()}
+    want = {}
+    for name, count in counts.items():
+        if count >= GENRE_CHANNEL_MIN:
+            slug = "shelf-" + _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+            want[slug] = name
+    for row in db.query("SELECT slug FROM channels WHERE slug LIKE ?", ("shelf-%",)):
+        if row["slug"] not in want:
+            db.execute("DELETE FROM channels WHERE slug=?", (row["slug"],))
+    for slug, name in want.items():
+        create_channel(slug, f"From the Shelf — {name}",
+                       f"Your {name.lower()} records on shuffle, straight off the shelf.",
+                       "library", {"genre": name})
+
+
 def list_channels(streamable_only: bool = False) -> list[dict]:
     rows = db.query("SELECT * FROM channels WHERE enabled=1 ORDER BY created_at")
     out = []

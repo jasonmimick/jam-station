@@ -303,6 +303,11 @@ def _enrich_all() -> None:
                 _enrich_one(folder, name)
             except Exception:
                 pass
+    try:
+        from . import channels                 # late import — no cycle at module load
+        channels.sync_genre_channels()         # fresh genres may birth a station
+    except Exception:
+        pass
 
 
 def kick() -> None:

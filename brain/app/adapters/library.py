@@ -85,7 +85,20 @@ def _meta(p: str) -> dict:
 
 
 def pick_tracks(cfg: dict, count: int = 25) -> list[dict]:
-    files = _scan(cfg.get("folders"))
+    if cfg.get("genre"):
+        # a section channel: random songs from every record filed under the genre
+        want = cfg["genre"].strip().lower()
+        files = []
+        for alb in list_albums():
+            if any((g or "").lower() == want for g in alb.get("genres") or []):
+                folder = os.path.join(config.MUSIC_DIR, alb["dir"])
+                try:
+                    files += [os.path.join(folder, f) for f in os.listdir(folder)
+                              if f.lower().endswith(config.AUDIO_EXTENSIONS)]
+                except OSError:
+                    pass
+    else:
+        files = _scan(cfg.get("folders"))
     if not files:
         return []
     picks = random.sample(files, min(count, len(files)))

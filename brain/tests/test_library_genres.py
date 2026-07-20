@@ -72,3 +72,30 @@ def test_enricher_skips_owner_set_genres(app_env, monkeypatch):
     covers._enrich_one(folder, "Fela - Zombie")
     meta = json.load(open(os.path.join(folder, "_album.json")))
     assert meta["genres"] == ["World"]                      # the owner's word stands
+
+
+def test_sections_become_stations(app_env):
+    from app import channels
+    for i in range(3):
+        _album(config.MUSIC_DIR, f"Cat {i} - Jazz Album {i}", 2, ["Jazz"])
+    _album(config.MUSIC_DIR, "Lone - Rock Album", 2, ["Rock"])   # below threshold
+    channels.sync_genre_channels()
+    chans = {c["slug"]: c for c in channels.list_channels()}
+    assert "shelf-jazz" in chans
+    assert chans["shelf-jazz"]["name"] == "From the Shelf — Jazz"
+    assert chans["shelf-jazz"]["private"] is True
+    assert chans["shelf-jazz"]["playable"] is True
+    assert "shelf-rock" not in chans                             # 1 record ≠ a station
+    # the section empties -> the station retires
+    for i in range(3):
+        library.set_genres(f"cds/Cat {i} - Jazz Album {i}", [])
+    channels.sync_genre_channels()
+    assert "shelf-jazz" not in {c["slug"] for c in channels.list_channels()}
+
+
+def test_pick_tracks_by_genre_stays_in_section(app_env):
+    _album(config.MUSIC_DIR, "A - Jazz One", 3, ["Jazz"])
+    _album(config.MUSIC_DIR, "B - Rock One", 3, ["Rock"])
+    picks = library.pick_tracks({"genre": "jazz"}, count=10)
+    assert picks and all(t["album"] == "Jazz One" for t in picks)
+    assert library.pick_tracks({"genre": "Classical"}) == []

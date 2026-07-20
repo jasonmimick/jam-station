@@ -21,6 +21,7 @@ async def lifespan(_app: FastAPI):
     os.makedirs(config.CACHE_DIR, exist_ok=True)
     db.init()
     channels.ensure_seeded()
+    channels.sync_genre_channels()
     auth.ensure_owner()      # the owner is config, not a signup — he never approves himself
     covers.kick()            # backfill album art + year in the background
     yield
@@ -322,6 +323,7 @@ def api_library_set_genre(body: GenreSet, request: Request):
         raise HTTPException(403, "members only")
     if not library.set_genres(body.dir, body.genres):
         raise HTTPException(404, "no such album")
+    channels.sync_genre_channels()      # curation can birth or retire a station
     return {"ok": True}
 
 
