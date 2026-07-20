@@ -173,6 +173,14 @@ struct ShelfGallery: View {
         }
     }
 
+    /// The broadcast twin of a section — 'From the Shelf — Jazz' on the dial.
+    func shelfChannel(for s: String) -> Channel? {
+        let slug = "shelf-" + s.lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return player.channels.first { $0.slug == slug && $0.playable }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -229,6 +237,19 @@ struct ShelfGallery: View {
                                     .contentShape(Capsule())
                             }
                             .buttonStyle(.plain)
+                            if let ch = shelfChannel(for: section) {
+                                Button {
+                                    player.tune(ch)
+                                } label: {
+                                    Text("((( TUNE IN")
+                                        .font(.system(size: 10, weight: .heavy)).tracking(0.8)
+                                        .padding(.horizontal, 11).padding(.vertical, 6)
+                                        .foregroundStyle(t.red)
+                                        .overlay(Capsule().stroke(t.red, lineWidth: 1.5))
+                                        .contentShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                     .padding(.horizontal, 18)

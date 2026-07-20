@@ -569,6 +569,14 @@ struct ShelfTab: View {
         }
     }
 
+    /// The broadcast twin of a section — 'From the Shelf — Jazz' on the dial.
+    func shelfChannel(for s: String) -> Channel? {
+        let slug = "shelf-" + s.lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return player.channels.first { $0.slug == slug && $0.playable }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             SignageHeader(t: t)
@@ -624,6 +632,24 @@ struct ShelfTab: View {
                                         .clipShape(Capsule())
                                 }
                                 .buttonStyle(.plain)
+                                if let ch = shelfChannel(for: section) {
+                                    Button {
+                                        tapHaptic()
+                                        player.tune(ch)
+                                        openPlayer()
+                                    } label: {
+                                        HStack(spacing: 5) {
+                                            Image(systemName: "dot.radiowaves.left.and.right")
+                                                .font(.system(size: 10, weight: .bold))
+                                            Text("TUNE IN")
+                                                .font(.system(size: 11, weight: .heavy)).tracking(0.8)
+                                        }
+                                        .padding(.horizontal, 12).padding(.vertical, 8)
+                                        .foregroundStyle(t.red)
+                                        .overlay(Capsule().stroke(t.red, lineWidth: 1.5))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                         .padding(.horizontal, 14)
