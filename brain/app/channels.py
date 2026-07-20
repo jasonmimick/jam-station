@@ -302,7 +302,7 @@ def sync_genre_channels() -> None:
 
 
 def list_channels(streamable_only: bool = False) -> list[dict]:
-    rows = db.query("SELECT * FROM channels WHERE enabled=1 ORDER BY created_at")
+    rows = db.query("SELECT * FROM channels WHERE enabled=1 ORDER BY created_at, slug")
     out = []
     for r in rows:
         r["query"] = json.loads(r.get("query") or "{}")

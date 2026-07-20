@@ -206,7 +206,10 @@ def api_channels(request: Request):
 def api_channels_liq():
     """Channel list for liquidsoap: one 'slug|Display Name' per line."""
     chans = channels.list_channels(streamable_only=True)
-    return "\n".join(f"{c['slug']}|{c['name']}" for c in chans)
+    # Canonical (sorted) order so a nondeterministic DB row order can never make
+    # liquidsoap misread a stable channel set as "changed" and restart its mounts.
+    lines = sorted(f"{c['slug']}|{c['name']}" for c in chans)
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------- playback
