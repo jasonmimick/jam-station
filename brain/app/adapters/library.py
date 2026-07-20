@@ -138,6 +138,40 @@ def list_albums(root: str = "cds") -> list[dict]:
     return out
 
 
+def art_slug(t: str) -> str:
+    """A photo 'type' -> a safe filename slug. 'Tracklist' -> 'tracklist', 'Back Insert' ->
+    'back-insert'. Lowercase [a-z0-9-] only, capped so a wild label can't blow out the name."""
+    s = re.sub(r"[^a-z0-9-]+", "-", (t or "").strip().lower())
+    return s.strip("-")[:24].strip("-")
+
+
+def album_images(rel_dir: str) -> list[dict]:
+    """Every image filed with an album: the front cover (_cover.jpg) first if it exists, then
+    any owner-added _art-<type>.jpg (tracklist / back / disc / …), sorted by type for a stable
+    strip. `rel_dir` is caller-supplied — same escape-guard as album_tracks before touching disk."""
+    base = os.path.realpath(config.MUSIC_DIR)
+    full = os.path.realpath(os.path.join(base, rel_dir))
+    if full != base and not full.startswith(base + os.sep):
+        return []                                    # ../../ escape — refused
+    if not os.path.isdir(full):
+        return []
+    rel = os.path.relpath(full, base)
+    out = []
+    if os.path.exists(os.path.join(full, "_cover.jpg")):
+        out.append({"type": "front", "url": "/music/" + quote(rel + "/_cover.jpg")})
+    extras = []
+    try:
+        for fn in os.listdir(full):
+            m = re.match(r"^_art-([a-z0-9-]+)\.jpg$", fn)
+            if m:
+                extras.append((m.group(1), fn))
+    except OSError:
+        pass
+    for typ, fn in sorted(extras):
+        out.append({"type": typ, "url": "/music/" + quote(rel + "/" + fn)})
+    return out
+
+
 def album_tracks(rel_dir: str) -> list[dict]:
     """One album's tracks, IN ORDER (filenames are '07 Title', so a filename sort is the
     running order). `rel_dir` is caller-supplied — resolve it and refuse anything that climbs

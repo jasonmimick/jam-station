@@ -405,6 +405,28 @@
 
   /* the schedule */
   .showname { padding:12px 24px 0; font-size:14px; font-weight:700; overflow-wrap:anywhere; }
+  /* the album's photos — front cover plus any tracklist/back/disc shots the owner added */
+  .showart { padding:12px 24px 2px; }
+  .artstrip { position:relative; display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+  .artthumb { border:1px solid var(--line); background:var(--sunk); border-radius:6px; padding:0;
+    cursor:pointer; overflow:hidden; width:76px; display:flex; flex-direction:column; }
+  .artthumb img { width:76px; height:76px; object-fit:cover; display:block; }
+  .artthumb .artlbl { font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--muted); padding:3px 4px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .artthumb:hover { border-color:var(--yellow); }
+  .artadd { width:76px; height:76px; flex:0 0 auto; border:1px dashed var(--line); background:transparent;
+    color:var(--muted); border-radius:6px; cursor:pointer; font-size:26px; line-height:1; align-self:flex-start; }
+  .artadd:hover { border-color:var(--yellow); color:var(--yellow); }
+  .artmenu { position:absolute; top:100%; left:0; z-index:60; margin-top:6px; background:var(--panel);
+    border:1px solid var(--line); border-radius:6px; padding:6px; box-shadow:0 12px 30px #0007;
+    display:flex; flex-direction:column; min-width:132px; }
+  .artmenu button { border:0; background:transparent; color:var(--ink); text-align:left; cursor:pointer;
+    font:inherit; font-size:12.5px; font-weight:600; padding:7px 10px; border-radius:4px; white-space:nowrap; }
+  .artmenu button:hover { background:var(--sunk); }
+  .artlightbox { position:fixed; inset:0; z-index:300; background:#000d; display:none;
+    align-items:center; justify-content:center; padding:4vh 4vw; cursor:zoom-out; }
+  .artlightbox img { max-width:100%; max-height:100%; object-fit:contain; border-radius:4px;
+    box-shadow:0 20px 60px #000a; }
   .prog { display:flex; align-items:center; gap:12px; padding:10px 24px 4px; }
   .prog .txt { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   .track { flex:1; height:5px; background:var(--sunk); border-radius:2px; overflow:hidden; }
@@ -660,6 +682,7 @@
       <div id="showWrap" style="display:none">
         <div class="ph" style="border-bottom:0"><span class="lbl">The show</span></div>
         <div class="showname" id="showName"></div>
+        <div class="showart" id="showArt" style="display:none"></div>
         <div class="prog">
           <span class="txt" id="progTxt"></span>
           <span class="track"><i id="progBar" style="width:0"></i></span>
@@ -1794,6 +1817,7 @@ function renderSetlist() {
   const t = S.show.tracks;
   $("showWrap").style.display = "";
   $("showName").textContent = S.show.album;
+  renderShowArt();
   $("progTxt").textContent = `Track ${S.idx+1} of ${t.length}`;
   const pct = ((S.idx+1)/t.length)*100;
   $("progBar").style.width = pct + "%";
@@ -1839,6 +1863,7 @@ async function refresh() {
       const set = [...played, ...ahead], pos = played.length;
       $("showWrap").style.display = "";
       $("showName").textContent = show;
+      $("showArt").style.display = "none"; $("showArt").innerHTML = "";   // photos are an on-demand-album thing
       $("progTxt").textContent = set.length ? `Track ${pos} of ${set.length}` : "";
       const pct = set.length ? (pos/set.length)*100 : 0;
       $("progBar").style.width = pct + "%";
@@ -2231,14 +2256,76 @@ function sortItems(list) {
   return [...list].sort(by[galSort] || by.added);
 }
 let coverDir = null;
-function setCoverFor(dir) { coverDir = dir; const inp = $("coverFile"); if (inp) inp.click(); }
+function setCoverFor(dir) { coverDir = dir; const inp = $("coverFile"); if (inp) { inp.dataset.mode = "cover"; inp.click(); } }
+// two upload paths share one file input: the gallery cover tile (mode "cover") and the album
+// detail's photo-typing menu (mode "art"). dataset.mode says which, so onchange routes correctly.
+let artUploadDir = null, artUploadType = "front";
+function startArtUpload(dir, type) { artUploadDir = dir; artUploadType = type;
+  const inp = $("coverFile"); if (inp) { inp.dataset.mode = "art"; inp.click(); } }
 (function () { const inp = $("coverFile"); if (!inp) return;
-  inp.onchange = async (e) => { const file = e.target.files && e.target.files[0]; e.target.value = ""; if (!file || !coverDir) return;
+  inp.onchange = async (e) => { const file = e.target.files && e.target.files[0]; e.target.value = "";
+    const mode = inp.dataset.mode || "cover"; inp.dataset.mode = "";
+    if (!file) return;
+    if (mode === "art") {
+      if (!artUploadDir) return;
+      const fd = new FormData(); fd.append("dir", artUploadDir); fd.append("photo", file); fd.append("type", artUploadType);
+      try { const r = await fetch("/api/library/cover", { method: "POST", body: fd });
+        if (r.ok) { await loadCatalog(); await loadShow(false); } else alert("Couldn't add the photo."); }
+      catch { alert("Couldn't add the photo."); }
+      return;
+    }
+    if (!coverDir) return;
     const fd = new FormData(); fd.append("dir", coverDir); fd.append("photo", file);
     try { const r = await fetch("/api/library/cover", { method: "POST", body: fd });
       if (r.ok) { await loadCatalog(); renderDeskGallery(); } else alert("Couldn't set the cover."); }
     catch { alert("Couldn't set the cover."); } };
 })();
+
+// the album-detail photo strip: front cover + tracklist/back/disc shots, click to enlarge, owner adds more
+const ART_LABELS = { front:"Front", tracklist:"Tracklist", back:"Back", disc:"Disc", inside:"Inside", booklet:"Booklet", spine:"Spine", front2:"Front" };
+const artLabel = (t) => ART_LABELS[t] || (t ? t.charAt(0).toUpperCase() + t.slice(1) : "Photo");
+function renderShowArt() {
+  const el = $("showArt"); if (!el) return;
+  const isAlbum = S.channel && S.channel.startsWith(ALBUM);
+  if (!isAlbum) { el.style.display = "none"; el.innerHTML = ""; return; }
+  const dir = S.channel.slice(ALBUM.length);
+  const imgs = (S.show && S.show.images) || [];
+  const thumbs = imgs.map(im =>
+    `<button class="artthumb" data-url="${esc(im.url)}" title="${esc(artLabel(im.type))}">` +
+    `<img src="${esc(im.url)}" alt="${esc(artLabel(im.type))}" loading="lazy">` +
+    `<span class="artlbl">${esc(artLabel(im.type))}</span></button>`).join("");
+  const add = S.user ? `<button class="artadd" id="artAdd" title="Add a photo">+</button>` : "";
+  if (!thumbs && !add) { el.style.display = "none"; el.innerHTML = ""; return; }
+  el.style.display = "";
+  el.innerHTML = `<div class="artstrip">${thumbs}${add}</div>`;
+  el.querySelectorAll(".artthumb").forEach(b => b.onclick = () => openArtLightbox(b.dataset.url));
+  const ab = $("artAdd"); if (ab) ab.onclick = (e) => { e.stopPropagation(); pickArtType(dir, ab); };
+}
+function pickArtType(dir, anchor) {
+  const open = document.getElementById("artMenu"); if (open) { open.remove(); return; }
+  const opts = [["front","Front cover"],["tracklist","Tracklist"],["back","Back"],["disc","Disc"],["__other","Other…"]];
+  const m = document.createElement("div"); m.id = "artMenu"; m.className = "artmenu";
+  m.innerHTML = opts.map(([v,l]) => `<button data-t="${v}">${esc(l)}</button>`).join("");
+  anchor.parentElement.appendChild(m);   // .artstrip is position-relative via its container; menu floats below
+  m.querySelectorAll("button").forEach(b => b.onclick = (e) => {
+    e.stopPropagation(); let t = b.dataset.t; m.remove();
+    if (t === "__other") { const lbl = prompt("Short label for this photo (e.g. booklet, spine):", ""); if (!lbl) return; t = lbl; }
+    startArtUpload(dir, t);
+  });
+  setTimeout(() => { const off = (e) => { if (!m.contains(e.target) && e.target !== anchor) { m.remove(); document.removeEventListener("click", off, true); } };
+    document.addEventListener("click", off, true); }, 0);
+}
+function openArtLightbox(url) {
+  let lb = document.getElementById("artLightbox");
+  if (!lb) { lb = document.createElement("div"); lb.id = "artLightbox"; lb.className = "artlightbox";
+    lb.onclick = () => { lb.style.display = "none"; lb.innerHTML = ""; }; document.body.appendChild(lb); }
+  lb.innerHTML = `<img src="${esc(url)}" alt="">`;
+  lb.style.display = "flex";
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") {
+  const lb = document.getElementById("artLightbox"); if (lb) { lb.style.display = "none"; lb.innerHTML = ""; }
+  const m = document.getElementById("artMenu"); if (m) m.remove();
+} });
 function renderGenreChips() {
   const w = $("galChips"); if (!w) return;
   if (dtab !== "cds") { w.style.display = "none"; return; }

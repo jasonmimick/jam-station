@@ -305,9 +305,12 @@ def api_library_albums(request: Request, response: Response):
 
 
 @app.post("/api/library/cover")
-def set_cover(request: Request, dir: str = Form(...), photo: UploadFile = File(...)):
-    """Owner drops a cover on an album — for the handful of discs nothing online has. Saves the
-    upload as _cover.jpg in the album folder; the enricher then leaves it alone (a cover exists)."""
+def set_cover(request: Request, dir: str = Form(...), photo: UploadFile = File(...),
+              type: str = Form("")):
+    """Owner drops a photo on an album. Default (type front/cover/empty) is the front cover —
+    saved as _cover.jpg, which the enricher then leaves alone. Any other type (tracklist, back,
+    disc, …) is a companion image saved as _art-<slug>.jpg in the same folder; there can be many."""
+    from .adapters import library
     if not _is_member(request):
         raise HTTPException(403, "members only")
     base = os.path.realpath(config.MUSIC_DIR)
@@ -316,14 +319,22 @@ def set_cover(request: Request, dir: str = Form(...), photo: UploadFile = File(.
         raise HTTPException(403, "no")                    # ../../ escape
     if not os.path.isdir(full):
         raise HTTPException(404, "no such album")
+    t = (type or "").strip().lower()
+    if t in ("", "front", "cover"):
+        slug, fname = "front", "_cover.jpg"
+    else:
+        slug = library.art_slug(t)
+        if not slug:
+            raise HTTPException(400, "bad type")
+        fname = f"_art-{slug}.jpg"
     data = photo.file.read()
     if not data:
         raise HTTPException(400, "empty image")
     if len(data) > 12 * 1024 * 1024:
         raise HTTPException(413, "image too large")
-    with open(os.path.join(full, "_cover.jpg"), "wb") as f:
+    with open(os.path.join(full, fname), "wb") as f:
         f.write(data)
-    return {"ok": True}
+    return {"ok": True, "type": slug}
 
 
 @app.get("/api/library/album")
@@ -336,7 +347,7 @@ def api_library_album(request: Request, dir: str):
     if not tracks:
         raise HTTPException(404, "no such album")
     return {"dir": dir, "album": tracks[0]["album"], "artist": tracks[0]["artist"],
-            "tracks": tracks, "playing": -1}
+            "tracks": tracks, "images": library.album_images(dir), "playing": -1}
 
 
 @app.get("/api/library/genres")

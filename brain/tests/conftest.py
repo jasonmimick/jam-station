@@ -130,7 +130,7 @@ def app_env(tmp_path, monkeypatch):
     # per-channel lock; start each test with a fresh lock table
     channels._topup_locks.clear()
     from app import presence
-    presence._streams.clear(); presence._beats.clear()   # presence is process-global too
+    presence._streams.clear(); presence._beats.clear(); presence._seen.clear()   # presence is process-global too
     db.init()
     channels.ensure_seeded()
     yield
