@@ -58,6 +58,15 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Ideas
 
+- [ ] **/admin — the engineer's booth** (Jason, 2026-07-19): owner-only page with live
+      system status (icecast mounts up?, liquidsoap reachable?, queue depth + prefetch per
+      channel, Postgres health, music-volume disk usage, last backup age, rip status,
+      presence) plus a **"Station Engineer" chat** — a dj.py-style Claude tool loop with
+      OPS tools instead of music tools: report status, skip/flush a queue, resync genre
+      channels, kick covers, read the brain's own logs. Honest scope note: the brain can't
+      restart containers (it IS one) — host-level actions stay with slab/ssh; the engineer
+      diagnoses and advises there. Reuses the existing chat UI pattern.
+
 - [ ] **Stylize the station photos** (Jason, 2026-07-18 — idea only, don't build yet):
       run the channel-art photos through a unifying treatment so the wall reads as one
       set — e.g. inverted, duotone/tinted toward the accent, or black-and-white with a
