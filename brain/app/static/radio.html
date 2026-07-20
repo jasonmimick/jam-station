@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0F0F11">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<title>Radio</title>
+<!-- DAD MODE. The whole point is that there is nothing to learn: big pictures, tap one,
+     music plays. No sign-in, no menus, no tabs, no settings. Radio only. If a feature
+     would make you say "let me show you how" — it does not belong on this page. -->
+<style>
+  :root { --bg:#0F0F11; --panel:#17171A; --line:#2B2B31; --ink:#FFFFFF; --muted:#9a9aa2;
+    --amber:#C9A24B; --live:#2FD16A; --pad: env(safe-area-inset-bottom, 0px); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html, body { margin:0; height:100%; }
+  body { background:var(--bg); color:var(--ink); overflow-x:hidden;
+    font:17px/1.4 -apple-system,"Helvetica Neue",Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+
+  header { text-align:center; padding:calc(18px + env(safe-area-inset-top,0px)) 16px 10px;
+    font-size:15px; font-weight:800; letter-spacing:.22em; color:var(--muted); text-transform:uppercase; }
+
+  main { padding:8px 14px calc(140px + var(--pad)); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (min-width:620px){ .grid { grid-template-columns:1fr 1fr 1fr; } }
+  .tile { position:relative; aspect-ratio:1; border-radius:18px; overflow:hidden; border:0;
+    background:var(--panel); cursor:pointer; padding:0; box-shadow:0 8px 24px -12px #000c; }
+  .tile img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .tile .name { position:absolute; left:0; right:0; bottom:0; padding:34px 12px 12px;
+    font-size:19px; font-weight:800; text-align:left; line-height:1.15;
+    background:linear-gradient(transparent, #000d); text-shadow:0 1px 6px #000; }
+  .tile.on { outline:4px solid var(--amber); outline-offset:-4px; }
+  .tile.on .name::before { content:"▶ "; color:var(--amber); }
+
+  /* the one big control bar, always there */
+  #bar { position:fixed; left:0; right:0; bottom:0; z-index:10;
+    padding:16px 18px calc(16px + var(--pad)); background:#141417; border-top:1px solid var(--line);
+    display:flex; align-items:center; gap:16px; }
+  #np { flex:1; min-width:0; }
+  #np b { display:block; font-size:19px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #np span { display:block; font-size:14px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  #play { width:78px; height:78px; flex:0 0 auto; border:0; border-radius:50%;
+    background:var(--amber); color:#12120C; font-size:34px; box-shadow:0 8px 20px -6px #0009; }
+  #play:active { transform:scale(.95); }
+  #play.busy { opacity:.55; }
+  .vol { display:flex; align-items:center; gap:10px; padding:0 18px 14px; }
+  .vol input { flex:1; height:34px; accent-color:var(--amber); }
+  .vol .ic { font-size:20px; color:var(--muted); }
+  #barwrap { position:fixed; left:0; right:0; bottom:0; z-index:10; background:#141417; }
+  .hint { text-align:center; color:var(--muted); font-size:15px; padding:40px 20px; }
+</style>
+</head>
+<body>
+  <header id="hdr">Radio</header>
+  <main><div class="grid" id="grid"><p class="hint">Loading the dial…</p></div></main>
+
+  <div id="barwrap">
+    <div class="vol"><span class="ic">🔈</span><input id="vol" type="range" min="0" max="100" value="85"><span class="ic">🔊</span></div>
+    <div id="bar">
+      <div id="np"><b id="npName">Tap a station</b><span id="npSub">to start the radio</span></div>
+      <button id="play" aria-label="play or pause">▶</button>
+    </div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const S = { channels: [], dial: {}, slug: null, audio: new Audio() };
+// whose radio is this? the URL's last segment is the member handle (e.g. /jmimick-dad)
+const HANDLE = decodeURIComponent(location.pathname.replace(/^\/+|\/+$/g, "").split("/").pop() || "");
+async function loadWho() {
+  if (!HANDLE || HANDLE === "dad") return;
+  try { const w = await (await fetch("/api/u/" + encodeURIComponent(HANDLE))).json();
+    if (w && w.name) { document.getElementById("hdr").textContent = w.name.split(" ")[0] + "\u2019s Radio";
+      document.title = w.name.split(" ")[0] + "\u2019s Radio"; } } catch {}
+}
+S.audio.preload = "none";
+
+/* placard fallback if a station has no photo — matches the rest of the app */
+const PLACARD = ["#A8842C","#0E7C6B","#B4552D","#3E6FB0","#7D5BA6","#4E8C4A","#C25B78","#356E7E","#8C6A3F","#5B7444"];
+function placard(name) {
+  let h = 0; for (const c of (name||"")) h = (h*31 + c.charCodeAt(0)) >>> 0;
+  const words = (name||"").split(/[^A-Za-z0-9]+/).filter(w => w && !/^the$/i.test(w));
+  const digits = ((name||"").match(/\d+/)||[""])[0].slice(-2);
+  let letters = words.filter(w=>/^[A-Za-z]/.test(w)).map(w=>w[0].toUpperCase()).join("");
+  if (letters.length < 3 && words[0] && !digits) letters = words.join("").replace(/[^A-Za-z]/g,"").slice(0,3).toUpperCase();
+  const sign = ((letters+digits).slice(0,4)) || "JAM";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="${PLACARD[h%PLACARD.length]}"/><text x="100" y="108" text-anchor="middle" font-family="Arial" font-weight="800" font-size="70" fill="#F6F3EA">${sign}</text></svg>`;
+  return "data:image/svg+xml," + encodeURIComponent(svg);
+}
+
+function render() {
+  // radio only — skip anything that isn't a live broadcast station (no CDs, no mixes)
+  const list = S.channels.filter(c => c.playable !== false && !(c.query && c.query.genre) && !c.private);
+  $("grid").innerHTML = list.map(c =>
+    `<button class="tile${S.slug===c.slug?" on":""}" data-slug="${esc(c.slug)}">
+       <img src="${c.art_url || placard(c.name)}" alt="">
+       <span class="name">${esc(c.name)}</span>
+     </button>`).join("") || `<p class="hint">No stations yet.</p>`;
+  document.querySelectorAll(".tile").forEach(b => b.onclick = () => tune(b.dataset.slug));
+}
+
+function tune(slug) {
+  S.slug = slug;
+  const ch = S.channels.find(c => c.slug === slug) || {};
+  S.audio.src = "/stream/" + slug;
+  $("play").classList.add("busy");
+  S.audio.play().then(() => $("play").classList.remove("busy")).catch(() => $("play").classList.remove("busy"));
+  paint();
+  render();
+}
+function paint() {
+  const ch = S.channels.find(c => c.slug === S.slug) || {};
+  const np = S.dial[S.slug];
+  $("npName").textContent = np && np.title ? np.title : (ch.name || "Tap a station");
+  $("npSub").textContent  = np && np.artist ? np.artist + " · " + (ch.name||"") : (ch.name || "to start the radio");
+  $("play").textContent = (!S.slug || S.audio.paused) ? "▶" : "❚❚";
+  if ("mediaSession" in navigator && np && np.title) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: np.title, artist: np.artist||"", album: ch.name||"Radio",
+      artwork: ch.art_url ? [{src: location.origin+ch.art_url, sizes:"600x600", type:"image/jpeg"}] : [] });
+  }
+}
+$("play").onclick = () => {
+  if (!S.slug) { const first = document.querySelector(".tile"); if (first) tune(first.dataset.slug); return; }
+  if (S.audio.paused) S.audio.play().catch(()=>{}); else S.audio.pause();
+  paint();
+};
+S.audio.addEventListener("playing", paint);
+S.audio.addEventListener("pause", paint);
+$("vol").oninput = (e) => { S.audio.volume = e.target.value/100; };
+S.audio.volume = 0.85;
+
+async function loadChannels() { try { S.channels = await (await fetch("/api/channels")).json(); } catch {} render(); }
+async function refreshDial() { try { S.dial = await (await fetch("/api/dial")).json(); } catch {} render(); if (S.slug) paint(); }
+
+loadWho(); loadChannels().then(refreshDial);
+setInterval(() => { if (!document.hidden) refreshDial(); }, 25000);
+</script>
+</body>
+</html>

@@ -37,6 +37,7 @@ OTHER DELIBERATE CHOICES
 from __future__ import annotations
 
 import hashlib
+import re
 import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -521,3 +522,24 @@ def add_favourite(email: str, t: dict) -> None:
 
 def remove_favourite(email: str, url: str) -> None:
     db.execute("DELETE FROM favourites WHERE email=? AND url=?", (norm(email), url))
+
+
+# ── personal handles: the URL-safe name a member's radio lives at ────────────────
+# Derived from the email's local part (before @), slugified. jmimick+dad@gmail.com ->
+# "jmimick-dad". Not stored — computed, so there's no migration and no second source of
+# truth. Collisions (two locals slugging the same) resolve to the first approved member.
+
+def handle_for(email: str) -> str:
+    local = norm(email).split("@", 1)[0]
+    h = re.sub(r"[^a-z0-9]+", "-", local).strip("-")
+    return h[:48]
+
+
+def member_by_handle(handle: str) -> dict | None:
+    h = re.sub(r"[^a-z0-9]+", "-", (handle or "").lower()).strip("-")
+    if not h:
+        return None
+    for m in db.query("SELECT * FROM members WHERE status='approved' ORDER BY created_at"):
+        if handle_for(m["email"]) == h:
+            return m
+    return None

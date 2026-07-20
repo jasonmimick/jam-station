@@ -932,3 +932,26 @@ def api_revoke(body: EmailReq, request: Request):
         raise HTTPException(400, "can't revoke the owner")
     auth.revoke(body.email)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- personal radio (per-member handle)
+
+@app.get("/api/u/{handle}")
+def api_user(handle: str):
+    """Whose radio is this — just the display name for a member's personal page. Minimal on
+    purpose (no email, no status): it feeds a greeting, nothing more."""
+    m = auth.member_by_handle(handle)
+    if not m:
+        raise HTTPException(404, "no such person")
+    return {"name": m["name"] or "Radio", "handle": auth.handle_for(m["email"])}
+
+
+@app.get("/{handle}")
+def personal_radio(handle: str):
+    """A member's own radio at their handle: jam-station.runslab.run/<handle>. The simple
+    dial (idea #1), personalized with their name. Registered LAST so every real route wins
+    first; an unknown handle 404s rather than shadowing anything. (Next: their contributed
+    stations up top — needs upload attribution.)"""
+    if not auth.member_by_handle(handle):
+        raise HTTPException(404, "not found")
+    return FileResponse(os.path.join(STATIC, "radio.html"), headers={"Cache-Control": "no-cache"})
