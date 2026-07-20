@@ -119,9 +119,20 @@ apps hitting icecast directly.
 **Mobile web is a FUNNEL, not an app**: station list + radio playback + sign-in (invite
 links land there) + a "Session for iPhone — coming soon" teaser on Apple devices. Don't
 grow it; grow the apps and the desktop.
-**Dad mode (`/dad`)** is a dead-simple radio for family: big station-photo tiles, one giant
-play button, volume — no sign-in, no tabs, no galleries, radio only. It's the *receiving*
-face of the family/affiliate vision.
+**Dad mode (`/dad`)** is a dead-simple radio: big station-photo tiles, one play button — the
+generic simple view. **Personal radio (`/<handle>`)** is the per-member evolution: the handle
+is the email local part kept verbatim (`jmimick+dad@gmail.com` → `/jmimick+dad`, header
+"jmimick+dad Radio"), computed by `auth.handle_for` (not stored), resolved by
+`auth.member_by_handle`. The `/{handle}` route is registered LAST in main.py so real routes
+win and an unknown handle 404s — don't add routes after it. Shows the whole dial today; their
+contributed slice up top is a TODO (needs upload attribution).
+
+**Family-facing pages** (all public, self-hosted on the station): `/guide` (Tailscale
+contributor how-to, Session look, teases the "become a broadcaster" carriage layer — keep that
+promise), `/session` + `/session/download` (the Session Mac app — zip lives in the **music
+volume** `/music/_downloads/Session-mac.zip`, NOT git; re-copy on a new build via `docker cp`).
+The **welcome email** (`auth.send_key_email`) links all of it: sign-in, `/<handle>`, `/session`,
+`/guide`. The desktop account panel (☺) links "Your radio" + the guide for signed-in members.
 
 ## Family / affiliate — the two layers (see docs/DESIGN-network.md, DESIGN-family-radio.md)
 

@@ -69,6 +69,22 @@ def guide(request: Request):
     return FileResponse(os.path.join(STATIC, "guide.html"), headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/session")
+def session_page(request: Request):
+    """Download page for the Session Mac app — with the once-only Gatekeeper install steps."""
+    return FileResponse(os.path.join(STATIC, "session.html"), headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/session/download")
+def session_download():
+    """The Session Mac app zip. Lives in the music VOLUME (survives redeploys, not in git —
+    it's a build artifact); re-copy on a new build. Response, not upload, so no CF size cap."""
+    p = os.path.join(config.MUSIC_DIR, "_downloads", "Session-mac.zip")
+    if not os.path.exists(p):
+        raise HTTPException(404, "no build hosted yet")
+    return FileResponse(p, media_type="application/zip", filename="Session-mac.zip")
+
+
 # Installable on a phone: a home-screen icon and a full-screen player instead of
 # browser chrome. He listens walking around; this makes it feel like an app.
 @app.get("/manifest.json")
