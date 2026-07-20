@@ -305,9 +305,9 @@ def normalize_code(raw: str) -> str:
     return c if 6 <= len(c) <= 24 else ""
 
 
-def send_key_email(name: str, email: str, link: str, code: str) -> bool:
+def send_key_email(name: str, email: str, link: str, code: str, cc: str = "") -> bool:
     """The invite itself — everything a person needs to start listening, contributing, and
-    finding their own radio, in one email."""
+    finding their own radio, in one email. `cc` lets the owner keep a copy of what was sent."""
     first = (name or "").split()[0] if (name or "").strip() else "there"
     handle = handle_for(email)
     base = config.PUBLIC_URL
@@ -354,6 +354,7 @@ def send_key_email(name: str, email: str, link: str, code: str) -> bool:
         "Keep this email — the link and passcode don't expire.\n"
         "\n"
         "— jam-station\n",
+        cc=cc,
     )
 
 

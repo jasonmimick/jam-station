@@ -28,32 +28,35 @@ from . import config
 log = logging.getLogger("mail")
 
 
-def send(to: str, subject: str, body: str) -> bool:
+def send(to: str, subject: str, body: str, cc: str = "") -> bool:
     if config.MAIL_BACKEND == "smtp":
-        return _smtp(to, subject, body)
-    return _console(to, subject, body)
+        return _smtp(to, subject, body, cc)
+    return _console(to, subject, body, cc)
 
 
-def _console(to: str, subject: str, body: str) -> bool:
+def _console(to: str, subject: str, body: str, cc: str = "") -> bool:
     # Not a stub — this is a working backend. With no SMTP configured you can still run the
     # whole invite/approve/sign-in flow; the magic link and the code are printed here.
     log.warning(
         "\n"
         "┌─ EMAIL (console backend — set MAIL_BACKEND=smtp to actually send) ─────────\n"
         "│ To:      %s\n"
+        "│ Cc:      %s\n"
         "│ Subject: %s\n"
         "├───────────────────────────────────────────────────────────────────────────\n"
         "%s\n"
         "└───────────────────────────────────────────────────────────────────────────",
-        to, subject, "\n".join("│ " + ln for ln in body.splitlines()),
+        to, cc or "—", subject, "\n".join("│ " + ln for ln in body.splitlines()),
     )
     return True
 
 
-def _smtp(to: str, subject: str, body: str) -> bool:
+def _smtp(to: str, subject: str, body: str, cc: str = "") -> bool:
     msg = EmailMessage()
     msg["From"] = config.MAIL_FROM
     msg["To"] = to
+    if cc:
+        msg["Cc"] = cc            # send_message adds Cc addresses to the envelope automatically
     msg["Subject"] = subject
     msg.set_content(body)
     try:
