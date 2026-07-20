@@ -241,15 +241,53 @@ public final class Player: ObservableObject {
     }
 
     /// "A jazz mix from the shelf": the whole section, shuffled, on the tape deck.
+    private var lastMixGenre: String?
+
     public func playMix(_ genre: String) {
         Task {
             guard let sh = try? await api.mix(genre: genre), !sh.tracks.isEmpty else { return }
             currentAlbum = nil
             browsed = nil
+            lastMixGenre = genre
             show = sh
             source = .tape
             playTrack(0)
         }
+    }
+
+    /// Flip to RADIO = "take me live, with music LIKE this."
+    /// From a record or a mix, that means finding the station that matches what
+    /// you're hearing: the genre's own shelf station first, then any channel
+    /// whose name speaks the genre (Late Night Jazz for a jazz record). A tape
+    /// of a radio show simply rejoins its broadcast — same music, now live.
+    public func flipToRadio() {
+        guard source != .radio else { return }
+        var contextGenres: [String] = []
+        if source == .cd, let al = currentAlbum {
+            contextGenres = al.genres
+        } else if show?.channel == "mix", let g = lastMixGenre {
+            contextGenres = [g]
+        }
+        for g in contextGenres {
+            if let ch = shelfStation(for: g) { tune(ch); return }
+        }
+        for g in contextGenres {
+            if let ch = channels.first(where: {
+                $0.playable && $0.name.localizedCaseInsensitiveContains(g)
+            }) { tune(ch); return }
+        }
+        setSource(.radio)      // a show's own tape, favourites, or no match: rejoin live
+    }
+
+    private func shelfStation(for genre: String) -> Channel? {
+        var slug = "shelf-"
+        var lastDash = true
+        for ch in genre.lowercased() {
+            if ch.isLetter || ch.isNumber { slug.append(ch); lastDash = false }
+            else if !lastDash { slug.append("-"); lastDash = true }
+        }
+        if slug.hasSuffix("-") { slug.removeLast() }
+        return channels.first { $0.slug == slug && $0.playable }
     }
 
     /// Owner curation: pin a record's sections, then refresh what the shelf knows.

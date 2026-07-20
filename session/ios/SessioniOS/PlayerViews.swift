@@ -330,7 +330,7 @@ struct SourceFlip: View {
     var body: some View {
         HStack(spacing: 0) {
             seg("dot.radiowaves.left.and.right", label: "RADIO", on: player.source == .radio) {
-                player.setSource(.radio)
+                player.flipToRadio()
             }
             seg("recordingtape", label: "TAPE", on: player.source != .radio) {
                 player.setSource(.tape)

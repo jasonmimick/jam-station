@@ -198,8 +198,8 @@ struct SourceSwitch: View {
     var body: some View {
         HStack(spacing: 0) {
             seg("dot.radiowaves.left.and.right", on: player.source == .radio,
-                help: "the live broadcast — what everyone hears") {
-                player.setSource(.radio)
+                help: "go live — a station playing music like this") {
+                player.flipToRadio()
             }
             seg("recordingtape", on: player.source != .radio,
                 help: "your own copy of the show — scrub, jump, rewind") {
