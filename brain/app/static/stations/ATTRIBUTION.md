@@ -23,3 +23,8 @@ Channel-art photos are Creative Commons; credits below satisfy the BY/BY-SA term
 | soul-jazz | Drawbars | ArtBrom | by-sa | https://www.flickr.com/photos/17277074@N00/1246521770 |
 | umphreys | jarre . in>doors . helsinki | miemo | by | https://www.flickr.com/photos/47949918@N00/3537131190 |
 | rain | Light through rain drops | echiner1 | CC BY-SA | https://www.flickr.com/photos/30567804@N00/1602969740 |
+| brook | Hidden Wonder | Jin Huang | by | https://commons.wikimedia.org/w/index.php?curid=71327810 |
+| dub | Speaker stack | Matt From London | by | https://www.flickr.com/photos/57868312@N00/18268047003 |
+| jazzhop | Groovy Round Thing | Kurayba | by-sa | https://www.flickr.com/photos/48503330@N08/31613237751 |
+| night | Fireflies in the meadow | rwwild | by | https://www.flickr.com/photos/183697404@N06/53817968318 |
+| ocean | Brighton Marina Concrete Sea Defences and Moonlight Reflections | Dominic's pics | by | https://www.flickr.com/photos/64097751@N00/4753358253 |
