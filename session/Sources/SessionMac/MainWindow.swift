@@ -99,7 +99,8 @@ struct MainWindowView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         case .dial:
-            TunerList(t: t, fixedHeight: nil, browseAlbums: true)
+            TunerList(t: t, fixedHeight: nil, browseAlbums: true,
+                      onAction: { dest = .stage })
         case .shelf:
             ShelfGallery(t: t, initialSection: "") { al in
                 player.browseAlbum(al)

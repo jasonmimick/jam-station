@@ -418,6 +418,8 @@ struct TunerList: View {
     /// Window: clicking an album BROWSES it (tracklist in the stage, nothing
     /// interrupted). Popover: clicking an album just plays it — quick-draw.
     var browseAlbums = false
+    /// Window: after tune/browse, jump the content to Now Playing.
+    var onAction: (() -> Void)? = nil
     @State private var find = ""
 
     var channels: [Channel] {
@@ -450,7 +452,7 @@ struct TunerList: View {
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(channels) { ch in
-                        ChannelRow(ch: ch, t: t)
+                        ChannelRow(ch: ch, t: t, onAction: onAction)
                     }
                     if !albums.isEmpty {
                         Text("THE SHELF — CD")
@@ -460,7 +462,7 @@ struct TunerList: View {
                             .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
                             .overlay(alignment: .top) { Rectangle().fill(t.line).frame(height: 1) }
                         ForEach(albums) { al in
-                            AlbumRow(al: al, t: t, browse: browseAlbums)
+                            AlbumRow(al: al, t: t, browse: browseAlbums, onAction: onAction)
                         }
                     }
                 }
@@ -475,6 +477,7 @@ struct ChannelRow: View {
     @EnvironmentObject var player: Player
     let ch: Channel
     let t: Theme
+    var onAction: (() -> Void)? = nil
     @State private var hover = false
 
     var tuned: Bool { player.current?.slug == ch.slug }
@@ -482,6 +485,7 @@ struct ChannelRow: View {
     var body: some View {
         Button {
             player.tune(ch)
+            onAction?()
         } label: {
             HStack(spacing: 8) {
                 Text(tuned ? "▸" : " ")
@@ -521,6 +525,7 @@ struct AlbumRow: View {
     let al: Album
     let t: Theme
     var browse = false
+    var onAction: (() -> Void)? = nil
     @State private var hover = false
 
     var playing: Bool { player.source == .cd && player.currentAlbum?.dir == al.dir }
@@ -529,6 +534,7 @@ struct AlbumRow: View {
     var body: some View {
         Button {
             if browse { player.browseAlbum(al) } else { player.playAlbum(al) }
+            onAction?()
         } label: {
             HStack(spacing: 8) {
                 Text(playing ? "▸" : "♫")

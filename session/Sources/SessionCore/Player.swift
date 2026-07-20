@@ -54,6 +54,8 @@ public final class Player: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var presenceTask: Task<Void, Never>?
     private var endObserver: NSObjectProtocol?
+    private var stallObserver: NSObjectProtocol?
+    private var napActivity: NSObjectProtocol?
     private var retryDelay: TimeInterval = 1
     private let aid: String
 
@@ -86,6 +88,22 @@ public final class Player: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.trackEnded() }
         }
+        stallObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemPlaybackStalled, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.status == .playing else { return }
+                if self.source == .radio { self.playRadio() }   // re-tune the stream
+                else { self.player.play() }                      // nudge the tape
+            }
+        }
+        #if os(macOS)
+        // App Nap pauses timers and throttles networking for background apps —
+        // a radio must not nap.
+        napActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .automaticTerminationDisabled],
+            reason: "Session audio playback")
+        #endif
         setupRemoteCommands()
         Task {
             await refreshChannels()
@@ -582,6 +600,12 @@ public final class Player: ObservableObject {
 
     private func pollNow() async {
         guard source == .radio, let ch = current else { return }
+        // silent-death watchdog: we believe we're playing but AVPlayer isn't
+        // moving and isn't buffering either — the stream died without a word
+        if status == .playing, player.timeControlStatus == .paused {
+            playRadio()
+            return
+        }
         if let np = try? await api.nowPlaying(channel: ch.slug) {
             if np != now {
                 now = np
