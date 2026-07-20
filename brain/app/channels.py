@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 import threading
 import time
 
 import httpx
+
+log = logging.getLogger("jam.channels")
 
 from . import config, db
 from .adapters import archive, cc, library, phishin
@@ -299,6 +302,8 @@ def _enqueue_library(ch: dict) -> int:
         "INSERT INTO queue(channel, url, title, artist, album, show_id) VALUES(?,?,?,?,?,?)",
         [(ch["slug"], t["url"], t["title"], t["artist"], t["album"], show_id) for t in tracks],
     )
+    log.info("enqueue_library: channel=%s queued=%d albums=%d show_id=%s",
+             ch["slug"], len(tracks), len({t["album"] for t in tracks}), show_id)
     return len(tracks)
 
 

@@ -7,10 +7,13 @@ urls under /music/, NOT file paths — see config.INTERNAL_URL for why.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
 import re
 from urllib.parse import quote
+
+log = logging.getLogger("jam.library")
 
 
 def _folder_extra(folder_abs: str, rel_dir: str) -> dict:
@@ -100,9 +103,13 @@ def pick_tracks(cfg: dict, count: int = 25) -> list[dict]:
     else:
         files = _scan(cfg.get("folders"))
     if not files:
+        log.info("pick_tracks: no files (query=%s)", cfg)
         return []
     picks = random.sample(files, min(count, len(files)))
-    return [_meta(p) for p in picks]
+    out = [_meta(p) for p in picks]
+    log.info("pick_tracks: query=%s pool=%d picked=%d albums=%d",
+             cfg, len(files), len(out), len({t["album"] for t in out}))
+    return out
 
 
 def list_albums(root: str = "cds") -> list[dict]:

@@ -387,8 +387,14 @@ def api_show(channel: str):
     rows = db.query("SELECT title, artist, album, url, served FROM queue "
                     "WHERE channel=? AND show_id=? ORDER BY id", (channel, show_id))
     playing = max((i for i, r in enumerate(rows) if r["served"]), default=-1)
-    return {"channel": channel, "show_id": show_id,
-            "album": rows[0]["album"] if rows else "",
+    # a library batch is a MIX across albums — labelling it with the first
+    # track's album made a whole shelf station read as one record
+    ch = channels.get_channel(channel)
+    if ch and ch["source"] == "library":
+        album = ch["name"]
+    else:
+        album = rows[0]["album"] if rows else ""
+    return {"channel": channel, "show_id": show_id, "album": album,
             "tracks": rows, "playing": playing}
 
 
