@@ -58,6 +58,15 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Ideas
 
+- [ ] **Agent-built channels — share a link + instructions, an AI agent interviews the
+      person and builds their station** (Jason, 2026-07-20; roadmap). You send a family
+      member a link with instructions for an AI agent; the agent asks "what do you want on
+      your radio?" and creates channels for them — no menus, just a conversation. Natural
+      extension of the DJ (`dj.py` already does tool-calling `create_channel`): give a
+      newcomer an onboarding agent that turns "I love '90s alt-rock and my old bootlegs"
+      into a personal dial. Pairs with personal-radio handles (`/<handle>`) and the
+      contributor inbox — the agent could even guide the folder upload. Later.
+
 - [ ] **/admin — the engineer's booth** (Jason, 2026-07-19): owner-only page with live
       system status (icecast mounts up?, liquidsoap reachable?, queue depth + prefetch per
       channel, Postgres health, music-volume disk usage, last backup age, rip status,
