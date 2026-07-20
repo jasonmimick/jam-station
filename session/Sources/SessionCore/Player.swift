@@ -1,6 +1,9 @@
 import Foundation
 import AVFoundation
 import MediaPlayer
+import os
+
+let engineLog = Logger(subsystem: "run.jam-station.session", category: "engine")
 
 /// One engine, two sources (CD arrives with sign-in in P1).
 /// RADIO rides the live icecast proxy — no seeking, the open connection is the
@@ -274,32 +277,40 @@ public final class Player: ObservableObject {
     /// "A jazz mix from the shelf": the whole section, shuffled, on the tape deck.
     private var lastMixGenre: String?
 
-    public func playMix(_ genre: String, label: String? = nil) {
+    public func playMix(_ genre: String, label: String? = nil, seamless: Bool = true) {
         Task {
-            guard let sh = try? await api.mix(genre: genre), !sh.tracks.isEmpty else { return }
+            guard let sh = try? await api.mix(genre: genre), !sh.tracks.isEmpty else {
+                engineLog.error("playMix(\(genre, privacy: .public)): empty mix")
+                return
+            }
             currentAlbum = nil
             browsed = nil
             lastMixGenre = genre
             let title = label ?? sh.album
             // Seamless handoff: if a song is already playing on-demand, it KEEPS
             // playing — the station's lineup queues up behind it. No cut.
-            if source != .radio, status == .playing || status == .paused,
+            // ONLY valid while a live player item actually exists: at end-of-mix
+            // refill the finished item is already gone, and handing off from
+            // nothing silently stopped playback with now-playing frozen.
+            if seamless, source != .radio, status == .playing || status == .paused,
+               player.currentItem != nil,
                let curShow = show, curShow.tracks.indices.contains(trackIndex) {
                 let cur = curShow.tracks[trackIndex]
                 show = Show(channel: "mix", album: title, tracks: [cur] + sh.tracks)
                 trackIndex = 0
                 source = .tape
-                // rebuild the lookahead behind the untouched current item
                 for item in player.items().dropFirst() { player.remove(item) }
                 for i in 1...min(2, sh.tracks.count) {
                     if let item = queueItem(at: i) {
                         player.insert(item, after: player.items().last)
                     }
                 }
+                engineLog.info("playMix handoff: \(genre, privacy: .public) behind '\(cur.title, privacy: .public)' items=\(self.player.items().count)")
                 pushNowPlayingInfo()
             } else {
                 show = Show(channel: "mix", album: title, tracks: sh.tracks)
                 source = .tape
+                engineLog.info("playMix fresh: \(genre, privacy: .public) tracks=\(sh.tracks.count) seamless=\(seamless) hadItem=\(self.player.currentItem != nil)")
                 playTrack(0)
             }
         }
@@ -497,7 +508,7 @@ public final class Player: ObservableObject {
             setSource(.radio)                    // ran off the tape's end → back to LIVE
         } else if let sh = show, trackIndex + 1 >= sh.tracks.count,
                   sh.channel == "mix", let g = lastMixGenre {
-            playMix(g)                           // skip off the mix's end → next batch
+            playMix(g, seamless: false)          // a skip CUTS — next batch, track 1, now
         } else {
             nextTrack()
         }
@@ -537,9 +548,13 @@ public final class Player: ObservableObject {
     }
 
     private func playTrack(_ index: Int) {
-        guard let sh = show, sh.tracks.indices.contains(index) else { return }
+        guard let sh = show, sh.tracks.indices.contains(index) else {
+            engineLog.error("playTrack(\(index)): out of range (count=\(self.show?.tracks.count ?? -1))")
+            return
+        }
         trackIndex = index
         let t = sh.tracks[index]
+        engineLog.info("playTrack \(index): '\(t.title, privacy: .public)' show=\(sh.channel, privacy: .public)")
         now = NowPlaying(title: t.title, artist: t.artist, album: t.album, url: t.url)
         position = 0; duration = 0
         player.removeAllItems()
@@ -560,8 +575,10 @@ public final class Player: ObservableObject {
         guard source != .radio, let sh = show, trackIndex + 1 < sh.tracks.count else {
             // a mix never runs dry — fetch the next shuffled batch and roll on
             if show?.channel == "mix", let g = lastMixGenre {
+                engineLog.info("mix ran dry → refill \(g, privacy: .public)")
                 playMix(g)
             } else {
+                engineLog.info("show ended (idx=\(self.trackIndex)) → paused")
                 status = .paused
                 pushNowPlayingInfo()
             }
@@ -569,6 +586,7 @@ public final class Player: ObservableObject {
         }
         trackIndex += 1
         let t = sh.tracks[trackIndex]
+        engineLog.info("advanced → \(self.trackIndex): '\(t.title, privacy: .public)' items=\(self.player.items().count)")
         now = NowPlaying(title: t.title, artist: t.artist, album: t.album, url: t.url)
         position = 0; duration = 0
         if let cur = player.currentItem { watch(cur) }
@@ -649,6 +667,7 @@ public final class Player: ObservableObject {
         // silent-death watchdog: we believe we're playing but AVPlayer isn't
         // moving and isn't buffering either — the stream died without a word
         if status == .playing, player.timeControlStatus == .paused {
+            engineLog.error("radio silent death — re-tuning \(ch.slug, privacy: .public)")
             playRadio()
             return
         }
