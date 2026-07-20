@@ -213,6 +213,47 @@ SEED_CHANNELS = [
         "query": {"items": ["DWK123", "DWK149", "DWK217", "DWK127", "DWK037",
                             "ca200_cjazz", "foot149", "foot090"]},
     },
+    # ── the sleep wing, round two: more textures in the Rain & Thunder vein. All field
+    #    recordings with explicit licenses; aporee items are short located recordings that
+    #    rotate for variety.
+    {
+        "slug": "ocean",
+        "name": "Ocean",
+        "description": "Surf, swell, pebble beaches — the sea at night. Curated field recordings, CC and public domain.",
+        "source": "cc",
+        "query": {"items": ["ocean-sea-sounds", "aporee_37542_42986", "aporee_27992_32262",
+                            "aporee_7678_9426", "aporee_9627_11535", "aporee_24168_28064",
+                            "aporee_12490_14596", "aporee_65293_75412"]},
+    },
+    {
+        "slug": "night",
+        "name": "Summer Night",
+        "description": "Crickets, tree frogs, high desert dark — the sound of a warm night. Curated field recordings.",
+        "source": "cc",
+        "query": {"items": ["aporee_22041_25600", "aporee_10410_12388", "aporee_10288_12240",
+                            "aporee_2263_3221", "aporee_11613_13666", "aporee_4299_5666",
+                            "aporee_30865_35494", "aporee_32354_37200",
+                            "HowlerMonkeysAndTreeFrogsInCostaRica"]},
+    },
+    {
+        "slug": "brook",
+        "name": "Brook & Falls",
+        "description": "Trickling streams, creeks, waterfalls — moving water, nothing else. Curated field recordings.",
+        "source": "cc",
+        "query": {"items": ["aporee_50949_58130", "aporee_34404_39551", "aporee_13900_16217",
+                            "aporee_15642_18198", "aporee_11923_14000", "aporee_9685_11594",
+                            "aporee_11090_13108", "aporee_16669_19368", "aporee_27311_31463",
+                            "07BabblingBrook"]},
+    },
+    {
+        "slug": "dub",
+        "name": "Dub",
+        "description": "Digital roots and dub — Disrupt, JAH Roots, Mastermind XS. CC netlabels.",
+        "source": "cc",
+        "query": {"items": ["jahroots_-_two_eyes", "JTREP01", "phoke24", "Brass_Islands_of_Dub",
+                            "lcl22MastermindXs-OneDubManyRoots", "Starfrosch-DubLife",
+                            "06-hardcore-dub-sessions"]},
+    },
 ]
 
 _topup_locks: dict[str, threading.Lock] = {}
