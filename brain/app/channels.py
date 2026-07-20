@@ -240,6 +240,10 @@ def list_channels(streamable_only: bool = False) -> list[dict]:
         r["private"] = (r["source"] == "library")
         if streamable_only and (r["source"] not in STREAMABLE_SOURCES or not r["playable"]):
             continue
+        # genre stations are MIX-ONLY: clients play them as instant on-demand
+        # shuffles — no icecast mount, no liquidsoap decode per section
+        if streamable_only and r["query"].get("genre"):
+            continue
         out.append(r)
     return out
 

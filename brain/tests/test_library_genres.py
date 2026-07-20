@@ -99,3 +99,14 @@ def test_pick_tracks_by_genre_stays_in_section(app_env):
     picks = library.pick_tracks({"genre": "jazz"}, count=10)
     assert picks and all(t["album"] == "Jazz One" for t in picks)
     assert library.pick_tracks({"genre": "Classical"}) == []
+
+
+def test_genre_stations_are_mix_only_not_streamed(app_env):
+    from app import channels
+    for i in range(3):
+        _album(config.MUSIC_DIR, f"Cat {i} - Jazz Album {i}", 2, ["Jazz"])
+    channels.sync_genre_channels()
+    dial = {c["slug"] for c in channels.list_channels()}
+    liq = {c["slug"] for c in channels.list_channels(streamable_only=True)}
+    assert "shelf-jazz" in dial          # on the dial for members
+    assert "shelf-jazz" not in liq       # but liquidsoap never mounts it
