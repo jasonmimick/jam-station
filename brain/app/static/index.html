@@ -728,6 +728,12 @@
       <div class="lbl" style="margin-bottom:6px">Your account</div>
       <p id="acctWho" style="font-size:12.5px;color:var(--muted);margin:0 0 12px"></p>
 
+      <!-- your places + how to contribute -->
+      <div id="acctLinks" style="display:none;border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin:0 0 14px">
+        <a id="myRadio" href="#" style="display:block;color:var(--yellow);font-weight:700;font-size:13.5px;text-decoration:none;margin-bottom:6px">◉ Your radio →</a>
+        <a href="/guide" style="display:block;color:var(--ink);font-size:13px;text-decoration:none">⚡ Add your own music — the contributor guide →</a>
+      </div>
+
       <!-- passphrase: everyone. set it once, sign in with email + passphrase forever. -->
       <div class="lbl" style="font-size:10px;margin:4px 0 6px">Passphrase</div>
       <p style="font-size:12px;color:var(--muted);margin:0 0 8px;line-height:1.5">
@@ -1991,6 +1997,13 @@ $("authCode").onkeydown = (e) => { if (e.key === "Enter") $("authGo").click(); }
 function openOwner() {
   $("owner").style.display = "flex";
   $("acctWho").textContent = S.user ? `Signed in as ${S.user.email}` : "";
+  // your places: personal radio (handle = email local part) + the contributor guide
+  if (S.user) {
+    const handle = S.user.email.split("@")[0].toLowerCase().replace(/[^a-z0-9._+-]/g, "");
+    $("myRadio").href = "/" + handle;
+    $("myRadio").textContent = "◉ Your radio — " + handle + " →";
+    $("acctLinks").style.display = "";
+  } else { $("acctLinks").style.display = "none"; }
   $("setPass").value = ""; $("setPassMsg").textContent = "";
   const owner = S.user && S.user.role === "owner";
   $("ownerPeople").style.display = owner ? "" : "none";

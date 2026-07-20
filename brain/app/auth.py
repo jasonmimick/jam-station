@@ -306,8 +306,11 @@ def normalize_code(raw: str) -> str:
 
 
 def send_key_email(name: str, email: str, link: str, code: str) -> bool:
-    """The invite itself — everything a person needs to start listening, in one email."""
+    """The invite itself — everything a person needs to start listening, contributing, and
+    finding their own radio, in one email."""
     first = (name or "").split()[0] if (name or "").strip() else "there"
+    handle = handle_for(email)
+    base = config.PUBLIC_URL
     return mail.send(
         email,
         "Your key to jam-station",
@@ -317,13 +320,33 @@ def send_key_email(name: str, email: str, link: str, code: str) -> bool:
         "(Grateful Dead, jazz, bluegrass, funk…) and a shelf of ripped CDs, streaming\n"
         "around the clock.\n"
         "\n"
-        "Two ways in, both yours for good:\n"
+        "SIGN IN — two ways, both yours for good:\n"
         "\n"
         f"  Your link:      {link}\n"
         f"  Your passcode:  {code}\n"
         "\n"
-        f"Tap the link on any device — or go to {config.PUBLIC_URL} and type the\n"
-        "passcode into the Sign in box. Phone, laptop, the car: it all works.\n"
+        f"Tap the link on any device — or go to {base} and type the passcode into\n"
+        "the Sign in box. Phone, laptop, the car: it all works.\n"
+        "\n"
+        "YOUR OWN RADIO\n"
+        "\n"
+        f"  {base}/{handle}\n"
+        "\n"
+        "Your personal dial — bookmark it. It's the same station, addressed to you, and\n"
+        "it's where your own stations will live as you add them.\n"
+        "\n"
+        "ON YOUR MAC — the Session desktop app\n"
+        "\n"
+        "There's a native Mac app, Session, with a proper player, a screensaver that\n"
+        "moves to the music, and lock-screen controls. Ask and I'll send it your way.\n"
+        "\n"
+        "ADD YOUR OWN MUSIC\n"
+        "\n"
+        f"  {base}/guide\n"
+        "\n"
+        "Got non-commercial music worth sharing — your own recordings, live tapings,\n"
+        "out-of-print tapes? The guide walks you through sending folders to the station,\n"
+        "where each one becomes a station on the dial.\n"
         "\n"
         "Keep this email — the link and passcode don't expire.\n"
         "\n"
