@@ -34,9 +34,11 @@ def test_send_key_email_console_backend(app_env):
 def test_send_key_email_contains_the_essentials(app_env, monkeypatch):
     from app import mail
     sent = {}
-    monkeypatch.setattr(mail, "send", lambda to, subject, body: sent.update(
-        to=to, subject=subject, body=body) or True)
-    assert auth.send_key_email("Dad Mimick", "dad@example.com", "https://j/k/tok", "ABC12345")
+    monkeypatch.setattr(mail, "send", lambda to, subject, body, cc="": sent.update(
+        to=to, subject=subject, body=body, cc=cc) or True)
+    assert auth.send_key_email("Dad Mimick", "dad@example.com", "https://j/k/tok", "ABC12345",
+                               cc="owner@example.com")
     assert sent["to"] == "dad@example.com"
+    assert sent["cc"] == "owner@example.com"
     assert "https://j/k/tok" in sent["body"] and "ABC12345" in sent["body"]
     assert sent["body"].startswith("Hi Dad,")
