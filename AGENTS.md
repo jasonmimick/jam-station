@@ -112,12 +112,35 @@ with zero credentials — the mini has real SMTP secrets set on `jam-brain`.
 
 ## Clients & the shelf's sections
 
-Four clients, one brain: the desktop web (`index.html`), the native **Session** apps
+Five front-ends, one brain: the desktop web (`index.html`), the native **Session** apps
 (`session/` — macOS, iPhone, iPad; SwiftUI; no App Store presence yet, no developer
-account), the mobile web (`mobile.html`), and radio apps hitting icecast directly.
+account), the mobile web (`mobile.html`), **dad mode** (`dad.html` at `/dad`), and radio
+apps hitting icecast directly.
 **Mobile web is a FUNNEL, not an app**: station list + radio playback + sign-in (invite
 links land there) + a "Session for iPhone — coming soon" teaser on Apple devices. Don't
 grow it; grow the apps and the desktop.
+**Dad mode (`/dad`)** is a dead-simple radio for family: big station-photo tiles, one giant
+play button, volume — no sign-in, no tabs, no galleries, radio only. It's the *receiving*
+face of the family/affiliate vision.
+
+## Family / affiliate — the two layers (see docs/DESIGN-network.md, DESIGN-family-radio.md)
+
+The family-radio vision splits into two independent, composable layers — don't conflate them:
+1. **Sourcing** — how one person turns a big archive into channels on THEIR station. The
+   **attic** project (`~/projects/attic`, a wiped Time Capsule vault of ripped/copied music)
+   is the content engine; the planned **"attic" source adapter** streams vault music through
+   jam-station without copying it onto the full mini (host music server on the mini +
+   `host.docker.internal` reach from the brain + a `/attic/<path>` proxy for browser+liquidsoap).
+2. **Carriage** — how a family member's whole STATION appears on your dial: a station-to-station
+   relay. Their jam-station makes icecast streams behind their own tunnel; yours carries the
+   remote stream as a channel (extends the existing `/stream/<slug>` proxy to a remote URL). Not
+   built yet.
+   **Contributor path (Tailscale):** dad is technical and wants to push his music folders TO the
+   station. Cloudflare free caps uploads at 100 MB/request, so the answer is **Tailscale** (mini
+   is `jasons-mac-mini` / `100.91.29.30` on the tailnet; euler is on it too). Plan: dad joins the
+   tailnet, rsyncs folders to a watched **inbox** on the mini, jam-station ingests each folder as
+   a named station (same "feed it, it appears" ritual as the CD drive). The folder→station ingest
+   is shared with attic's vault-music work.
 
 The shelf has **sections** (genres): auto-mapped by the enricher (release →
 release-group → artist fallback), owner-pinned via `POST /api/library/genre`.
