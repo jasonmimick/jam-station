@@ -79,6 +79,9 @@
   #auth .x { width:100%; margin-top:8px; padding:10px; background:transparent;
     border:1px solid var(--line); color:var(--muted); border-radius:8px; }
   #auth p.msg { font-size:12.5px; margin:10px 0 0; }
+  .mfoot { display:flex; flex-wrap:wrap; gap:18px; justify-content:center; padding:26px 16px 40px; }
+  .mfoot a { color:#8a8a90; text-decoration:none; font-size:13px; font-weight:600; }
+  .mfoot a:active { color:#FFD200; }
 </style>
 </head>
 <body>
@@ -95,6 +98,11 @@
   </div>
 
   <main id="list"></main>
+
+  <footer class="mfoot">
+    <a href="/guide">＋ Add your own music</a>
+    <a href="/session">Get the app for Mac</a>
+  </footer>
 
   <div id="mini" hidden>
     <div class="mc" id="mCover"></div>
