@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jam-station · engineer's booth</title>
+<!-- SKELETON. Status cards are real; the Station Engineer chat is a stub waiting for its
+     dj.py-pattern tool loop. Keep this page owner-only, boring, and honest. -->
+<style>
+  :root { --board:#0F0F11; --panel:#17171A; --sunk:#0A0A0C; --line:#2B2B31;
+    --ink:#EDEDEA; --muted:#8C8C94; --yellow:#FFD200; --live:#2FD16A; --red:#FF5B5B; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--board); color:var(--ink);
+    font:14px/1.5 -apple-system,"Helvetica Neue",Arial,sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:16px 22px; border-bottom:1px solid var(--line); }
+  header b { color:var(--yellow); }
+  header .lbl { margin-left:auto; font-size:11px; color:var(--muted); }
+  main { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:14px; padding:20px 22px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+  .card h2 { margin:0 0 8px; font-size:11px; font-weight:800; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--muted); display:flex; align-items:center; gap:8px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); }
+  .dot.ok { background:var(--live); } .dot.bad { background:var(--red); }
+  .big { font-size:22px; font-weight:800; }
+  .sub { font-size:12px; color:var(--muted); }
+  .row { display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0;
+    border-top:1px solid var(--line); }
+  .row:first-of-type { border-top:0; }
+  .wide { grid-column:1 / -1; }
+  #engineer { display:flex; flex-direction:column; gap:10px; }
+  #engineer .msg { background:var(--sunk); border:1px solid var(--line); border-left:3px solid var(--yellow);
+    border-radius:6px; padding:10px 12px; font-size:13px; }
+  #engineer form { display:flex; gap:8px; }
+  #engineer input { flex:1; padding:10px 12px; border-radius:6px; border:1px solid var(--line);
+    background:var(--sunk); color:var(--muted); }
+  #engineer button { padding:10px 16px; border:0; border-radius:6px; background:var(--sunk);
+    color:var(--muted); border:1px solid var(--line); }
+</style>
+</head>
+<body>
+  <header><span>jam-station · <b>engineer's booth</b></span><span class="lbl" id="stamp">—</span></header>
+  <main id="cards"><p class="sub" style="padding:8px">Reading the meters…</p></main>
+  <section class="card wide" style="margin:0 22px 22px" id="engineer">
+    <h2><span class="dot"></span>Station Engineer</h2>
+    <div class="msg">Not on duty yet. This becomes a maintenance chat — the DJ's tool loop
+      with ops tools instead of music tools: report status, skip or flush a queue, resync
+      the shelf stations, kick the cover enricher, read the brain's logs. The cards above
+      are already its eyes.</div>
+    <form onsubmit="return false"><input disabled placeholder="…coming soon"><button disabled>Send</button></form>
+  </section>
+<script>
+const $ = (id) => document.getElementById(id);
+const dot = (ok) => `<span class="dot ${ok ? "ok" : "bad"}"></span>`;
+function card(title, ok, body) {
+  return `<div class="card"><h2>${dot(ok)}${title}</h2>${body}</div>`;
+}
+async function refresh() {
+  let s;
+  try { s = await (await fetch("/api/admin/status")).json(); }
+  catch { $("cards").innerHTML = `<p class="sub" style="padding:8px">Can't reach the brain.</p>`; return; }
+  const ic = s.icecast, lq = s.liquidsoap, dbx = s.database, dk = s.disk, rip = s.rip;
+  const qrows = (s.queues || []).map(q => `<div class="row"><span>${q.channel}</span><span>${q.unserved}</span></div>`).join("");
+  $("cards").innerHTML =
+    card("icecast", ic.ok, ic.ok ? `<div class="big">${ic.mounts} mounts</div><div class="sub">${ic.detail.reduce((n, m) => n + (m.listeners || 0), 0)} direct listeners</div>` : `<div class="sub">${ic.error || "down"}</div>`) +
+    card("liquidsoap", lq.ok, lq.ok ? `<div class="big">on air</div><div class="sub">telnet answers</div>` : `<div class="sub">${lq.error || "down"}</div>`) +
+    card("postgres", dbx.ok, dbx.ok ? `<div class="big">${dbx.members} members</div><div class="sub">${dbx.queued_tracks} tracks queued</div>` : `<div class="sub">${dbx.error || "down"}</div>`) +
+    card("music volume", dk.ok, dk.free_gb !== undefined ? `<div class="big">${dk.free_gb} GB free</div><div class="sub">of ${dk.total_gb} GB</div>` : `<div class="sub">${dk.error || "?"}</div>`) +
+    card("ripper", rip.ok, `<div class="sub">${(rip.state || "").toString().slice(0, 120) || "idle"}</div>`) +
+    card("in the room", true,
+      (s.listening || []).map(l => `<div class="row"><span>${l.name}</span><span>▶ ${l.channel}</span></div>`).join("") +
+      (s.online || []).map(o => `<div class="row"><span>${o.name}</span><span>${o.client}</span></div>`).join("") ||
+      `<div class="sub">empty</div>`) +
+    card("queues (unserved)", true, qrows || `<div class="sub">nothing queued</div>`) +
+    card("not visible from here", true,
+      (s.not_visible_from_here || []).map(x => `<div class="row"><span>${x}</span><span>host-side</span></div>`).join(""));
+  $("stamp").textContent = new Date().toLocaleTimeString();
+}
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

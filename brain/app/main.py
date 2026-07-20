@@ -10,7 +10,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, StreamingResponse)
 from pydantic import BaseModel
 
-from . import auth, channels, config, covers, db, dj, presence, spot
+from . import admin, auth, channels, config, covers, db, dj, presence, spot
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
@@ -469,6 +469,28 @@ async def presence_touch(request: Request, call_next):
             presence.seen(me["email"], me["name"],
                           _client_of(request.headers.get("user-agent", "")))
     return await call_next(request)
+
+
+# ---------------------------------------------------------------- the engineer's booth
+
+def _is_owner(request: Request) -> bool:
+    me = _me(request)
+    return bool(me and me.get("role") == "owner")
+
+
+@app.get("/admin")
+def admin_page(request: Request):
+    """Owner-only. 404 for everyone else — the booth's existence is nobody's business."""
+    if not _is_owner(request):
+        raise HTTPException(404, "not found")
+    return FileResponse(os.path.join(STATIC, "admin.html"), headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/admin/status")
+def api_admin_status(request: Request):
+    if not _is_owner(request):
+        raise HTTPException(404, "not found")
+    return admin.status()
 
 
 @app.get("/api/listeners")
