@@ -51,8 +51,8 @@ struct MiniPlayer: View {
             Button {
                 player.toggle()
             } label: {
-                Text(player.isPlaying ? "❚❚" : "▶")
-                    .font(.system(size: 14, weight: .bold))
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 15, weight: .bold))
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(t.accent))
                     .foregroundStyle(t.onAccent)
@@ -179,12 +179,14 @@ struct PlayerSheet: View {
                 Button {
                     tapHaptic()
                     player.stepBack()      // radio: step back in time onto the tape
-                } label: { Text("⏮").font(.system(size: 26)) }
+                } label: {
+                    Image(systemName: "backward.end.fill").font(.system(size: 24, weight: .semibold))
+                }
                 Button {
                     player.toggle()
                 } label: {
-                    Text(player.isPlaying ? "❚❚" : "▶")
-                        .font(.system(size: 24, weight: .bold))
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 26, weight: .bold))
                         .frame(width: 68, height: 68)
                         .background(Circle().fill(t.accent))
                         .foregroundStyle(t.onAccent)
@@ -192,12 +194,15 @@ struct PlayerSheet: View {
                 Button {
                     tapHaptic()
                     if player.source == .radio { confirmSkip = true } else { player.stepForward() }
-                } label: { Text("⏭").font(.system(size: 26)) }
+                } label: {
+                    Image(systemName: "forward.end.fill").font(.system(size: 24, weight: .semibold))
+                }
                 Button {
                     tapHaptic()
                     player.toggleFavourite()
                 } label: {
-                    Text("♥").font(.system(size: 22))
+                    Image(systemName: player.nowIsFavourite ? "heart.fill" : "heart")
+                        .font(.system(size: 21))
                         .foregroundStyle(player.nowIsFavourite ? t.red : t.faint)
                 }
                 .disabled(player.member == nil || player.now.url.isEmpty)

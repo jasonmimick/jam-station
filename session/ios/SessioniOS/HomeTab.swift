@@ -96,8 +96,8 @@ struct HomeTab: View {
                 .padding(16)
                 HStack {
                     Spacer()
-                    Text(player.isPlaying ? "❚❚" : "▶")
-                        .font(.system(size: 18, weight: .bold))
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 20, weight: .bold))
                         .frame(width: 54, height: 54)
                         .background(Circle().fill(t.accent))
                         .foregroundStyle(t.onAccent)

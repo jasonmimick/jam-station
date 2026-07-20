@@ -224,6 +224,31 @@ struct SourceSwitch: View {
     }
 }
 
+/// Image loader over URLSession.shared — AsyncImage neither sends the session
+/// cookie (members-only /music covers 403) nor reliably drops a stale frame
+/// when its URL changes on macOS.
+struct MacNetImage: View {
+    let url: URL?
+    @State private var img: NSImage?
+
+    var body: some View {
+        Group {
+            if let img {
+                Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                Color.clear
+            }
+        }
+        .task(id: url) {
+            img = nil                          // never show the previous track's art
+            guard let url else { return }
+            if let (d, r) = try? await URLSession.shared.data(from: url),
+               (r as? HTTPURLResponse)?.statusCode == 200,
+               let ns = NSImage(data: d) { img = ns }
+        }
+    }
+}
+
 struct ArtTile: View {
     @EnvironmentObject var player: Player
     let t: Theme
@@ -233,11 +258,8 @@ struct ArtTile: View {
         ZStack {
             LinearGradient(colors: [Color(hex: "#34353b"), Color(hex: "#161719")],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
-            if let url = artURL {
-                AsyncImage(url: url) { img in
-                    img.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: { monogram }
-            } else { monogram }
+            monogram
+            MacNetImage(url: artURL)
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 5))

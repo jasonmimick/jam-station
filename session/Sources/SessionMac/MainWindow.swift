@@ -524,11 +524,7 @@ struct CoverTile: View {
             Text(String(al.album.prefix(1)))
                 .font(.system(size: 42, weight: .ultraLight))
                 .foregroundStyle(.white.opacity(0.92))
-            if let url = al.coverURL(base: player.stationBase) {
-                AsyncImage(url: url) { img in
-                    img.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: { Color.clear }
-            }
+            MacNetImage(url: al.coverURL(base: player.stationBase))
         }
         .clipShape(RoundedRectangle(cornerRadius: corner))
     }
