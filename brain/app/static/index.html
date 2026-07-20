@@ -98,6 +98,14 @@
   .lrow .lwho { font-weight:700; }
   .lrow .lch { color:var(--muted); text-align:right; }
   .svmodes { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  /* shelf sections — genre chips over the collection */
+  .gchips { display:flex; flex-wrap:wrap; gap:8px; padding:12px 20px 0; }
+  .gchips button { border:1px solid var(--line); background:transparent; color:var(--muted);
+    border-radius:999px; padding:5px 12px; font-size:11.5px; font-weight:700; cursor:pointer; }
+  .gchips button.on { background:var(--yellow); color:var(--on-yellow); border-color:transparent; }
+  .setgen { position:absolute; top:8px; right:8px; z-index:2; font-size:12px; padding:4px 7px;
+    border-radius:5px; background:#000a; color:#fff; cursor:pointer; opacity:0; transition:opacity .15s; }
+  .albcover:hover .setgen { opacity:1; }
   .svmodes button { padding:6px 0; border:1px solid var(--line); border-radius:4px; cursor:pointer;
     background:var(--sunk); color:var(--muted); font-size:10px; font-weight:700; }
   .svmodes button.on { background:var(--yellow); color:var(--on-yellow); border-color:transparent; }
@@ -667,6 +675,7 @@
             <button data-v="list" title="List view" aria-label="List view">☰</button>
           </span>
         </div>
+        <div class="gchips" id="galChips" style="display:none"></div>
         <div class="collgrid" id="dgallery"></div>
         <input id="coverFile" type="file" accept="image/*" style="display:none">
       </div>
@@ -765,6 +774,7 @@
 const S = { channel:null, channels:[], albums:[], spots:[], msgs:[], mode:"radio", status:"idle", filter:"",
             histScope:"channel", audio:new Audio(), show:null, idx:-1, np:null, userPaused:false };
 const ALBUM = "album:";                       // virtual-station prefix for a catalog album
+const MIX = "mix:";                           // virtual-station prefix for a shelf-section mix
 S.audio.preload = "none";
 S.audio.crossOrigin = "anonymous";   // archive.org sends ACAO:* — keeps the Web Audio graph untainted
 
@@ -867,7 +877,17 @@ function setStatus(kind) {
 S.audio.addEventListener("playing", () => setStatus("playing"));
 S.audio.addEventListener("pause",   () => setStatus("paused"));
 S.audio.addEventListener("error",   () => setStatus("error"));
-S.audio.addEventListener("ended",   () => { if (S.mode === "ondemand") playIdx(S.idx + 1); });
+S.audio.addEventListener("ended",   () => { if (S.mode === "ondemand") advanceOnDemand(); });
+async function advanceOnDemand() {
+  // a mix never runs out: pull the next shuffled batch before the needle lifts
+  if (S.channel && S.channel.startsWith(MIX) && S.show && S.idx >= S.show.tracks.length - 2) {
+    try {
+      const more = await (await fetch(`/api/library/mix?genre=${encodeURIComponent(S.channel.slice(MIX.length))}&count=40`)).json();
+      if (more.tracks && more.tracks.length) { S.show.tracks.push(...more.tracks); renderSetlist(); }
+    } catch {}
+  }
+  playIdx(S.idx + 1);
+}
 S.audio.addEventListener("timeupdate", () => {
   if (S.mode !== "ondemand") return;
   const d = S.audio.duration || 0;
@@ -926,7 +946,9 @@ function renderStations() {
       (dead ? `<span class="chip">No music</span>` : "") +
       `<div class="sub">${dead
         ? "Needs your own files — nothing in music/" + esc((ch.query.folders || [])[0] || "")
-        : esc(ch.description || "")}</div></span>`;
+        : (S.dial && S.dial[ch.slug]
+            ? "▶ " + esc(S.dial[ch.slug].title) + (S.dial[ch.slug].artist ? " — " + esc(S.dial[ch.slug].artist) : "")
+            : esc(ch.description || ""))}</div></span>`;
     b.onclick = () => { if (!dead) tune(ch.slug); };
     w.appendChild(b);
   }
@@ -1003,6 +1025,10 @@ $("mOnDemand").onclick = () => setMode("ondemand");
 
 /* ── radio ───────────────────────────────────────────────────────────────── */
 function tune(slug) {
+  // Shelf sections are MIX-ONLY: no icecast mount exists (each listener has their own
+  // "now"), so tuning one becomes an instant endless on-demand mix — same as the apps.
+  const shelf = (S.channels || []).find(c => c.slug === slug && c.query && c.query.genre);
+  if (shelf) return tuneMix(shelf.query.genre);
   S.channel = slug;
   localStorage.setItem("jam-last", JSON.stringify({ channel: slug, mode: S.mode }));
   $("play").disabled = false; $("next").disabled = false;
@@ -1028,6 +1054,18 @@ function tuneFavs() {
   renderStations();
 }
 
+/* ── shelf-section mix (on demand, endless — the web twin of the apps' mixes) ── */
+function tuneMix(genre) {
+  const id = MIX + genre;
+  if (S.channel !== id) S.idx = 0;
+  S.channel = id;
+  localStorage.setItem("jam-last", JSON.stringify({ channel: id, mode: "ondemand" }));
+  $("play").disabled = false; $("eqBtn").disabled = false; $("share").disabled = true;
+  if (S.mode !== "ondemand") setMode("ondemand");
+  else loadShow(true);
+  renderStations();
+}
+
 /* ── catalog album (on demand, like favourites but server-backed) ─────────── */
 function tuneAlbum(dir) {
   const id = ALBUM + dir;
@@ -1043,6 +1081,17 @@ function tuneAlbum(dir) {
 /* ── on demand ───────────────────────────────────────────────────────────── */
 async function loadShow(autoplay) {
   if (!S.channel) return;
+  if (S.channel.startsWith(MIX)) {
+    const genre = S.channel.slice(MIX.length);
+    try { S.show = await (await fetch(`/api/library/mix?genre=${encodeURIComponent(genre)}&count=40`)).json(); }
+    catch { return; }
+    if (!S.show.tracks || !S.show.tracks.length) { $("showWrap").style.display = "none"; return; }
+    S.show.album = `From the Shelf — ${genre}`;
+    S.idx = Math.min(Math.max(0, S.idx), S.show.tracks.length - 1);
+    renderSetlist();
+    if (autoplay) playIdx(S.idx);
+    return;
+  }
   if (S.channel.startsWith(ALBUM)) {
     const dir = S.channel.slice(ALBUM.length);
     try { S.show = await (await fetch(`/api/library/album?dir=${encodeURIComponent(dir)}`)).json(); }
@@ -1353,7 +1402,8 @@ function chLabel(slug) {
   const ch = (S.channels || []).find(c => c.slug === slug);
   if (ch) return ch.name;
   if (slug === FAVS) return "Favourites";
-  if (String(slug).startsWith("cds/")) return "the collection";
+  if (String(slug).startsWith(MIX)) return slug.slice(MIX.length) + " mix";
+  if (String(slug).startsWith("cds/") || String(slug).startsWith(ALBUM)) return "the collection";
   return "on demand";
 }
 function fmtFor(s) { return s < 90 ? "just now" : s < 3600 ? Math.round(s / 60) + "m" : Math.round(s / 3600) + "h"; }
@@ -1383,6 +1433,14 @@ function sendBeat() {
 S.audio.addEventListener("playing", sendBeat);                 // count on-demand listeners instantly
 setInterval(() => { if (!document.hidden) { sendBeat(); refreshListeners(); } }, 30000);
 setTimeout(refreshListeners, 2500);                            // after loadMe has settled
+
+/* ── the dial knows what's on: now-playing per station, one call ──────────── */
+async function refreshDial() {
+  try { S.dial = await (await fetch("/api/dial")).json(); } catch { return; }
+  renderStations();
+}
+setInterval(() => { if (!document.hidden) refreshDial(); }, 20000);
+setTimeout(refreshDial, 1500);
 
 /* station-art style — a single treatment across every station tile (sidebar, gallery) */
 (function () {
@@ -2101,7 +2159,7 @@ function deskItems() {
   return (S.albums || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
     sub: (al.artist || "—") + (al.year ? " · " + al.year : ""), cover: al.cover_url || "",
     sortArtist: (al.artist || "").toLowerCase(), sortAlbum: (al.album || "").toLowerCase(),
-    mtime: al.mtime || 0, tracks: al.tracks || 0 }));
+    mtime: al.mtime || 0, tracks: al.tracks || 0, genres: al.genres || [] }));
 }
 let galView = localStorage.getItem("jam-galview") || "grid";
 function setGalView(v) { galView = v; localStorage.setItem("jam-galview", v);
@@ -2136,6 +2194,19 @@ function setCoverFor(dir) { coverDir = dir; const inp = $("coverFile"); if (inp)
       if (r.ok) { await loadCatalog(); renderDeskGallery(); } else alert("Couldn't set the cover."); }
     catch { alert("Couldn't set the cover."); } };
 })();
+function renderGenreChips() {
+  const w = $("galChips"); if (!w) return;
+  if (dtab !== "cds") { w.style.display = "none"; return; }
+  const counts = {};
+  for (const al of S.albums || []) for (const g of al.genres || [])
+    counts[g] = (counts[g] || 0) + 1;
+  const names = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+  if (!names.length) { w.style.display = "none"; return; }
+  w.style.display = "";
+  w.innerHTML = `<button data-g="" class="${S.galGenre ? "" : "on"}">All</button>` +
+    names.map(n => `<button data-g="${esc(n)}" class="${S.galGenre === n ? "on" : ""}">${esc(n)} · ${counts[n]}</button>`).join("");
+  w.querySelectorAll("button").forEach(b => b.onclick = () => { S.galGenre = b.dataset.g || ""; renderDeskGallery(); });
+}
 function renderDeskGallery(flashSpot) {
   const g = $("dgallery"); if (!g) return;
   g.className = "collgrid";
@@ -2150,14 +2221,18 @@ function renderDeskGallery(flashSpot) {
     return;
   }
   if (dtab === "cds" && !S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to see your CDs.</p>`; return; }
+  renderGenreChips();
   let list = deskItems();
+  if (dtab === "cds" && S.galGenre)
+    list = list.filter(it => (it.genres || []).some(x => x.toLowerCase() === S.galGenre.toLowerCase()));
   if (q) list = list.filter(it => (it.name + " " + it.sub).toLowerCase().includes(q));
   list = sortItems(list);
   if (galView === "list") g.className = "collgrid aslist";
   const canCover = dtab === "cds" && S.user;
   g.innerHTML = list.map(it => {
     const a = albBg({ album: it.name, cover_url: it.cover });
-    const cov = canCover ? `<span class="setcov" data-cover-dir="${esc(it.id)}" title="Set cover">⤓</span>` : "";
+    const cov = canCover ? `<span class="setcov" data-cover-dir="${esc(it.id)}" title="Set cover">⤓</span>` +
+      `<span class="setgen" data-genre-dir="${esc(it.id)}" data-genres="${esc((it.genres || []).join(", "))}" title="Edit sections">✎</span>` : "";
     const added = fmtAdded(it.mtime);
     const af = it.kind === "station" ? " artf" : "";
     if (galView === "list")
@@ -2171,6 +2246,16 @@ function renderDeskGallery(flashSpot) {
       (added ? `<span class="albdate">${added}</span>` : "") + `</div></button>`;
   }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match." : "No albums yet — rip a CD."}</p>`;
   g.querySelectorAll(".setcov").forEach(b => b.onclick = (e) => { e.stopPropagation(); setCoverFor(b.dataset.coverDir); });
+  g.querySelectorAll(".setgen").forEach(b => b.onclick = async (e) => {
+    e.stopPropagation();
+    const cur = b.dataset.genres || "";
+    const put = prompt("Sections for this album (comma-separated — the buckets are yours):", cur);
+    if (put === null) return;
+    const genres = put.split(",").map(x => x.trim()).filter(Boolean).slice(0, 5);
+    const r = await fetch("/api/library/genre", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dir: b.dataset.genreDir, genres }) });
+    if (r.ok) { await loadCatalog(); await loadChannels(); renderDeskGallery(); }   // may birth/retire a station
+  });
   g.querySelectorAll(".albcard, .alrow").forEach(b => b.onclick = () => {
     if (b.dataset.kind === "station") tune(b.dataset.id); else tuneAlbum(b.dataset.id);
     setDtab("playing");

@@ -110,6 +110,25 @@ Keys are stored hashed and shown once. Sessions are 30-day HttpOnly cookies.
 `mail.py` speaks SMTP; the `console` backend prints the mail so the whole flow works
 with zero credentials — the mini has real SMTP secrets set on `jam-brain`.
 
+## Clients & the shelf's sections
+
+Four clients, one brain: the desktop web (`index.html`), the native **Session** apps
+(`session/` — macOS, iPhone, iPad; SwiftUI; no App Store presence yet, no developer
+account), the mobile web (`mobile.html`), and radio apps hitting icecast directly.
+**Mobile web is a FUNNEL, not an app**: station list + radio playback + sign-in (invite
+links land there) + a "Session for iPhone — coming soon" teaser on Apple devices. Don't
+grow it; grow the apps and the desktop.
+
+The shelf has **sections** (genres): auto-mapped by the enricher (release →
+release-group → artist fallback), owner-pinned via `POST /api/library/genre`.
+`GET /api/library/genres` lists sections; `GET /api/library/mix?genre=` returns a
+show-shaped shuffled mix. Sections ≥3 records become **`shelf-*` stations
+automatically** (`sync_genre_channels`) — and these are **mix-only**: no icecast
+mount, every client "tunes" them by playing the mix through its own on-demand
+machinery (web: `tuneMix`/`MIX` prefix; a `/stream/shelf-*` request is always 404 and
+that's correct). `GET /api/dial` gives now-playing for every broadcast channel in one
+call — clients poll it instead of hammering `/api/nowplaying` per channel.
+
 ## Gotchas
 
 - Queue top-ups are guarded by per-channel `threading.Lock`s (`channels._lock_for`).
