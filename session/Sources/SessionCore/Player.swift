@@ -345,6 +345,12 @@ public final class Player: ObservableObject {
         guard channel.playable else { return }
         UserDefaults.standard.set(channel.slug, forKey: "lastChannel")
         current = channel
+        // a genre station is mix-only: the song changes NOW and the lineup
+        // queues behind it — no live stream to join mid-song
+        if let g = channel.mixGenre {
+            playMix(g)
+            return
+        }
         source = .radio
         show = nil; currentAlbum = nil; browsed = nil
         trackIndex = -1; position = 0; duration = 0
@@ -457,6 +463,9 @@ public final class Player: ObservableObject {
         if let sh = show, trackIndex + 1 >= sh.tracks.count,
            sh.channel == current?.slug, currentAlbum == nil {
             setSource(.radio)                    // ran off the tape's end → back to LIVE
+        } else if let sh = show, trackIndex + 1 >= sh.tracks.count,
+                  sh.channel == "mix", let g = lastMixGenre {
+            playMix(g)                           // skip off the mix's end → next batch
         } else {
             nextTrack()
         }
@@ -517,8 +526,13 @@ public final class Player: ObservableObject {
     /// The queue advanced (naturally or by skip) — sync state, top up lookahead.
     private func advancedInQueue() {
         guard source != .radio, let sh = show, trackIndex + 1 < sh.tracks.count else {
-            status = .paused
-            pushNowPlayingInfo()
+            // a mix never runs dry — fetch the next shuffled batch and roll on
+            if show?.channel == "mix", let g = lastMixGenre {
+                playMix(g)
+            } else {
+                status = .paused
+                pushNowPlayingInfo()
+            }
             return
         }
         trackIndex += 1

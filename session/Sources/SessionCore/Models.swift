@@ -7,13 +7,28 @@ public struct Channel: Decodable, Identifiable, Equatable {
     public let playable: Bool
     public let isPrivate: Bool
     public let artPath: String?
+    /// Set on genre stations: play as an instant on-demand mix, not a stream.
+    public let mixGenre: String?
 
     public var id: String { slug }
 
     enum CodingKeys: String, CodingKey {
-        case slug, name, source, playable
+        case slug, name, source, playable, query
         case isPrivate = "private"
         case artPath = "art_url"
+    }
+
+    private struct Query: Decodable { let genre: String? }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        slug = (try? c.decode(String.self, forKey: .slug)) ?? ""
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        source = (try? c.decode(String.self, forKey: .source)) ?? ""
+        playable = (try? c.decode(Bool.self, forKey: .playable)) ?? true
+        isPrivate = (try? c.decode(Bool.self, forKey: .isPrivate)) ?? false
+        artPath = try? c.decode(String.self, forKey: .artPath)
+        mixGenre = (try? c.decode(Query.self, forKey: .query))?.genre
     }
 
     public func artURL(base: URL) -> URL? {
@@ -85,6 +100,7 @@ public struct Album: Decodable, Identifiable, Equatable {
     public let genres: [String]     // the shelf's sections this record lives in
 
     public var id: String { dir }
+
 
     enum CodingKeys: String, CodingKey {
         case dir, artist, album, year, mtime, genres
