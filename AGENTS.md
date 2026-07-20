@@ -133,8 +133,10 @@ The family-radio vision splits into two independent, composable layers — don't
    `host.docker.internal` reach from the brain + a `/attic/<path>` proxy for browser+liquidsoap).
 2. **Carriage** — how a family member's whole STATION appears on your dial: a station-to-station
    relay. Their jam-station makes icecast streams behind their own tunnel; yours carries the
-   remote stream as a channel (extends the existing `/stream/<slug>` proxy to a remote URL). Not
-   built yet.
+   remote stream as a channel (extends the existing `/stream/<slug>` proxy to a remote URL).
+   **COMING, not built.** This is the "become a real broadcaster" path teased at the bottom of
+   `/guide`: a contributor sends folders (built, below); a broadcaster runs their own sovereign
+   station that the network carries. The `/guide` page promises it — keep that promise.
    **Contributor path (Tailscale):** dad is technical and wants to push his music folders TO the
    station. Cloudflare free caps uploads at 100 MB/request, so the answer is **Tailscale** (mini
    is `jasons-mac-mini` / `100.91.29.30` on the tailnet; euler is on it too). Plan: dad joins the
