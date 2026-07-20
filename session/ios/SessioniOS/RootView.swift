@@ -686,8 +686,10 @@ struct ShelfTab: View {
                                 }
                             }
                         }
-                        SpottedSection(t: t)
-                            .padding(.bottom, 20)
+                        if section.isEmpty && find.isEmpty {   // Spotted belongs to the whole shelf,
+                            SpottedSection(t: t)               // not to every section view
+                        }
+                        Color.clear.frame(height: 20)
                     }
                 } else {
                 ScrollView {
@@ -725,8 +727,10 @@ struct ShelfTab: View {
                         }
                     }
                     .padding(.horizontal, 14)
-                    SpottedSection(t: t)
-                        .padding(.bottom, 20)
+                    if section.isEmpty && find.isEmpty {
+                        SpottedSection(t: t)
+                    }
+                    Color.clear.frame(height: 20)
                 }
                 }
             }

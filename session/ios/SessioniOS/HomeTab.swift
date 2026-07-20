@@ -60,13 +60,12 @@ struct HomeTab: View {
         } label: {
             ZStack(alignment: .bottomLeading) {
                 ZStack {
-                    let seed = player.current?.name ?? "♪"
-                    let hue = Double(abs(seed.hashValue % 360)) / 360.0
+                    let hue = Double(abs(heroName.hashValue % 360)) / 360.0
                     LinearGradient(
                         colors: [Color(hue: hue, saturation: 0.32, brightness: 0.4),
                                  Color(hue: hue, saturation: 0.42, brightness: 0.1)],
                         startPoint: .topLeading, endPoint: .bottomTrailing)
-                    if let url = player.current?.artURL(base: player.stationBase) {
+                    if let url = heroArt {
                         NetImage(url: url)
                     }
                     LinearGradient(colors: [.clear, .black.opacity(0.75)],
@@ -78,12 +77,15 @@ struct HomeTab: View {
                             Circle().fill(t.red).frame(width: 7, height: 7)
                             Text("ON AIR").font(.system(size: 9, weight: .heavy)).tracking(1.8)
                                 .foregroundStyle(t.red)
+                        } else if player.isPlaying || player.status == .paused {
+                            Text("NOW PLAYING").font(.system(size: 9, weight: .heavy)).tracking(1.8)
+                                .foregroundStyle(.white.opacity(0.65))
                         } else {
                             Text("YOUR STATION").font(.system(size: 9, weight: .heavy)).tracking(1.8)
                                 .foregroundStyle(.white.opacity(0.65))
                         }
                     }
-                    Text(player.current?.name ?? "Pick a channel")
+                    Text(heroName)
                         .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(.white)
                     Text(heroLine)
@@ -110,8 +112,31 @@ struct HomeTab: View {
         .buttonStyle(.plain)
     }
 
+    /// The hero is WHAT'S PLAYING — the record, the mix, the channel — and only
+    /// falls back to "your last channel" when nothing is going at all.
+    var heroName: String {
+        if player.isPlaying || player.status == .paused {
+            switch player.source {
+            case .cd: return player.currentAlbum?.album ?? player.now.album
+            case .tape:
+                if player.show?.channel == "favourites" { return "Favourites" }
+                if player.show?.channel == "mix" { return player.show?.album ?? "Mix" }
+                return player.current?.name ?? "On the tape"
+            case .radio: return player.current?.name ?? "On air"
+            }
+        }
+        return player.current?.name ?? "Pick a channel"
+    }
+
+    var heroArt: URL? {
+        if (player.isPlaying || player.status == .paused), player.source == .cd {
+            return player.currentAlbum?.coverURL(base: player.stationBase)
+        }
+        return player.current?.artURL(base: player.stationBase)
+    }
+
     var heroLine: String {
-        let np = player.isPlaying ? player.now : heroNP
+        let np = player.isPlaying || player.status == .paused ? player.now : heroNP
         if np.isEmpty { return "tap to tune in" }
         return np.title + (np.artist.isEmpty ? "" : " — \(np.artist)")
     }
