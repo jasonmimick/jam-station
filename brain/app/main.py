@@ -444,14 +444,41 @@ def api_presence(body: PresenceBeat, request: Request):
     return {"ok": True}
 
 
+def _client_of(ua: str) -> str:
+    """What kind of thing is speaking. URLSession's default UA leads with the bundle
+    executable ('Session/1 CFNetwork/…', 'SessioniOS/1 …'); browsers say Mozilla."""
+    u = (ua or "").lower()
+    if "sessionios" in u:
+        return "Session (iOS)"
+    if u.startswith("session"):
+        return "Session (Mac)"
+    if "cfnetwork" in u or ("darwin" in u and "mozilla" not in u):
+        return "Session app"
+    if "mobile" in u and "mozilla" in u:
+        return "phone web"
+    return "web"
+
+
+@app.middleware("http")
+async def presence_touch(request: Request, call_next):
+    # Any signed-in /api chatter means that client is IN THE ROOM — this is how the native
+    # apps show up without heartbeat code of their own (they poll the dial anyway).
+    if request.url.path.startswith("/api/"):
+        me = _me(request)
+        if me:
+            presence.seen(me["email"], me["name"],
+                          _client_of(request.headers.get("user-agent", "")))
+    return await call_next(request)
+
+
 @app.get("/api/listeners")
 def api_listeners(request: Request):
     """Who's here. Members only — anonymous gets an empty room, not an error, in the same
     spirit as the catalog: the UI simply shows nothing rather than breaking."""
     if not _is_member(request):
-        return {"count": 0, "listeners": []}
+        return {"count": 0, "listeners": [], "online": []}
     ls = presence.listeners()
-    return {"count": len(ls), "listeners": ls}
+    return {"count": len(ls), "listeners": ls, "online": presence.online()}
 
 
 @app.get("/api/history")

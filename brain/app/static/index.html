@@ -1412,13 +1412,21 @@ async function refreshListeners() {
   if (!S.user) { pill.hidden = true; return; }
   try {
     const d = await (await fetch("/api/listeners")).json();
+    const online = d.online || [];
     pill.hidden = false;
-    pill.textContent = `◉ ${d.count}`;
+    // ◉ n = actually listening; ○ n = apps/pages open in the room but nothing playing
+    pill.textContent = d.count ? `◉ ${d.count}` : `○ ${online.length}`;
     pill.classList.toggle("live", d.count > 0);
-    $("listenRows").innerHTML = d.count
+    const rows = d.count
       ? d.listeners.map(l => `<div class="lrow"><span class="lwho">${esc(l.name)}</span>` +
           `<span class="lch">${esc(chLabel(l.channel))}${l.mode === "ondemand" ? " · od" : ""} · ${fmtFor(l.for_seconds)}</span></div>`).join("")
       : `<p class="msub">Nobody's tuned in right now.</p>`;
+    const room = online.length
+      ? `<p class="lbl" style="margin-top:12px">In the room</p>` +
+        online.map(o => `<div class="lrow"><span class="lwho">${esc(o.name)}</span>` +
+          `<span class="lch">${esc(o.client)} · ${fmtFor(o.for_seconds)}</span></div>`).join("")
+      : "";
+    $("listenRows").innerHTML = rows + room;
   } catch {}
 }
 $("listenPill").onclick = (e) => { e.stopPropagation(); refreshListeners(); $("listenPop").classList.toggle("open"); };

@@ -39,6 +39,18 @@ def test_listeners_endpoint_anonymous_sees_empty_room(app_env):
     assert d == {"count": 0, "listeners": []}    # soft gate, same spirit as the catalog
 
 
+def test_seen_tracks_open_apps_per_client(app_env, monkeypatch):
+    presence.seen("jason@x.com", "Jason", "Session (Mac)")
+    presence.seen("jason@x.com", "Jason", "Session (iOS)")
+    presence.seen("jason@x.com", "Jason", "web")
+    assert len(presence.online()) == 3          # three sessions, one person
+    presence.seen("jason@x.com", "Jason", "web")
+    assert len(presence.online()) == 3          # refresh, not a duplicate
+    real = time.time
+    monkeypatch.setattr(time, "time", lambda: real() + presence.SEEN_TTL + 1)
+    assert presence.online() == []              # silence means they left
+
+
 def test_presence_endpoint_accepts_anonymous_beat(app_env):
     c = TestClient(app)
     r = c.post("/api/presence", json={"channel": "on-demand", "aid": "testdevice1"})

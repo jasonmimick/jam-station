@@ -18,10 +18,12 @@ import threading
 import time
 
 HEARTBEAT_TTL = 75          # ~2.5 missed 30s beats = they're gone
+SEEN_TTL = 90               # an app that hasn't spoken for this long has left the room
 
 _lock = threading.Lock()
 _streams: dict[int, dict] = {}     # open /stream connections
 _beats: dict[str, dict] = {}       # on-demand heartbeats, keyed by member email or anon id
+_seen: dict[tuple, dict] = {}      # (email, client) -> presence of an OPEN app/page
 _ids = itertools.count(1)
 
 
@@ -44,6 +46,30 @@ def heartbeat(name: str, email: str, key: str, channel: str) -> None:
         since = prev["since"] if prev and prev["channel"] == channel else time.time()
         _beats[key] = {"name": name or "Someone", "email": email or "", "channel": channel,
                        "mode": "ondemand", "since": since, "until": time.time() + HEARTBEAT_TTL}
+
+
+def seen(email: str, name: str, client: str) -> None:
+    """A signed-in request happened — that person's client is IN THE ROOM, whether or not
+    audio is playing. Keyed per (member, client) so the Mac app, the iOS app, and a browser
+    each count as their own session. (Two devices on the same client string collapse — the
+    apps don't send a device id; good enough until they do.)"""
+    key = (email, client)
+    with _lock:
+        prev = _seen.get(key)
+        _seen[key] = {"name": name or "Someone", "email": email, "client": client,
+                      "since": prev["since"] if prev else time.time(),
+                      "until": time.time() + SEEN_TTL}
+
+
+def online() -> list[dict]:
+    """Who has an app or page open right now."""
+    now = time.time()
+    with _lock:
+        for k in [k for k, e in _seen.items() if e["until"] < now]:
+            del _seen[k]
+        rows = sorted(_seen.values(), key=lambda e: e["since"])
+    return [{"name": e["name"], "client": e["client"], "for_seconds": int(now - e["since"])}
+            for e in rows]
 
 
 def listeners() -> list[dict]:
