@@ -53,6 +53,14 @@ def index(request: Request, m: str = "", desktop: str = ""):
                         headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/dad")
+def dad(request: Request):
+    """Dad mode: a dead-simple full-screen radio — big station tiles, one play button,
+    nothing to learn. Public like the radio itself. The affiliate/family front-end starts
+    here (see DESIGN-family-radio)."""
+    return FileResponse(os.path.join(STATIC, "dad.html"), headers={"Cache-Control": "no-cache"})
+
+
 # Installable on a phone: a home-screen icon and a full-screen player instead of
 # browser chrome. He listens walking around; this makes it feel like an app.
 @app.get("/manifest.json")
