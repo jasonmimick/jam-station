@@ -23,7 +23,7 @@ AUDIO_RE='\.(mp3|flac|m4a|wma|wav|aac|ogg|aiff|shn|ape|m4p)$'
 export PATH=$PATH:/usr/local/bin
 mkdir -p "$INBOX"; touch "$LEDGER"
 
-slugify() { echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//' | cut -c1-48; }
+slugify() { echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-//; s/-$//' | cut -c1-48; }
 dir_size() { du -sk "$1" 2>/dev/null | cut -f1; }
 
 import_folder() {
