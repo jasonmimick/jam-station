@@ -52,3 +52,12 @@ def test_create_channel_and_history(app_env):
     channels.next_track("spring77")
     rows = db.query("SELECT * FROM history WHERE channel='spring77'")
     assert len(rows) == 1
+
+
+def test_api_dial_batches_nowplaying(app_env):
+    from app import channels, main
+    channels.ensure_seeded()
+    channels.set_nowplaying("dead77", "Scarlet Begonias", "Grateful Dead", "Barton Hall")
+    dial = main.api_dial()
+    assert dial["dead77"]["title"] == "Scarlet Begonias"
+    assert "shelf-jazz" not in dial          # mix stations have no shared now

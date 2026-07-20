@@ -203,6 +203,23 @@ def api_nowplaying(channel: str):
     return channels.get_nowplaying(channel)
 
 
+@app.get("/api/dial")
+def api_dial():
+    """Now-playing across the whole dial in one call — so a client can show
+    what every channel is on without a request per channel. Mix-only genre
+    stations are skipped (each listener has their own 'now')."""
+    out = {}
+    for ch in channels.list_channels():
+        if ch["query"].get("genre"):
+            continue
+        np = channels.get_nowplaying(ch["slug"])
+        if np.get("title"):
+            out[ch["slug"]] = {"title": np.get("title", ""),
+                               "artist": np.get("artist", ""),
+                               "album": np.get("album", "")}
+    return out
+
+
 @app.get("/api/queue")
 def api_queue(channel: str):
     return channels.queue_status(channel)
