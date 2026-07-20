@@ -35,7 +35,10 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
       Recommendation: **Shortwave**. The vocabulary keeps working — *on air · call sign ·
       affiliate · carriage · relay · the dial.*
 
-- [ ] **Load your own music.** The single unlock that lights up both `70s Fusion`
+- [ ] **Load your own music.** *Status 2026-07-19: Jason is digging out old hard drives and
+      MP3 CDs this week. Note: MP3 CDs are DATA discs — the watcher ignores them (has_aiff);
+      ingest those by copying files off the mounted volume, or teach cd-tick a data-disc
+      path if there turn out to be many.* The single unlock that lights up both `70s Fusion`
       and `BeBop` (currently shown honestly as "NO MUSIC"). Needs the music files on
       the mac-mini and a slab volume mount. This is also the *only* way to get real
       bebop/commercial fusion — it isn't on the Archive (live taper tapes only) and
