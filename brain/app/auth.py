@@ -530,13 +530,14 @@ def remove_favourite(email: str, url: str) -> None:
 # truth. Collisions (two locals slugging the same) resolve to the first approved member.
 
 def handle_for(email: str) -> str:
+    # the email local part, kept readable — jmimick+dad@gmail.com -> "jmimick+dad".
+    # Only strip characters that can't live in a URL path segment.
     local = norm(email).split("@", 1)[0]
-    h = re.sub(r"[^a-z0-9]+", "-", local).strip("-")
-    return h[:48]
+    return re.sub(r"[^a-z0-9._+-]", "", local)[:48]
 
 
 def member_by_handle(handle: str) -> dict | None:
-    h = re.sub(r"[^a-z0-9]+", "-", (handle or "").lower()).strip("-")
+    h = re.sub(r"[^a-z0-9._+-]", "", (handle or "").lower())[:48]
     if not h:
         return None
     for m in db.query("SELECT * FROM members WHERE status='approved' ORDER BY created_at"):

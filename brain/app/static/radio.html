@@ -70,11 +70,10 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"
 const S = { channels: [], dial: {}, slug: null, audio: new Audio() };
 // whose radio is this? the URL's last segment is the member handle (e.g. /jmimick-dad)
 const HANDLE = decodeURIComponent(location.pathname.replace(/^\/+|\/+$/g, "").split("/").pop() || "");
-async function loadWho() {
+function loadWho() {
   if (!HANDLE || HANDLE === "dad") return;
-  try { const w = await (await fetch("/api/u/" + encodeURIComponent(HANDLE))).json();
-    if (w && w.name) { document.getElementById("hdr").textContent = w.name.split(" ")[0] + "\u2019s Radio";
-      document.title = w.name.split(" ")[0] + "\u2019s Radio"; } } catch {}
+  document.getElementById("hdr").textContent = HANDLE + " Radio";   // the handle IS the station name
+  document.title = HANDLE + " Radio";
 }
 S.audio.preload = "none";
 
