@@ -177,6 +177,42 @@ SEED_CHANNELS = [
                             "3-thunderstorm-at-sea-sounds-for-sleeping-relaxing-thunder-rain-ocean-sea",
                             "JacquesRicherCountryRain", "aporee_11681_13735", "aporee_4389_5761"]},
     },
+    # ── the netlabel wing: golden-age CC netlabels, curated per channel and verified
+    #    (mp3s + explicit licenseurl) against the live API before shipping. Mostly by-nc
+    #    variants — fine for this personal tier; commercial_ok is recorded per track.
+    {
+        "slug": "ambient",
+        "name": "Ambient",
+        "description": "Drift music — Ambient Collective, laridae, Doc & Lena Selyanina. CC netlabels.",
+        "source": "cc",
+        "query": {"items": ["laridae031", "ambientcollective006", "SFIRE018", "laridae029",
+                            "amb_col_light", "ambcol_dark", "mt008", "wh146"]},
+    },
+    {
+        "slug": "dubtechno",
+        "name": "Dub Techno",
+        "description": "The Thinner/Autoplate catalog — deep, submerged, endless. CC netlabel canon.",
+        "source": "cc",
+        "query": {"items": ["thcomp001", "thn083", "apl020", "thn071", "thn057",
+                            "thn067", "thn054", "thn084", "thn068", "apl037"]},
+    },
+    {
+        "slug": "electronica",
+        "name": "Electronica",
+        "description": "Monotonik, Nullbomb, Vulpiano & friends — melodic IDM and braindance. CC netlabels.",
+        "source": "cc",
+        "query": {"items": ["mtcomp003", "nullbomb", "TAM033-Ronan_Dec", "MoxEarlyGanglions",
+                            "ca015_va_cs", "Vkrsnl038MirandaShvangiradzeTalkToMeEp",
+                            "Vkrsnl037CandlegravityAMomentForMyself"]},
+    },
+    {
+        "slug": "jazzhop",
+        "name": "Jazz-Hop",
+        "description": "Dusted Wax Kingdom & co — dusty jazz samples over downtempo beats. CC netlabels.",
+        "source": "cc",
+        "query": {"items": ["DWK123", "DWK149", "DWK217", "DWK127", "DWK037",
+                            "ca200_cjazz", "foot149", "foot090"]},
+    },
 ]
 
 _topup_locks: dict[str, threading.Lock] = {}
