@@ -186,6 +186,14 @@ public final class Player: ObservableObject {
         !now.url.isEmpty && favs.contains { $0.url == now.url }
     }
 
+    /// The art for what's playing RIGHT NOW: on tape/CD/mix, the playing
+    /// track's own record sleeve; nil means "fall back to channel art".
+    public var nowCoverURL: URL? {
+        guard source != .radio, let sh = show, sh.tracks.indices.contains(trackIndex),
+              let p = sh.tracks[trackIndex].coverPath else { return nil }
+        return URL(string: p, relativeTo: stationBase)?.absoluteURL
+    }
+
     public func toggleFavourite() {
         guard member != nil, !now.url.isEmpty else { return }
         if nowIsFavourite {

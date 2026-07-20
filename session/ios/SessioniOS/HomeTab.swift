@@ -129,8 +129,11 @@ struct HomeTab: View {
     }
 
     var heroArt: URL? {
-        if (player.isPlaying || player.status == .paused), player.source == .cd {
-            return player.currentAlbum?.coverURL(base: player.stationBase)
+        if player.isPlaying || player.status == .paused {
+            if let cover = player.nowCoverURL { return cover }
+            if player.source == .cd {
+                return player.currentAlbum?.coverURL(base: player.stationBase)
+            }
         }
         return player.current?.artURL(base: player.stationBase)
     }

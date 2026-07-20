@@ -1,5 +1,8 @@
 import SwiftUI
 import SessionCore
+import os
+
+let imgLog = Logger(subsystem: "run.jam-station.session", category: "images")
 
 // ── the popover ──────────────────────────────────────────────────────────
 
@@ -241,10 +244,22 @@ struct MacNetImage: View {
         }
         .task(id: url) {
             img = nil                          // never show the previous track's art
-            guard let url else { return }
-            if let (d, r) = try? await URLSession.shared.data(from: url),
-               (r as? HTTPURLResponse)?.statusCode == 200,
-               let ns = NSImage(data: d) { img = ns }
+            guard let url else {
+                imgLog.info("no url for tile")
+                return
+            }
+            do {
+                let (d, r) = try await URLSession.shared.data(from: url)
+                let code = (r as? HTTPURLResponse)?.statusCode ?? -1
+                if code == 200, let ns = NSImage(data: d) {
+                    img = ns
+                    imgLog.info("loaded \(url.lastPathComponent, privacy: .public) (\(d.count) bytes)")
+                } else {
+                    imgLog.error("failed \(url.absoluteString, privacy: .public) status=\(code) bytes=\(d.count)")
+                }
+            } catch {
+                imgLog.error("error \(url.absoluteString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 }
@@ -268,6 +283,7 @@ struct ArtTile: View {
 
     var artURL: URL? {
         if let b = player.browsed { return b.album.coverURL(base: player.stationBase) }
+        if let cover = player.nowCoverURL { return cover }   // the playing track's sleeve
         if player.source == .cd {
             return player.currentAlbum?.coverURL(base: player.stationBase)
         }

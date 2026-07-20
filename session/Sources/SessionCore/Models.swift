@@ -67,13 +67,17 @@ public struct ShowTrack: Decodable, Equatable, Identifiable {
     public let album: String
     public let url: String
     public let served: Bool
+    public let coverPath: String?    // the track's own record sleeve (library tracks)
     public var id: String { url }
 
-    enum CodingKeys: String, CodingKey { case title, artist, album, url, served }
+    enum CodingKeys: String, CodingKey {
+        case title, artist, album, url, served
+        case coverPath = "cover_url"
+    }
 
     public init(title: String, artist: String, album: String, url: String, served: Bool = false) {
         self.title = title; self.artist = artist; self.album = album
-        self.url = url; self.served = served
+        self.url = url; self.served = served; self.coverPath = nil
     }
 
     public init(from decoder: Decoder) throws {
@@ -82,6 +86,7 @@ public struct ShowTrack: Decodable, Equatable, Identifiable {
         artist = (try? c.decode(String.self, forKey: .artist)) ?? ""
         album = (try? c.decode(String.self, forKey: .album)) ?? ""
         url = (try? c.decode(String.self, forKey: .url)) ?? ""
+        coverPath = try? c.decode(String.self, forKey: .coverPath)
         // Postgres may hand this back as a bool or an int depending on the column
         if let b = try? c.decode(Bool.self, forKey: .served) { served = b }
         else if let i = try? c.decode(Int.self, forKey: .served) { served = i != 0 }

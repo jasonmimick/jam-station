@@ -288,6 +288,7 @@ struct PlayerSheet: View {
     }
 
     var artURL: URL? {
+        if let cover = player.nowCoverURL { return cover }   // the playing track's sleeve
         if player.source == .cd { return player.currentAlbum?.coverURL(base: player.stationBase) }
         return player.current?.artURL(base: player.stationBase)
     }
