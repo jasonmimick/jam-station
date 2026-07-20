@@ -36,7 +36,7 @@ def test_listeners_endpoint_anonymous_sees_empty_room(app_env):
     presence.stream_connect("Dad", "dad@example.com", "dead77")
     c = TestClient(app)
     d = c.get("/api/listeners").json()
-    assert d == {"count": 0, "listeners": []}    # soft gate, same spirit as the catalog
+    assert d == {"count": 0, "listeners": [], "online": []}   # soft gate, same spirit as the catalog
 
 
 def test_seen_tracks_open_apps_per_client(app_env, monkeypatch):
