@@ -63,19 +63,22 @@ def _meta(p: str) -> dict:
         "Artist - Title.mp3"                     (a loose file in a folder)
         "Artist - Album/07 Title.mp3"            (what rip-cd.sh lays down)
     Without the second, every ripped track came out titled "04 Bonnie & Slyde" with no artist
-    at all — a track number in the title and a blank name on the board."""
+    at all — a track number in the title and a blank name on the board.
+
+    A third form, for a Various-Artists mix where every track has its OWN artist:
+        "Various Artists - iSS.1/03 Pink Floyd - Speak to Me.mp3"
+    The leading track number is stripped FIRST, so what's left ("Pink Floyd - Speak to Me")
+    still splits cleanly into a per-track artist and title; the folder only supplies the album."""
     base = os.path.splitext(os.path.basename(p))[0]
     folder = os.path.basename(os.path.dirname(p))
-    artist, _, title = base.partition(" - ")
-    if not title:
-        artist, title = "", base
-    album = folder
-    m = re.match(r"^(\d{1,2})[ .\-_]+(.+)$", title)   # strip a leading track number
-    if m and not artist:
-        title = m.group(2)
-        a, sep, alb = folder.partition(" - ")          # "Artist - Album"
-        if sep:
-            artist, album = a.strip(), alb.strip()
+    # strip a leading track number ("07 ", "07. ", "07 - ") before splitting artist/title
+    m = re.match(r"^(\d{1,2})[ .\-_]+(.+)$", base)
+    core = (m.group(2) if m else base).strip()
+    fa, fsep, falb = folder.partition(" - ")           # "Artist - Album" folder, maybe
+    album = falb.strip() if fsep else folder
+    artist, sep, title = core.partition(" - ")
+    if not sep:                                        # no per-track artist — inherit the folder's
+        title, artist = core, (fa.strip() if fsep else "")
     return {
         # PERCENT-ENCODE. "…UFO Tofu/09 Life Without Elvis.mp3" is a fine FILENAME and an
         # illegal URL — a url cannot hold a raw space. Browsers paper over it; liquidsoap
