@@ -143,13 +143,10 @@ def _walk_root(rootid: str, root: str) -> list[dict]:
 
 _cache: dict = {"at": 0.0, "catalog": None}
 _cache_lock = threading.Lock()
+_walk_lock = threading.Lock()             # single-flight: one AFP walk at a time, ever
 
 
-def catalog(refresh: bool = False) -> dict:
-    with _cache_lock:
-        fresh = _cache["catalog"] is not None and time.time() - _cache["at"] < CATALOG_TTL
-        if fresh and not refresh:
-            return _cache["catalog"]
+def _do_walk() -> dict:
     tracks = []
     for rootid, root in ROOTS.items():
         if os.path.isdir(root):
@@ -165,6 +162,35 @@ def catalog(refresh: bool = False) -> dict:
     with _cache_lock:
         _cache.update(at=time.time(), catalog=cat)
     return cat
+
+
+def _refresh_async() -> None:
+    def run():
+        if _walk_lock.acquire(blocking=False):     # someone's already walking: fine
+            try:
+                _do_walk()
+            finally:
+                _walk_lock.release()
+    threading.Thread(target=run, daemon=True).start()
+
+
+def catalog(refresh: bool = False) -> dict:
+    """ALWAYS answers instantly from cache — a stale catalog beats a 40s AFP walk on
+    the request path (the walk used to run inline on TTL expiry; the brain times out
+    at 15s, so every expiry blanked the attic and piled up concurrent walks until the
+    server choked). Expiry/refresh now re-walks in ONE background thread; only the
+    very first call (cold boot, no cache yet) waits for the walk."""
+    with _cache_lock:
+        cached = _cache["catalog"]
+        stale = cached is None or time.time() - _cache["at"] >= CATALOG_TTL
+    if cached is None:
+        with _walk_lock:                  # cold boot: single-flight, others queue here
+            if _cache["catalog"] is None:
+                return _do_walk()
+        return _cache["catalog"]
+    if stale or refresh:
+        _refresh_async()
+    return cached
 
 
 def resolve_file(rootid: str, relpath: str) -> str | None:
@@ -188,9 +214,11 @@ _MIME = {".mp3": "audio/mpeg", ".flac": "audio/flac", ".ogg": "audio/ogg",
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "attic-server/1"
+    timeout = 75          # idle keep-alive connections must not hold threads forever
 
     def log_message(self, fmt, *args):     # one line per request, no reverse DNS
-        print(f"{self.address_string()} {fmt % args}", flush=True)
+        print(f"{time.strftime('%m-%d %H:%M:%S')} {self.address_string()} {fmt % args}",
+              flush=True)
 
     def _json(self, obj, code: int = 200) -> None:
         body = json.dumps(obj).encode()

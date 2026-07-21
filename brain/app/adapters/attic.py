@@ -57,9 +57,17 @@ def _catalog() -> dict:
         cat = r.json()
         _cache.update(at=now, ttl=CATALOG_TTL, catalog=cat)
     except Exception as e:
+        old = _cache["catalog"]
+        if old and old.get("tracks"):
+            # a fetch hiccup must not blank a working dial — serve the last-known
+            # catalog and try again after the negative TTL
+            log.warning("attic catalog fetch failed (%s) — serving stale", e)
+            _cache.update(at=now, ttl=NEG_TTL)
+            return old
         log.warning("attic catalog unreachable (%s) — vault stations off air", e)
         cat = {"categories": [], "tracks": []}
-        _cache.update(at=now, ttl=NEG_TTL, catalog=cat)
+        # no data yet (typically boot): retry quickly rather than sitting empty for a minute
+        _cache.update(at=now, ttl=5.0, catalog=cat)
     return cat
 
 
