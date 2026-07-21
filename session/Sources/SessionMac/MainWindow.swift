@@ -115,9 +115,10 @@ struct MainWindowView: View {
         case .records:
             RecordWall(t: t)
         case .attic:
+            // play in place — you stay in the crate, digging; the transport bar
+            // has the music, and Now Playing is a click away when YOU want it
             AtticGallery(t: t) { al in
-                player.browseAlbum(al)
-                dest = .stage
+                player.playAlbum(al)
             }
         case .favs:
             FavList(t: t)
