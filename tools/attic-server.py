@@ -49,13 +49,22 @@ GENRES_FILE = "_genres.json"
 
 def _ffmpeg() -> str | None:
     """ffmpeg for the WMA transcode. Not on launchd's PATH (same gotcha as docker) —
-    check the usual homes. Absent = .wma is served raw (radio can still decode it)."""
-    for p in (os.environ.get("ATTIC_FFMPEG", ""), "/usr/local/bin/ffmpeg",
-              "/opt/homebrew/bin/ffmpeg"):
-        if p and os.path.exists(p):
-            return p
+    check the usual homes, and PROBE each candidate: the mini had a broken leftover
+    Intel-brew ffmpeg whose mere existence made every transcode an empty 200. A
+    binary that can't print -version doesn't get to serve music. Probe failure =
+    .wma served raw (the radio's own decoder still works; browsers just skip it)."""
+    import subprocess
     from shutil import which
-    return which("ffmpeg")
+    for p in (os.environ.get("ATTIC_FFMPEG", ""), "/opt/homebrew/bin/ffmpeg",
+              "/usr/local/bin/ffmpeg", which("ffmpeg")):
+        if not p or not os.path.exists(p):
+            continue
+        try:
+            subprocess.run([p, "-version"], capture_output=True, timeout=10, check=True)
+            return p
+        except Exception:
+            print(f"attic-server: ignoring broken ffmpeg at {p}", flush=True)
+    return None
 
 
 FFMPEG = _ffmpeg()
