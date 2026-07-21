@@ -169,6 +169,8 @@ public final class Player: ObservableObject {
 
     @Published public private(set) var spots: [SpotResult] = []
     @Published public private(set) var genres: [GenreCount] = []
+    @Published public private(set) var vinyl: [VinylRecord] = []
+    @Published public private(set) var vinylSections: [GenreCount] = []
     @Published public private(set) var dialNow: [String: NowPlaying] = [:]
 
     public func refreshDial() async {
@@ -186,12 +188,16 @@ public final class Player: ObservableObject {
             favs = (try? await api.favourites()) ?? favs
             spots = (try? await api.spots()) ?? spots
             genres = (try? await api.genres()) ?? genres
+            vinyl = (try? await api.vinyl()) ?? vinyl
+            vinylSections = (try? await api.vinylSections()) ?? vinylSections
             await refreshChannels()               // private channels appear
         } else {
             albums = []                            // server CONFIRMED anonymous
             favs = []
             spots = []
             genres = []
+            vinyl = []
+            vinylSections = []
         }
     }
 

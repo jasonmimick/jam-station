@@ -7,7 +7,7 @@ import SessionCore
 /// visit, not permanent rails; the genre sections sit in the sidebar with
 /// MIX / TUNE IN one click away; the transport never leaves the bottom edge.
 enum MacDest: Hashable {
-    case stage, dial, shelf, favs, history, you
+    case stage, dial, shelf, records, favs, history, you
     case genre(String)
 }
 
@@ -112,6 +112,8 @@ struct MainWindowView: View {
                 dest = .stage
             }
             .id(g)      // fresh state per section
+        case .records:
+            RecordWall(t: t)
         case .favs:
             FavList(t: t)
         case .history:
@@ -136,6 +138,10 @@ struct Sidebar: View {
                 SideItem(label: "Now Playing", glyph: "▶", sel: dest == .stage, t: t) { dest = .stage }
                 SideItem(label: "The Dial", glyph: "◉", sel: dest == .dial, t: t) { dest = .dial }
                 SideItem(label: "The Shelf", glyph: "▤", sel: dest == .shelf, t: t) { dest = .shelf }
+                if !player.vinyl.isEmpty {
+                    SideItem(label: "The Records", glyph: "◉", sel: dest == .records, t: t,
+                             badge: "\(player.vinyl.count)") { dest = .records }
+                }
                 if player.member != nil {
                     SideItem(label: "Favourites", glyph: "♥", sel: dest == .favs, t: t,
                              glyphColor: t.red) { dest = .favs }
@@ -504,6 +510,175 @@ struct ShelfGallery: View {
                 }
             }
         }
+    }
+}
+
+/// The vinyl record wall — Jason's LP collection off Discogs. Catalog, not
+/// playback: browsing is the feature; a click opens the Discogs release.
+/// Playable twins arrive in phase 2 (DESIGN-vinyl.md).
+struct RecordWall: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    @State private var find = ""
+    @State private var section = ""
+    @AppStorage("wallView") var wallView = "grid"
+
+    var records: [VinylRecord] {
+        player.vinyl.filter { r in
+            (section.isEmpty || r.sections.contains(section))
+            && (find.isEmpty
+                || r.title.localizedCaseInsensitiveContains(find)
+                || r.artist.localizedCaseInsensitiveContains(find))
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(section.isEmpty ? "THE RECORDS" : section.uppercased())
+                    .font(.system(size: 12, weight: .heavy)).tracking(2)
+                    .foregroundStyle(t.ink)
+                TextField("search", text: $find)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .frame(maxWidth: 200)
+                    .background(t.board)
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
+                HStack(spacing: 0) {
+                    ForEach([("grid", "▦"), ("list", "☰")], id: \.0) { mode, glyph in
+                        Button {
+                            wallView = mode
+                        } label: {
+                            Text(glyph).font(.system(size: 12))
+                                .frame(width: 30, height: 26)
+                                .background(wallView == mode ? t.accent : t.panel)
+                                .foregroundStyle(wallView == mode ? t.onAccent : t.muted)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(t.line, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                Spacer()
+                Text("\(records.count) LPs · VINYL")
+                    .font(.system(size: 9, weight: .heavy)).tracking(1)
+                    .foregroundStyle(t.faint)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 12)
+            if !player.vinylSections.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        MacChipW(label: "ALL", on: section.isEmpty, t: t) { section = "" }
+                        ForEach(player.vinylSections) { s in
+                            MacChipW(label: "\(s.name.uppercased()) · \(s.count)",
+                                     on: section == s.name, t: t) {
+                                section = section == s.name ? "" : s.name
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                }
+                .padding(.bottom, 10)
+            }
+            if wallView == "list" {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(records) { r in
+                            Link(destination: r.discogsURL ?? player.stationBase) {
+                                HStack(spacing: 12) {
+                                    VinylTile(r: r, t: t).frame(width: 44, height: 44)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(r.title)
+                                            .font(.system(size: 13.5, weight: .semibold))
+                                            .foregroundStyle(t.ink).lineLimit(1)
+                                        Text(r.artist + (r.year.map { " · \($0)" } ?? ""))
+                                            .font(.system(size: 11.5))
+                                            .foregroundStyle(t.muted).lineLimit(1)
+                                    }
+                                    Spacer()
+                                    Text(r.styles.prefix(2).joined(separator: " · "))
+                                        .font(.system(size: 9, weight: .bold)).tracking(0.5)
+                                        .foregroundStyle(t.faint)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 7)
+                                .contentShape(Rectangle())
+                            }
+                            .overlay(alignment: .bottom) {
+                                Rectangle().fill(t.line).frame(height: 1).padding(.leading, 70)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 24)
+                }
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 18)], spacing: 22) {
+                        ForEach(records) { r in
+                            Link(destination: r.discogsURL ?? player.stationBase) {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    VinylTile(r: r, t: t)
+                                        .aspectRatio(1, contentMode: .fit)
+                                        .shadow(color: .black.opacity(0.45), radius: 12, y: 8)
+                                    Text(r.title)
+                                        .font(.system(size: 12.5, weight: .semibold))
+                                        .foregroundStyle(t.ink).lineLimit(1)
+                                        .padding(.top, 9)
+                                    Text(r.artist + (r.year.map { " · \($0)" } ?? ""))
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(t.muted).lineLimit(1)
+                                        .padding(.top, 1)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 18).padding(.bottom, 24)
+                }
+            }
+        }
+    }
+}
+
+struct MacChipW: View {
+    let label: String
+    let on: Bool
+    let t: Theme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 10, weight: .heavy)).tracking(0.5)
+                .padding(.horizontal, 11).padding(.vertical, 6)
+                .background(on ? t.accent : t.panel)
+                .foregroundStyle(on ? t.onAccent : t.muted)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(on ? t.accent : t.line, lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct VinylTile: View {
+    @EnvironmentObject var player: Player
+    let r: VinylRecord
+    let t: Theme
+
+    var body: some View {
+        ZStack {
+            let hue = Double(abs(r.title.hashValue % 360)) / 360.0
+            LinearGradient(
+                colors: [Color(hue: hue, saturation: 0.28, brightness: 0.32),
+                         Color(hue: hue, saturation: 0.36, brightness: 0.11)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+            Circle().stroke(.white.opacity(0.25), lineWidth: 2).padding(10)
+            Circle().fill(.white.opacity(0.25)).frame(width: 8, height: 8)
+            MacNetImage(url: r.coverURL(base: player.stationBase))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
 

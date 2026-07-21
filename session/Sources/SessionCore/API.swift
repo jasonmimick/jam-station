@@ -156,6 +156,16 @@ public struct StationAPI {
         }
     }
 
+    // ── the vinyl record wall (catalog only — DESIGN-vinyl.md) ──
+
+    public func vinyl() async throws -> [VinylRecord] {
+        try await get("api/vinyl")
+    }
+
+    public func vinylSections() async throws -> [GenreCount] {
+        try await get("api/vinyl/sections")
+    }
+
     // ── spot: photograph music in the wild ──
 
     public func spot(jpeg: Data) async throws -> SpotResult {

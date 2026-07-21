@@ -192,6 +192,45 @@ public struct HistoryRow: Decodable, Equatable, Identifiable {
     }
 }
 
+/// One LP on the record wall — catalog only; vinyl has no audio to stream.
+public struct VinylRecord: Decodable, Equatable, Identifiable {
+    public let id: Int
+    public let artist: String
+    public let title: String
+    public let year: Int?
+    public let styles: [String]
+    public let genres: [String]
+    public let coverPath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, artist, title, year, styles, genres
+        case coverPath = "cover_url"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(Int.self, forKey: .id)) ?? 0
+        artist = (try? c.decode(String.self, forKey: .artist)) ?? ""
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        year = try? c.decode(Int.self, forKey: .year)
+        styles = (try? c.decode([String].self, forKey: .styles)) ?? []
+        genres = (try? c.decode([String].self, forKey: .genres)) ?? []
+        coverPath = try? c.decode(String.self, forKey: .coverPath)
+    }
+
+    public func coverURL(base: URL) -> URL? {
+        guard let coverPath else { return nil }
+        return URL(string: coverPath, relativeTo: base)?.absoluteURL
+    }
+
+    public var discogsURL: URL? {
+        URL(string: "https://www.discogs.com/release/\(id)")
+    }
+
+    /// The wall's section membership: styles, genres as fallback.
+    public var sections: [String] { styles.isEmpty ? genres : styles }
+}
+
 public struct GenreCount: Decodable, Equatable, Identifiable {
     public let name: String
     public let count: Int

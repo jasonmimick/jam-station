@@ -7,6 +7,7 @@ final class Nav: ObservableObject {
     @Published var tab = "home"
     @Published var playerOpen = false
     @Published var shelfSection: String?   // a genre handoff to the Shelf view
+    @Published var shelfCrate: String?     // cds | vinyl handoff (iPad sidebar)
 }
 
 struct RootView: View {
@@ -152,7 +153,15 @@ struct PadSidebar: View {
                 }
                 PadSideItem(label: "The Shelf", glyph: "square.stack", sel: nav.tab == "shelf", t: t) {
                     nav.shelfSection = ""
+                    nav.shelfCrate = "cds"
                     nav.tab = "shelf"
+                }
+                if !player.vinyl.isEmpty {
+                    PadSideItem(label: "The Records", glyph: "opticaldisc", sel: false, t: t,
+                                badge: "\(player.vinyl.count)") {
+                        nav.shelfCrate = "vinyl"
+                        nav.tab = "shelf"
+                    }
                 }
                 PadSideItem(label: "You", glyph: "circle.circle", sel: nav.tab == "you", t: t) {
                     nav.tab = "you"
@@ -714,6 +723,7 @@ struct ShelfTab: View {
     let openPlayer: () -> Void
     @State private var find = ""
     @State private var section = ""          // "" = the whole shelf
+    @State private var crate = "cds"         // cds | vinyl — which wall you're facing
     @AppStorage("shelfView") var shelfView = "grid"
 
     var albums: [Album] {
@@ -736,6 +746,19 @@ struct ShelfTab: View {
     var body: some View {
         VStack(spacing: 0) {
             SignageHeader(t: t)
+            if !player.vinyl.isEmpty {
+                HStack(spacing: 7) {
+                    SectionChip(label: "SHELF · \(player.albums.count)",
+                                on: crate == "cds", t: t) { crate = "cds" }
+                    SectionChip(label: "RECORDS · \(player.vinyl.count)",
+                                on: crate == "vinyl", t: t) { crate = "vinyl" }
+                    Spacer()
+                }
+                .padding(.horizontal, 14).padding(.bottom, 8)
+            }
+            if crate == "vinyl" {
+                VinylWalliOS(t: t)
+            } else {
             if let rip = player.rip, rip.ripping {
                 HStack(spacing: 8) {
                     Circle().fill(t.red).frame(width: 7, height: 7)
@@ -916,13 +939,86 @@ struct ShelfTab: View {
                 }
                 }
             }
+            }
         }
         .background(t.board)
         .onChange(of: nav.shelfSection) { _, s in
-            if let s { section = s; nav.shelfSection = nil }
+            if let s { section = s; crate = "cds"; nav.shelfSection = nil }
+        }
+        .onChange(of: nav.shelfCrate) { _, c in
+            if let c { crate = c; nav.shelfCrate = nil }
         }
         .onAppear {
             if let s = nav.shelfSection { section = s; nav.shelfSection = nil }
+            if let c = nav.shelfCrate { crate = c; nav.shelfCrate = nil }
+        }
+    }
+}
+
+/// The vinyl wall on iOS — browse the LP collection; a tap opens the Discogs
+/// release. Catalog, not playback (playable twins are phase 2).
+struct VinylWalliOS: View {
+    @EnvironmentObject var player: Player
+    let t: IOSTheme
+    @State private var find = ""
+    @State private var section = ""
+
+    var records: [VinylRecord] {
+        player.vinyl.filter { r in
+            (section.isEmpty || r.sections.contains(section))
+            && (find.isEmpty
+                || r.title.localizedCaseInsensitiveContains(find)
+                || r.artist.localizedCaseInsensitiveContains(find))
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            FindField(text: $find, prompt: "search the records", t: t)
+            if !player.vinylSections.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        SectionChip(label: "ALL", on: section.isEmpty, t: t) { section = "" }
+                        ForEach(player.vinylSections) { s in
+                            SectionChip(label: "\(s.name.uppercased()) · \(s.count)",
+                                        on: section == s.name, t: t) {
+                                section = section == s.name ? "" : s.name
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                }
+                .padding(.bottom, 10)
+            }
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 11)], spacing: 14) {
+                    ForEach(records) { r in
+                        Link(destination: r.discogsURL ?? player.stationBase) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ZStack {
+                                    let hue = Double(abs(r.title.hashValue % 360)) / 360.0
+                                    LinearGradient(
+                                        colors: [Color(hue: hue, saturation: 0.28, brightness: 0.32),
+                                                 Color(hue: hue, saturation: 0.36, brightness: 0.11)],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing)
+                                    Circle().stroke(.white.opacity(0.25), lineWidth: 2).padding(10)
+                                    Circle().fill(.white.opacity(0.25)).frame(width: 7, height: 7)
+                                    NetImage(url: r.coverURL(base: player.stationBase))
+                                }
+                                .aspectRatio(1, contentMode: .fit)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                Text(r.title)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(t.ink).lineLimit(1).padding(.top, 6)
+                                Text(r.artist + (r.year.map { " · \($0)" } ?? ""))
+                                    .font(.system(size: 10.5)).foregroundStyle(t.muted).lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 14).padding(.bottom, 20)
+            }
         }
     }
 }
