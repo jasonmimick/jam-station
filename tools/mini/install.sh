@@ -31,6 +31,9 @@ swap() {   # label  -- retire the nohup orphan, then hand the job to launchd
 # the CD-watch helper that holds Full Disk Access (see jam-cdd.c) — build it before its agent
 clang -O2 -o ~/bin/jam-cdd "$HERE/jam-cdd.c" && echo "  built ~/bin/jam-cdd"
 
+# the attic shelf-server helper — same FDA story, for the AFP vault (see jam-atticd.c)
+clang -O2 -o ~/bin/jam-atticd "$HERE/jam-atticd.c" && echo "  built ~/bin/jam-atticd"
+
 # ── keep the GUI session fully live for ripping ──────────────────────────────
 # caffeinate (run.jam.awake) stops SLEEP but NOT the screensaver — and the screensaver engaging
 # is what makes a rip "get funky when the screen locks." Disable it outright (idleTime 0), never

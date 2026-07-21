@@ -6,11 +6,13 @@
   <!-- The shelf server: serves the AFP-mounted TC vault to jam-brain over HTTP
        (host.docker.internal:8517). Long-running, so KeepAlive. If the TC isn't
        mounted it serves an empty catalog (vault stations OFF AIR) — it never
-       needs the mount to start. -->
+       needs the mount to start.
+       Runs via ~/bin/jam-atticd (NOT python3 directly): launchd jobs are silently
+       denied the AFP mount unless their program holds Full Disk Access, and the
+       helper binary is the thing you grant it to — the jam-cdd pattern. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
-    <string>/Users/jason/business/jam-station/tools/attic-server.py</string>
+    <string>/Users/jason/bin/jam-atticd</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

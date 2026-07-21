@@ -39,8 +39,26 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("ATTIC_PORT", "8517"))
 CATALOG_TTL = 15 * 60
-AUDIO_EXTENSIONS = (".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".wav")
+# .wma included: the vault is ~7,400 old Windows Media rips. Browsers can't play WMA,
+# so /file transcodes it to MP3 on the fly (see _ffmpeg below). .m4p (DRM'd iTunes)
+# is deliberately absent — nothing can legally decode it.
+AUDIO_EXTENSIONS = (".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".wav", ".wma")
+TRANSCODE_EXTENSIONS = (".wma",)
 GENRES_FILE = "_genres.json"
+
+
+def _ffmpeg() -> str | None:
+    """ffmpeg for the WMA transcode. Not on launchd's PATH (same gotcha as docker) —
+    check the usual homes. Absent = .wma is served raw (radio can still decode it)."""
+    for p in (os.environ.get("ATTIC_FFMPEG", ""), "/usr/local/bin/ffmpeg",
+              "/opt/homebrew/bin/ffmpeg"):
+        if p and os.path.exists(p):
+            return p
+    from shutil import which
+    return which("ffmpeg")
+
+
+FFMPEG = _ffmpeg()
 
 
 def parse_roots(spec: str) -> dict[str, str]:
@@ -185,8 +203,11 @@ class Handler(BaseHTTPRequestHandler):
         full = resolve_file(rootid, urllib.parse.unquote(rel)) if sep else None
         if not full:
             return self._json({"error": "no such file"}, 404)
+        ext = os.path.splitext(full)[1].lower()
+        if ext in TRANSCODE_EXTENSIONS and FFMPEG:
+            return self._transcode(full)
         size = os.path.getsize(full)
-        mime = _MIME.get(os.path.splitext(full)[1].lower(), "application/octet-stream")
+        mime = _MIME.get(ext, "application/octet-stream")
 
         start, end = 0, size - 1
         rng = self.headers.get("Range", "")
@@ -223,6 +244,33 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
                 remaining -= len(chunk)
+
+    def _transcode(self, full: str) -> None:
+        """Stream a WMA as MP3, transcoded live. No Content-Length (we don't know it)
+        and no Range (there's nothing to seek in) — connection-close delimits the body,
+        which every client here (browsers, liquidsoap, httpx) handles. One ffmpeg per
+        concurrent listener; audio transcode is a rounding error on the M1."""
+        import subprocess
+        self.send_response(200)
+        self.send_header("Content-Type", "audio/mpeg")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        proc = subprocess.Popen(
+            [FFMPEG, "-v", "error", "-i", full, "-f", "mp3", "-codec:a", "libmp3lame",
+             "-b:a", "256k", "-"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        try:
+            while True:
+                chunk = proc.stdout.read(1 << 16)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        finally:
+            proc.stdout.close()
+            if proc.poll() is None:
+                proc.kill()           # listener hung up mid-song: stop burning CPU
+            proc.wait()
 
 
 def main() -> None:
