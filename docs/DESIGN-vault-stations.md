@@ -101,14 +101,14 @@ GET /health                {ok, roots: {id: {present, files}}}
   music is a config row, not new code.
 
 ## Build checklist
-- [ ] `tools/attic-server.py` + `run.attic.server.plist`, verify `/catalog.json` on the mini
+- [x] `tools/attic-server.py` + `run.attic.server.plist`, verify `/catalog.json` on the mini
 - [ ] `tools/attic-genres.py` → `_genres.json`, verify categories appear in the catalog
-- [ ] `brain/app/adapters/attic.py` + channels/main wiring + `/api/mix` + web UI tune + tests
-- [ ] container→host reach confirmed; `ATTIC_SERVER_URL` set on jam-brain; deploy
-- [ ] create **The Vault** + **Artist Spotlight**; `vault-*` category channels sync at boot
-- [ ] verify: private on the dial, channels.liq stable (exactly +2 lines once), audio plays
-- [ ] AGENTS.md updated (adapter built, contract, env var, flap gotcha)
-- [ ] drive-08's Music root added once drive-03 works
+- [x] `brain/app/adapters/attic.py` + channels/main wiring + `/api/mix` + web UI tune + tests
+- [x] container→host reach confirmed; `ATTIC_SERVER_URL` set on jam-brain; deploy
+- [x] create **The Vault** + **Artist Spotlight**; `vault-*` category channels sync at boot
+- [x] verify: private on the dial, channels.liq stable (exactly +2 lines once), audio plays
+- [x] AGENTS.md updated (adapter built, contract, env var, flap gotcha)
+- [x] drive-08's Music root added once drive-03 works (`Old Laptop/Music`, 7,311 files)
 
 ## Open items
 - AFP mount doesn't survive reboot (launchd mount TODO — separate from this build; the

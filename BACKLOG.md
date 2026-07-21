@@ -46,6 +46,13 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 - [ ] **launchd services.** The cloudflared tunnel and the mini's slab daemon both
       run under `nohup`. **A reboot takes the station down** until someone SSHes in.
+      *2026-07-20: attic-server joined the nohup club* — its launchd agent + `~/bin/jam-atticd`
+      are installed and ready, but **Jason must grant Full Disk Access to `~/bin/jam-atticd`**
+      (System Settings → Privacy & Security → Full Disk Access; launchd is silently denied the
+      AFP vault without it, exactly like jam-cdd). Then:
+      `pkill -f attic-server.py && launchctl load ~/Library/LaunchAgents/run.attic.server.plist`.
+      Also still TODO: launchd auto-mount for the TC AFP share itself (a reboot unmounts the
+      vault → vault stations OFF AIR until `mount_afp`).
 
 ## Known issues
 

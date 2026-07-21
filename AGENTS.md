@@ -241,6 +241,13 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   channels.liq (= a jam-radio restart) and stations read OFF AIR — that's degradation, not a
   bug. NEVER expose port 8517 through the tunnel; the `vault-` slug prefix belongs to
   `sync_attic_channels` (it retires strays — The Vault is `vault`, Spotlight is `spotlight`).
+  The vault is ~7,400 **WMA** rips: browsers can't play WMA, so attic-server transcodes
+  wma→mp3 live via **`/opt/homebrew/bin/ffmpeg`** (the `/usr/local/bin` one is a BROKEN
+  Intel-brew leftover — the server probes `-version` before trusting any candidate; a broken
+  ffmpeg = wma served raw). launchd is silently DENIED the AFP mount without Full Disk
+  Access — `~/bin/jam-atticd` (the jam-cdd pattern, built by install.sh) is the FDA-holding
+  wrapper; `run.attic.server.plist` runs it. iTunes-library nesting
+  (`iTunes/iTunes Media/Music/...`) is stripped before Artist/Album derivation.
 - liquidsoap is pinned to `savonet/liquidsoap:v2.2.5`. Its scripting language breaks
   between minor versions — if you bump the pin, re-run `--check` and expect churn.
 - `liquidsoap --check` also RUNS top-level code; with no brain reachable the script
