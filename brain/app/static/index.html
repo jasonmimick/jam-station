@@ -354,6 +354,12 @@
   .nptitle { font-size:33px; line-height:1.05; font-weight:600; letter-spacing:-.022em;
     margin:15px 0 0; color:var(--ink); overflow-wrap:anywhere; transition:opacity .26s ease; }
   .nptitle.swap { opacity:0; }
+  .sitebanner { display:flex; gap:10px; align-items:center; justify-content:center;
+    padding:8px 40px 8px 14px; background:var(--yellow); color:var(--on-yellow);
+    font-size:13px; font-weight:600; position:relative; text-align:center; }
+  .sitebanner button { position:absolute; right:10px; top:50%; transform:translateY(-50%);
+    border:0; background:transparent; color:inherit; font-size:17px; cursor:pointer;
+    line-height:1; padding:4px; }
   .byline { margin-top:9px; font-size:15px; font-weight:500; color:var(--ink); }
   .byline .sm { color:var(--muted); font-weight:400; }
   .byline .bylnk { border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer;
@@ -558,6 +564,10 @@
 </style>
 </head>
 <body>
+  <div id="siteBanner" class="sitebanner" style="display:none" role="status">
+    <span id="bannerText"></span>
+    <button id="bannerX" aria-label="dismiss">×</button>
+  </div>
   <header>
     <h1><svg class="mark" viewBox="0 0 76 64" width="30" height="26" aria-label="jam-station"><path d="M0 6 h56 l20 26 -20 26 H0 z" fill="currentColor"/><path d="M36 14 L22 38 h9 l-3 16 L50 32 H38 z" fill="var(--yellow)"/><rect y="30" width="76" height="1.6" fill="var(--yellow)" opacity=".18"/></svg>JAM·STATION</h1>
     <div class="modes">
@@ -814,6 +824,20 @@
                 letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Add person</button>
         <div id="ownResult" style="margin-top:12px"></div>
         <div id="ownList" style="margin-top:8px"></div>
+
+        <div class="lbl" style="margin:18px 0 6px">Site banner</div>
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 8px;line-height:1.5">
+          Shown to everyone at the top of the page — deploy heads-ups, news. Clear to take it down.</p>
+        <input id="ownBanner" placeholder="e.g. Working on the station tonight — brief glitches possible"
+               style="width:100%;padding:10px;margin-bottom:8px">
+        <div style="display:flex;gap:8px">
+          <button id="ownBannerSet" style="flex:1;padding:10px;border:0;border-radius:2px;
+                  background:var(--yellow);color:var(--on-yellow);font:inherit;font-weight:800;
+                  letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Set</button>
+          <button id="ownBannerClear" style="flex:1;padding:10px;border:1px solid var(--line);
+                  border-radius:2px;background:transparent;color:var(--ink);font:inherit;
+                  font-weight:600;cursor:pointer">Clear</button>
+        </div>
       </div>
 
       <div style="display:flex;gap:8px;margin-top:16px">
@@ -977,6 +1001,22 @@ S.audio.addEventListener("timeupdate", () => {
 });
 
 /* ── departures ──────────────────────────────────────────────────────────── */
+/* ── site banner: deploy notices + news, owner-set, dismiss remembers the TEXT
+      (a new message shows again even if an old one was dismissed) ─────────── */
+async function loadBanner() {
+  let b; try { b = await (await fetch("/api/banner")).json(); } catch { return; }
+  const el = $("siteBanner");
+  if (b.text && localStorage.getItem("jam-banner-seen") !== b.text) {
+    $("bannerText").textContent = b.text; el.dataset.text = b.text; el.style.display = "";
+  } else el.style.display = "none";
+}
+$("bannerX").onclick = () => {
+  localStorage.setItem("jam-banner-seen", $("siteBanner").dataset.text || "");
+  $("siteBanner").style.display = "none";
+};
+loadBanner();
+setInterval(loadBanner, 60000);   // an active session learns about a deploy within a minute
+
 async function loadChannels() {
   try { S.channels = await (await fetch("/api/channels")).json(); } catch { return; }
   renderStations();
@@ -2172,6 +2212,15 @@ function sentNote(d) {   // did the invite email go out? say so either way
     ? `<p style="font-size:12.5px;color:var(--green,#3fbf6f);margin:0 0 8px">✉ Emailed ${esc(email)} their link + passcode.</p>`
     : `<p style="font-size:12.5px;color:var(--red);margin:0 0 8px">Email didn't send — text them the card below.</p>`;
 }
+async function setBanner(text) {
+  const r = await fetch("/api/owner/banner", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+  if (r.ok) { localStorage.removeItem("jam-banner-seen"); loadBanner(); }
+  else alert("Couldn't set the banner.");
+}
+$("ownBannerSet").onclick = () => { const t = $("ownBanner").value.trim(); if (t) setBanner(t); };
+$("ownBannerClear").onclick = () => { $("ownBanner").value = ""; setBanner(""); };
+
 $("ownAdd").onclick = async () => {
   const name = $("ownName").value.trim(); if (!name) return;
   const r = await fetch("/api/owner/add", { method: "POST", headers: {"Content-Type":"application/json"},

@@ -47,7 +47,59 @@ app = FastAPI(title="jam-station brain", lifespan=lifespan)
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    """Machine-readable station health — agents and monitors check here.
+    `ok` keeps its original meaning (the brain is up and its DB answers) so every
+    existing `curl /health` verify keeps working; the rest is informational:
+    icecast + shelf-server reachability ride the same caches the app already
+    maintains, so this endpoint stays cheap enough to poll."""
+    out = {"ok": True, "db": True, "icecast": False, "shelf": None, "channels": 0}
+    try:
+        out["channels"] = len(channels.list_channels())
+    except Exception:
+        out["ok"] = out["db"] = False
+    try:
+        out["icecast"] = bool(channels._icecast_on_air())
+    except Exception:
+        pass
+    if config.ATTIC_SERVER_URL:
+        try:
+            from .adapters import attic
+            out["shelf"] = bool(attic._catalog().get("tracks"))
+        except Exception:
+            out["shelf"] = False
+    try:
+        rows = db.query("SELECT value FROM settings WHERE key='banner'")
+        out["banner"] = rows[0]["value"] if rows else ""
+    except Exception:
+        pass
+    return out
+
+
+@app.get("/api/banner")
+def api_banner():
+    """The site banner, public — deploy notices, news. Empty text = no banner."""
+    rows = db.query("SELECT value, updated_at FROM settings WHERE key='banner'")
+    if not rows or not rows[0]["value"]:
+        return {"text": ""}
+    return {"text": rows[0]["value"], "updated_at": rows[0]["updated_at"]}
+
+
+class BannerSet(BaseModel):
+    text: str = ""
+
+
+@app.post("/api/owner/banner")
+def api_owner_banner(body: BannerSet, request: Request):
+    """Owner sets (or clears, with empty text) the site banner."""
+    if not _is_owner(request):
+        raise HTTPException(403, "owner only")
+    text = body.text.strip()[:300]
+    db.execute(
+        "INSERT INTO settings(key, value, updated_at) "
+        "VALUES('banner', ?, to_char(now() AT TIME ZONE 'utc','YYYY-MM-DD HH24:MI:SS')) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+        (text,))
+    return {"ok": True, "text": text}
 
 
 # A phone and a desktop want genuinely different apps, not one page bent to fit both — the

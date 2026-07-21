@@ -38,6 +38,11 @@ from . import config
 _NOW = "to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS')"
 
 SCHEMA = f"""
+CREATE TABLE IF NOT EXISTS settings(
+  key TEXT PRIMARY KEY,             -- owner-set station state: 'banner' etc
+  value TEXT DEFAULT '',
+  updated_at TEXT DEFAULT ({_NOW})
+);
 CREATE TABLE IF NOT EXISTS channels(
   slug TEXT PRIMARY KEY,
   name TEXT NOT NULL,
