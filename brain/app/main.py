@@ -478,6 +478,20 @@ def api_attic_albums(request: Request, response: Response):
     return attic.list_albums()
 
 
+@app.get("/api/attic/artist")
+def api_attic_artist(request: Request, name: str, count: int = 60):
+    """Play an artist: everything of theirs in the vault, shuffled, show-shaped —
+    the 'I like this song, give me more of them' jump from a vault station."""
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    from .adapters import attic
+    tracks = attic.artist_mix(name, count)
+    if not tracks:
+        raise HTTPException(404, f"nothing by {name!r} in the attic")
+    return {"channel": "mix", "album": f"{name} — from the attic", "artist": name,
+            "tracks": tracks, "playing": -1}
+
+
 @app.get("/api/attic/cover")
 def api_attic_cover(request: Request, artist: str, album: str, k: str = ""):
     """Album art for vault tracks, fetched LAZILY: the vault has no curated covers and

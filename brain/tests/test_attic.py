@@ -205,6 +205,19 @@ def test_attic_albums_api_and_album_door(shelf):
         assert show["tracks"] and all(t["url"].startswith("/attic/") for t in show["tracks"])
 
 
+def test_artist_mix_and_api(shelf):
+    mix = attic.artist_mix("miles davis")                # case-insensitive, whole catalog
+    assert len(mix) == 6 and all(t["artist"] == "Miles Davis" for t in mix)
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as client:
+        assert client.get("/api/attic/artist", params={"name": "Miles Davis"}).status_code == 403
+        _member_cookie(client)
+        show = client.get("/api/attic/artist", params={"name": "Miles Davis"}).json()
+        assert len(show["tracks"]) == 6 and show["album"] == "Miles Davis — from the attic"
+        assert client.get("/api/attic/artist", params={"name": "Nobody"}).status_code == 404
+
+
 def test_api_mix_dispatches_by_source(shelf):
     from fastapi.testclient import TestClient
     from app.main import app

@@ -156,6 +156,14 @@ def album_tracks(dir_key: str) -> list[dict]:
     return [_track(t) for t in ts]
 
 
+def artist_mix(name: str, count: int = 60) -> list[dict]:
+    """Everything by one artist, shuffled — 'play that artist' from a track you liked.
+    Show-shaped by the caller, same as build_mix."""
+    tracks = [_track(t) for t in _filtered({"artist": name})]
+    random.shuffle(tracks)
+    return tracks[:max(1, min(count, 200))]
+
+
 def categories() -> list[str]:
     """The sections this shelf server declared it wants as channels."""
     return list(_catalog().get("categories") or [])
