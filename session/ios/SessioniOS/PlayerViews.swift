@@ -26,9 +26,22 @@ struct AirPlayButton: UIViewRepresentable {
 /// The floating pill above the tab bar.
 struct MiniPlayer: View {
     @EnvironmentObject var player: Player
-    let t: IOSTheme
+    @Environment(\.colorScheme) var scheme
+    @AppStorage("accent") var accentHex = "#FFD200"
+    @AppStorage("theme") var themePref = "auto"
+    @AppStorage("dance") var dance = false
     var bare = false           // true inside tabViewBottomAccessory (system draws the chrome)
     let open: () -> Void
+
+    /// The accessory renders in its OWN environment (system appearance, not the
+    /// app's theme override) — so the pill derives its theme itself, honoring
+    /// the in-app choice, instead of trusting a colour set computed elsewhere.
+    var t: IOSTheme {
+        let s: ColorScheme = themePref == "dark" ? .dark
+                           : themePref == "light" ? .light : scheme
+        return IOSTheme.current(s, accentHex: accentHex,
+                                dance: dance && player.status == .playing ? player.dancePhase : nil)
+    }
 
     var body: some View {
         HStack(spacing: 10) {

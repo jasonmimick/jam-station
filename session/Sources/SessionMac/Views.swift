@@ -35,6 +35,10 @@ struct PopoverView: View {
         .frame(width: 390)
         .background(t.board)
         .preferredColorScheme(themePref == "dark" ? .dark : themePref == "light" ? .light : nil)
+        // MenuBarExtra windows ignore preferredColorScheme — force the resolved
+        // scheme into the environment so the popover follows the UX choice
+        .environment(\.colorScheme, themePref == "dark" ? .dark
+                     : themePref == "light" ? .light : scheme)
         .onAppear { Task { await player.refreshChannels() } }
     }
 }

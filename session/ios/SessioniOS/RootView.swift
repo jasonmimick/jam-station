@@ -39,7 +39,7 @@ struct RootView: View {
     @ViewBuilder func withMini<V: View>(_ v: V) -> some View {
         v.safeAreaInset(edge: .bottom) {
             if player.status != .idle {
-                MiniPlayer(t: t) { openPlayer() }
+                MiniPlayer { openPlayer() }
             }
         }
     }
@@ -63,7 +63,11 @@ struct RootView: View {
                 }
                 .tabViewBottomAccessory {
                     if player.status != .idle {
-                        MiniPlayer(t: t, bare: true) { openPlayer() }
+                        MiniPlayer(bare: true) { openPlayer() }
+                            // the accessory hosts its own environment — repeat the
+                            // app's theme override so its chrome matches the UX
+                            .preferredColorScheme(themePref == "dark" ? .dark
+                                                  : themePref == "light" ? .light : nil)
                     }
                 }
             } else {
@@ -117,7 +121,7 @@ struct PadRoot: View {
             .frame(maxWidth: .infinity)
             .safeAreaInset(edge: .bottom) {
                 if player.status != .idle {
-                    MiniPlayer(t: t) { openPlayer() }
+                    MiniPlayer { openPlayer() }
                 }
             }
         }
