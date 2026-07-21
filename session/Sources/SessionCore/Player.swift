@@ -23,6 +23,21 @@ public final class Player: ObservableObject {
     @Published public private(set) var show: Show?
     @Published public private(set) var trackIndex = -1
     @Published public private(set) var member: String?      // signed-in name, nil = anonymous
+    @Published public private(set) var memberEmail: String?
+
+    /// The member's personal-radio handle — the server's rule, mirrored:
+    /// the email local part, lowercased, URL-safe characters only.
+    public var memberHandle: String? {
+        guard let email = memberEmail, let local = email.lowercased()
+            .split(separator: "@").first else { return nil }
+        let safe = local.unicodeScalars.filter {
+            CharacterSet.lowercaseLetters.contains($0)
+            || CharacterSet.decimalDigits.contains($0)
+            || "._+-".unicodeScalars.contains($0)
+        }
+        let h = String(String.UnicodeScalarView(safe)).prefix(48)
+        return h.isEmpty ? nil : String(h)
+    }
     @Published public private(set) var albums: [Album] = [] // the shelf (empty when anonymous)
     @Published public private(set) var currentAlbum: Album?
     @Published public private(set) var rip: RipStatus?      // LISTEN AND RIP, live
@@ -162,9 +177,10 @@ public final class Player: ObservableObject {
 
     public func refreshMembership() async {
         // a network hiccup must NOT masquerade as a sign-out and wipe the shelf
-        let result: String?
+        let result: StationAPI.Whoami?
         do { result = try await api.me() } catch { return }       // offline: keep current state
-        member = result
+        member = result?.name
+        memberEmail = result?.email
         if member != nil {
             albums = (try? await api.albums()) ?? albums
             favs = (try? await api.favourites()) ?? favs
@@ -233,6 +249,24 @@ public final class Player: ObservableObject {
         history = (try? await api.history()) ?? []
     }
 
+    /// Owner drops a photo on a record; the browsed/playing album refreshes so
+    /// the strip shows the new picture immediately.
+    public func uploadAlbumArt(dir: String, type: String, jpeg: Data) async -> Bool {
+        do { try await api.uploadAlbumArt(dir: dir, type: type, jpeg: jpeg) }
+        catch { return false }
+        if let fresh = try? await api.album(dir: dir) {
+            if browsed?.album.dir == dir, let al = browsed?.album {
+                browsed = (al, fresh)
+            } else if currentAlbum?.dir == dir {
+                let idx = trackIndex
+                show = fresh
+                trackIndex = idx        // display only — playback untouched
+            }
+        }
+        albums = (try? await api.albums()) ?? albums
+        return true
+    }
+
     // ── sleep timer ──────────────────────────────────────────────────────
 
     @Published public private(set) var sleepAt: Date?
@@ -258,6 +292,7 @@ public final class Player: ObservableObject {
     public func signOut() async {
         await api.signOut()
         member = nil
+        memberEmail = nil
         albums = []
         if source == .cd { setSource(.radio) }
         await refreshChannels()

@@ -711,6 +711,21 @@ struct SettingsPane: View {
                 Text("MEMBERS").font(.system(size: 9, weight: .heavy)).tracking(2.2)
                     .foregroundStyle(t.faint)
                 if let name = player.member {
+                    if let handle = player.memberHandle {
+                        HStack(spacing: 8) {
+                            Text("YOUR RADIO").font(.system(size: 9, weight: .heavy)).tracking(1.5)
+                                .foregroundStyle(t.faint)
+                            Link(player.stationBase.host.map { "\($0)/\(handle)" } ?? handle,
+                                 destination: player.stationBase.appendingPathComponent(handle))
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(t.blue)
+                            Spacer()
+                            Link("GUIDE ↗", destination: player.stationBase.appendingPathComponent("guide"))
+                                .font(.system(size: 10, weight: .heavy))
+                                .foregroundStyle(t.muted)
+                        }
+                        .padding(.bottom, 4)
+                    }
                     HStack {
                         Text("signed in — \(name)")
                             .font(.system(size: 12)).foregroundStyle(t.ink)

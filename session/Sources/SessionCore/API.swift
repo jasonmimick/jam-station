@@ -54,13 +54,18 @@ public struct StationAPI {
     // ── membership (the session cookie lives in HTTPCookieStorage and
     //    persists across launches — no token scheme, same as the web) ──
 
+    public struct Whoami {
+        public let name: String
+        public let email: String
+    }
+
     /// THROWS on network failure — a dropped packet is not a sign-out. Only a
     /// successful response saying "user: null" means anonymous.
-    public func me() async throws -> String? {
+    public func me() async throws -> Whoami? {
         struct Me: Decodable { let user: User? }
-        struct User: Decodable { let name: String? }
+        struct User: Decodable { let name: String?; let email: String? }
         let me: Me = try await get("api/me")
-        return me.user.map { $0.name ?? "member" }
+        return me.user.map { Whoami(name: $0.name ?? "member", email: $0.email ?? "") }
     }
 
     /// One box: the brain tries the input as an access code, then a passphrase.
@@ -125,6 +130,30 @@ public struct StationAPI {
 
     public func removeFavourite(url: String) async {
         _ = try? await post("api/favourites/remove", json: ["url": url])
+    }
+
+    /// Owner drops a photo on an album: type "" (or front/cover) = the front
+    /// cover; anything else (tracklist, back, disc…) is a typed companion image.
+    public func uploadAlbumArt(dir: String, type: String, jpeg: Data) async throws {
+        let boundary = "session-art-\(UUID().uuidString)"
+        var req = URLRequest(url: base.appendingPathComponent("api/library/cover"))
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        func field(_ name: String, _ value: String) {
+            body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8))
+        }
+        field("dir", dir)
+        field("type", type)
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"art.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".utf8))
+        body.append(jpeg)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        req.httpBody = body
+        req.timeoutInterval = 60
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
     }
 
     // ── spot: photograph music in the wild ──

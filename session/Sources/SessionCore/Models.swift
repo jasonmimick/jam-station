@@ -264,16 +264,36 @@ public struct RipStatus: Decodable, Equatable {
     public var ripping: Bool { state == "ripping" }
 }
 
+public struct AlbumImage: Decodable, Equatable, Identifiable {
+    public let type: String        // front / tracklist / back / disc / …
+    public let url: String
+    public var id: String { url }
+
+    enum CodingKeys: String, CodingKey { case type, url }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = (try? c.decode(String.self, forKey: .type)) ?? ""
+        url = (try? c.decode(String.self, forKey: .url)) ?? ""
+    }
+
+    public func imageURL(base: URL) -> URL? {
+        URL(string: url, relativeTo: base)?.absoluteURL
+    }
+}
+
 public struct Show: Decodable, Equatable {
     public let channel: String
     public let album: String
     public let tracks: [ShowTrack]
     public let playing: Int
+    public let images: [AlbumImage]   // the record's photo strip (album shows)
 
-    enum CodingKeys: String, CodingKey { case channel, album, tracks, playing }
+    enum CodingKeys: String, CodingKey { case channel, album, tracks, playing, images }
 
     public init(channel: String, album: String, tracks: [ShowTrack], playing: Int = -1) {
         self.channel = channel; self.album = album; self.tracks = tracks; self.playing = playing
+        self.images = []
     }
 
     public init(from decoder: Decoder) throws {
@@ -282,5 +302,6 @@ public struct Show: Decodable, Equatable {
         album = (try? c.decode(String.self, forKey: .album)) ?? ""
         tracks = (try? c.decode([ShowTrack].self, forKey: .tracks)) ?? []
         playing = (try? c.decode(Int.self, forKey: .playing)) ?? -1
+        images = (try? c.decode([AlbumImage].self, forKey: .images)) ?? []
     }
 }

@@ -356,10 +356,16 @@ let SHELF_SECTIONS = ["Jazz", "Blues", "Classical", "Rock", "Folk", "Country",
 
 struct AlbumSectionsModifier: ViewModifier {
     @EnvironmentObject var player: Player
+    @Environment(\.colorScheme) var scheme
+    @AppStorage("accent") var accentHex = "#FFD200"
     let al: Album
+    @State private var showPhotos = false
 
     func body(content: Content) -> some View {
         content.contextMenu {
+            Button {
+                showPhotos = true
+            } label: { Label("Photos…", systemImage: "photo.on.rectangle") }
             Menu("Set section" + (al.genres.isEmpty ? "" : " (\(al.genres.joined(separator: ", ")))")) {
                 ForEach(SHELF_SECTIONS, id: \.self) { s in
                     Button {
@@ -376,6 +382,9 @@ struct AlbumSectionsModifier: ViewModifier {
                     player.setAlbumGenres(al, genres: [])
                 }
             }
+        }
+        .sheet(isPresented: $showPhotos) {
+            AlbumPhotosView(album: al, t: IOSTheme.current(scheme, accentHex: accentHex))
         }
     }
 }
@@ -1032,6 +1041,36 @@ struct YouTab: View {
                                             .foregroundStyle(t.muted).lineLimit(1)
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+                if player.member != nil, let handle = player.memberHandle {
+                    Section("Your radio") {
+                        let url = player.stationBase.appendingPathComponent(handle)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Your personal dial")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(t.ink)
+                                Text(url.absoluteString.replacingOccurrences(of: "https://", with: ""))
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(t.muted)
+                            }
+                            Spacer()
+                            ShareLink(item: url) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(t.accent)
+                            }
+                        }
+                        Link(destination: player.stationBase.appendingPathComponent("guide")) {
+                            HStack {
+                                Text("Contributor guide")
+                                    .font(.system(size: 13)).foregroundStyle(t.ink)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 11)).foregroundStyle(t.faint)
                             }
                         }
                     }

@@ -647,6 +647,7 @@ struct EmptyNote: View {
 struct Tracklist: View {
     @EnvironmentObject var player: Player
     let t: Theme
+    @State private var lightbox: AlbumImage?
 
     var display: Show? { player.browsed?.show ?? player.show }
 
@@ -691,6 +692,32 @@ struct Tracklist: View {
                     Spacer()
                 }
                 .padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 6)
+                if !sh.images.isEmpty {
+                    // the record's photo strip: cover, tracklist insert, back, disc…
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(sh.images) { img in
+                                Button {
+                                    lightbox = img
+                                } label: {
+                                    VStack(spacing: 3) {
+                                        MacNetImage(url: img.imageURL(base: player.stationBase))
+                                            .frame(width: 64, height: 64)
+                                            .background(t.sunk)
+                                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                                        Text(img.type.uppercased())
+                                            .font(.system(size: 7, weight: .heavy)).tracking(1)
+                                            .foregroundStyle(t.faint)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 22)
+                    }
+                    .padding(.bottom, 8)
+                }
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(Array(sh.tracks.enumerated()), id: \.offset) { i, track in
@@ -699,6 +726,20 @@ struct Tracklist: View {
                     }
                     .padding(.horizontal, 12).padding(.bottom, 16)
                 }
+            }
+            .sheet(item: $lightbox) { img in
+                VStack(spacing: 10) {
+                    MacNetImage(url: img.imageURL(base: player.stationBase))
+                        .aspectRatio(contentMode: .fit)
+                        .frame(minWidth: 480, minHeight: 420)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    Text(img.type.uppercased())
+                        .font(.system(size: 9, weight: .heavy)).tracking(2)
+                        .foregroundStyle(t.faint)
+                }
+                .padding(20)
+                .background(t.board)
+                .onTapGesture { lightbox = nil }
             }
         } else {
             Text("tune a channel — the set list appears here")

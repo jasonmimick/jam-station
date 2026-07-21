@@ -95,6 +95,7 @@ struct PlayerSheet: View {
     @AppStorage("saver") var saverMode = "rotate"
     @State private var confirmSkip = false
     @State private var showSaver = false
+    @State private var photosAlbum: Album?
     @State private var dragY: CGFloat = 0
 
     var body: some View {
@@ -112,6 +113,18 @@ struct PlayerSheet: View {
                             .foregroundStyle(t.muted)
                     }
                     Spacer()
+                    if let al = player.currentAlbum {
+                        Button {
+                            photosAlbum = al
+                        } label: {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.system(size: 12))
+                                .frame(width: 32, height: 32)
+                                .foregroundStyle(t.muted)
+                                .overlay(Circle().stroke(t.line, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
                     Button {
                         showSaver = true
                     } label: {
@@ -138,6 +151,9 @@ struct PlayerSheet: View {
             )
             .fullScreenCover(isPresented: $showSaver) {
                 SaverView(t: t, mode: saverMode) { showSaver = false }
+            }
+            .sheet(item: $photosAlbum) { al in
+                AlbumPhotosView(album: al, t: t)
             }
             ZStack {
                 let seed = player.currentAlbum?.album ?? player.current?.name ?? "♪"
