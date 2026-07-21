@@ -679,6 +679,14 @@ struct AtticGallery: View {
         }
     }
 
+    /// The brag line: how much music the attic rescued.
+    var headline: String {
+        if let s = player.atticStats {
+            return "\(s.albums) ALBUMS · \(s.tracks) TRACKS · \(s.artists) ARTISTS"
+        }
+        return "\(albums.count) RESCUED RECORDS"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -709,7 +717,7 @@ struct AtticGallery: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 AlbumLikeFilter(on: $likedOnly, t: t)
                 Spacer()
-                Text("\(albums.count) RESCUED RECORDS")
+                Text(headline)
                     .font(.system(size: 9, weight: .heavy)).tracking(1)
                     .foregroundStyle(t.faint)
             }
