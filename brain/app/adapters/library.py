@@ -31,6 +31,8 @@ def _folder_extra(folder_abs: str, rel_dir: str) -> dict:
                 extra["learn_url"] = "https://musicbrainz.org/release/" + m["mbid"]
             if m.get("genres") is not None:
                 extra["genres"] = m["genres"]
+            if m.get("artist"):
+                extra["artist"] = m["artist"]      # explicit album artist wins (e.g. "Various Artists" on a mix)
     except Exception:
         pass
     if os.path.exists(os.path.join(folder_abs, "_cover.jpg")):
