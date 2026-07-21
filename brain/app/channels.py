@@ -319,6 +319,13 @@ def sync_attic_channels() -> None:
     created AND retired here — never hand a non-category channel a 'vault-'
     slug (The Vault itself is 'vault', Artist Spotlight is 'spotlight')."""
     import re as _re
+    # NO DATA IS NOT "NO CATEGORIES". A boot race (brain up before the shelf
+    # server's first walk finishes) once served an empty catalog here and this
+    # function dutifully retired every vault-* station. Absent/empty shelf =
+    # do nothing; playable=False already reads OFF AIR. Retirement requires a
+    # real catalog that genuinely lacks the category.
+    if not attic._catalog().get("tracks"):
+        return
     want = {}
     for name, count in attic.genre_counts().items():
         if count >= ATTIC_CHANNEL_MIN:

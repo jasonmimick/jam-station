@@ -126,6 +126,10 @@ public struct StationAPI {
         try await get("api/attic/artist", ["name": name, "count": String(count)])
     }
 
+    public func atticStats() async throws -> AtticStats {
+        try await get("api/attic/stats")
+    }
+
     public func setGenres(dir: String, genres: [String]) async {
         _ = try? await post("api/library/genre", json: ["dir": dir, "genres": genres])
     }

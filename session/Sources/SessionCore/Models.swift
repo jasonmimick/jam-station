@@ -231,6 +231,21 @@ public struct VinylRecord: Decodable, Equatable, Identifiable {
     public var sections: [String] { styles.isEmpty ? genres : styles }
 }
 
+public struct AtticStats: Decodable, Equatable {
+    public let tracks: Int
+    public let albums: Int
+    public let artists: Int
+
+    enum CodingKeys: String, CodingKey { case tracks, albums, artists }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tracks = (try? c.decode(Int.self, forKey: .tracks)) ?? 0
+        albums = (try? c.decode(Int.self, forKey: .albums)) ?? 0
+        artists = (try? c.decode(Int.self, forKey: .artists)) ?? 0
+    }
+}
+
 public struct GenreCount: Decodable, Equatable, Identifiable {
     public let name: String
     public let count: Int

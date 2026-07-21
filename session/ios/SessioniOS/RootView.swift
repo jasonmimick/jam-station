@@ -1029,6 +1029,9 @@ struct AtticWalliOS: View {
                                     Text(String(al.album.prefix(1)))
                                         .font(.system(size: 16, weight: .light))
                                         .foregroundStyle(.white.opacity(0.9))
+                                    if al.coverPath != nil {       // cached sleeves only — the
+                                        NetImage(url: al.coverURL(base: player.stationBase))
+                                    }                              // warmer fills the rest
                                 }
                                 .frame(width: 40, height: 40)
                                 .clipShape(RoundedRectangle(cornerRadius: 6))

@@ -172,6 +172,7 @@ public final class Player: ObservableObject {
     @Published public private(set) var vinyl: [VinylRecord] = []
     @Published public private(set) var vinylSections: [GenreCount] = []
     @Published public private(set) var attic: [Album] = []   // the rescued crate
+    @Published public private(set) var atticStats: AtticStats?
     @Published public private(set) var dialNow: [String: NowPlaying] = [:]
 
     public func refreshDial() async {
@@ -192,6 +193,7 @@ public final class Player: ObservableObject {
             vinyl = (try? await api.vinyl()) ?? vinyl
             vinylSections = (try? await api.vinylSections()) ?? vinylSections
             attic = (try? await api.atticAlbums()) ?? attic
+            atticStats = (try? await api.atticStats()) ?? atticStats
             await refreshChannels()               // private channels appear
         } else {
             albums = []                            // server CONFIRMED anonymous

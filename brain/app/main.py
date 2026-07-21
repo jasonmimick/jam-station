@@ -26,6 +26,16 @@ async def lifespan(_app: FastAPI):
         channels.sync_attic_channels()   # vault categories -> stations; one HTTP call,
     except Exception:                    # and an absent shelf server must never block boot
         pass
+
+    def _attic_resync():                 # boot ordering must not matter: if the shelf
+        while True:                      # server wasn't up yet, the stations appear on
+            time.sleep(600)              # the next pass instead of the next deploy
+            try:
+                channels.sync_attic_channels()
+            except Exception:
+                pass
+    import threading
+    threading.Thread(target=_attic_resync, daemon=True).start()
     auth.ensure_owner()      # the owner is config, not a signup — he never approves himself
     covers.kick()            # backfill album art + year in the background
     covers.kick_attic()      # trickle-fill vault sleeves (1/sec; skips everything cached)

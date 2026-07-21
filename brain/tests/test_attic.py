@@ -106,12 +106,20 @@ def test_sync_attic_channels_creates_and_retires(shelf):
     slugs = {c["slug"] for c in channels.list_channels()}
     assert "vault-jazz" in slugs                       # 12 tracks >= ATTIC_CHANNEL_MIN
     assert "vault-rock" not in slugs                   # 3 tracks — not enough
-    # the shelf server goes away -> its categories retire from the dial
+    # an EMPTY catalog (shelf down / boot race) must NOT retire anything —
+    # that exact race once wiped all 12 vault-* stations on a deploy
     attic.set_client(httpx.Client(transport=httpx.MockTransport(
         lambda r: httpx.Response(200, json={"categories": [], "tracks": []}))))
     channels.sync_attic_channels()
-    slugs = {c["slug"] for c in channels.list_channels()}
-    assert "vault-jazz" not in slugs
+    assert "vault-jazz" in {c["slug"] for c in channels.list_channels()}
+    # a REAL catalog that genuinely lacks the category retires it
+    real = {"categories": [], "tracks": [{"root": "drive03", "path": "X/Y/01 A.mp3",
+                                          "artist": "X", "album": "Y", "title": "A",
+                                          "genres": [], "url": "/file/drive03/X/Y/01%20A.mp3"}]}
+    attic.set_client(httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, json=real))))
+    channels.sync_attic_channels()
+    assert "vault-jazz" not in {c["slug"] for c in channels.list_channels()}
 
 
 def test_vault_channels_are_private_and_mix_only(shelf):
