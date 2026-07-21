@@ -380,6 +380,12 @@ struct AlbumSectionsModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.contextMenu {
             Button {
+                player.toggleAlbumLike(al.dir)
+            } label: {
+                Label(player.isAlbumLiked(al.dir) ? "Unlike record" : "Like record",
+                      systemImage: player.isAlbumLiked(al.dir) ? "heart.fill" : "heart")
+            }
+            Button {
                 showPhotos = true
             } label: { Label("Photos…", systemImage: "photo.on.rectangle") }
             Menu("Set section" + (al.genres.isEmpty ? "" : " (\(al.genres.joined(separator: ", ")))")) {
@@ -733,9 +739,12 @@ struct ShelfTab: View {
     @State private var crate = "cds"         // cds | vinyl — which wall you're facing
     @AppStorage("shelfView") var shelfView = "grid"
 
+    @State private var likedOnly = false
+
     var albums: [Album] {
         player.albums.filter { al in
-            (section.isEmpty || al.genres.contains(section))
+            (!likedOnly || player.isAlbumLiked(al.dir))
+            && (section.isEmpty || al.genres.contains(section))
             && (find.isEmpty
                 || al.album.localizedCaseInsensitiveContains(find)
                 || al.artist.localizedCaseInsensitiveContains(find))
@@ -809,6 +818,7 @@ struct ShelfTab: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 7) {
                             SectionChip(label: "ALL", on: section.isEmpty, t: t) { section = "" }
+                            SectionChip(label: "♥", on: likedOnly, t: t) { likedOnly.toggle() }
                             ForEach(player.genres) { g in
                                 SectionChip(label: "\(g.name.uppercased()) · \(g.count)",
                                             on: section == g.name, t: t) {
@@ -937,6 +947,16 @@ struct ShelfTab: View {
                                     }
                                     .aspectRatio(1, contentMode: .fit)
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(alignment: .topLeading) {
+                                        if player.isAlbumLiked(al.dir) {
+                                            Image(systemName: "heart.fill")
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(t.accent)
+                                                .padding(5)
+                                                .background(Circle().fill(.black.opacity(0.5)))
+                                                .padding(6)
+                                        }
+                                    }
                                     Text(al.album)
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundStyle(t.ink).lineLimit(1).padding(.top, 6)

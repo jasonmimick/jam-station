@@ -276,6 +276,20 @@ public final class Player: ObservableObject {
         return true
     }
 
+    // ── record likes: ♥ a whole album. LOCAL taste state (UserDefaults),
+    //    mirroring the web's jam-fav-albums localStorage — not synced. ──────
+
+    @Published public private(set) var likedAlbums: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: "likedAlbums") ?? [])
+
+    public func isAlbumLiked(_ dir: String) -> Bool { likedAlbums.contains(dir) }
+
+    public func toggleAlbumLike(_ dir: String) {
+        if likedAlbums.contains(dir) { likedAlbums.remove(dir) }
+        else { likedAlbums.insert(dir) }
+        UserDefaults.standard.set(Array(likedAlbums), forKey: "likedAlbums")
+    }
+
     // ── sleep timer ──────────────────────────────────────────────────────
 
     @Published public private(set) var sleepAt: Date?

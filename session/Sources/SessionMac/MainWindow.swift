@@ -367,6 +367,7 @@ struct ShelfGallery: View {
     let onPick: (Album) -> Void
     @State var section: String
     @State private var find = ""
+    @State private var likedOnly = false
     @AppStorage("shelfView") var shelfView = "grid"
 
     init(t: Theme, initialSection: String, onPick: @escaping (Album) -> Void) {
@@ -377,7 +378,8 @@ struct ShelfGallery: View {
 
     var albums: [Album] {
         player.albums.filter { al in
-            (section.isEmpty || al.genres.contains(section))
+            (!likedOnly || player.isAlbumLiked(al.dir))
+            && (section.isEmpty || al.genres.contains(section))
             && (find.isEmpty
                 || al.album.localizedCaseInsensitiveContains(find)
                 || al.artist.localizedCaseInsensitiveContains(find))
@@ -446,6 +448,7 @@ struct ShelfGallery: View {
                 }
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(t.line, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                AlbumLikeFilter(on: $likedOnly, t: t)
                 Spacer()
                 Text("\(albums.count) RECORDS")
                     .font(.system(size: 9, weight: .heavy)).tracking(1)
@@ -476,6 +479,7 @@ struct ShelfGallery: View {
                                             .font(.system(size: 9, weight: .bold)).tracking(0.5)
                                             .foregroundStyle(t.faint)
                                     }
+                                    AlbumLikeButton(dir: al.dir, t: t)
                                     Text("\(al.trackCount) TRK")
                                         .font(.system(size: 9, weight: .heavy)).tracking(1)
                                         .foregroundStyle(t.faint)
@@ -514,6 +518,9 @@ struct ShelfGallery: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .overlay(alignment: .topLeading) {
+                                AlbumLikeButton(dir: al.dir, t: t).padding(6)
+                            }
                         }
                     }
                     .padding(.horizontal, 18).padding(.bottom, 24)
@@ -660,13 +667,15 @@ struct AtticGallery: View {
     let t: Theme
     let onPick: (Album) -> Void
     @State private var find = ""
+    @State private var likedOnly = false
     @AppStorage("atticView") var atticView = "list"
 
     var albums: [Album] {
-        find.isEmpty ? player.attic
-        : player.attic.filter {
-            $0.album.localizedCaseInsensitiveContains(find)
-            || $0.artist.localizedCaseInsensitiveContains(find)
+        player.attic.filter { al in
+            (!likedOnly || player.isAlbumLiked(al.dir))
+            && (find.isEmpty
+                || al.album.localizedCaseInsensitiveContains(find)
+                || al.artist.localizedCaseInsensitiveContains(find))
         }
     }
 
@@ -698,6 +707,7 @@ struct AtticGallery: View {
                 }
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(t.line, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                AlbumLikeFilter(on: $likedOnly, t: t)
                 Spacer()
                 Text("\(albums.count) RESCUED RECORDS")
                     .font(.system(size: 9, weight: .heavy)).tracking(1)
@@ -724,6 +734,9 @@ struct AtticGallery: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .overlay(alignment: .topLeading) {
+                                AlbumLikeButton(dir: al.dir, t: t).padding(6)
+                            }
                         }
                     }
                     .padding(.horizontal, 18).padding(.bottom, 24)
@@ -747,6 +760,7 @@ struct AtticGallery: View {
                                             .foregroundStyle(t.muted).lineLimit(1)
                                     }
                                     Spacer()
+                                    AlbumLikeButton(dir: al.dir, t: t)
                                     Text("\(al.trackCount) TRK")
                                         .font(.system(size: 9, weight: .heavy)).tracking(1)
                                         .foregroundStyle(t.faint)
@@ -764,6 +778,49 @@ struct AtticGallery: View {
                 }
             }
         }
+    }
+}
+
+struct AlbumLikeFilter: View {
+    @Binding var on: Bool
+    let t: Theme
+
+    var body: some View {
+        Button {
+            on.toggle()
+        } label: {
+            Text("♥").font(.system(size: 12))
+                .frame(width: 30, height: 26)
+                .background(on ? t.accent : t.panel)
+                .foregroundStyle(on ? t.onAccent : t.muted)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(on ? t.accent : t.line, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("liked records only")
+    }
+}
+
+/// The ♥ on a record — the web's alfav, native. Signage yellow when on.
+struct AlbumLikeButton: View {
+    @EnvironmentObject var player: Player
+    let dir: String
+    let t: Theme
+
+    var body: some View {
+        Button {
+            player.toggleAlbumLike(dir)
+        } label: {
+            Text("♥").font(.system(size: 12))
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(.black.opacity(0.55)))
+                .foregroundStyle(player.isAlbumLiked(dir) ? t.accent : .white.opacity(0.55))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .opacity(player.isAlbumLiked(dir) ? 1 : 0.45)
+        .help(player.isAlbumLiked(dir) ? "unlike this record" : "like this record")
     }
 }
 
