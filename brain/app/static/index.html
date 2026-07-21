@@ -216,6 +216,12 @@
     background:#000a; color:#fff; font-size:13px; line-height:1; cursor:pointer; opacity:0; display:grid; place-items:center; z-index:2; }
   .albcard:hover .setcov, .alrow:hover .setcov { opacity:1; }
   .alrow .setcov { position:static; margin-left:auto; opacity:.5; flex:0 0 auto; }
+  .alfav { position:absolute; top:6px; left:6px; width:24px; height:24px; border-radius:50%;
+    background:#000a; color:#fff; font-size:13px; line-height:1; cursor:pointer; opacity:0; display:grid; place-items:center; z-index:2; }
+  .albcard:hover .alfav, .alrow:hover .alfav { opacity:1; }
+  .alfav.on { opacity:1; color:var(--yellow); }
+  .alrow .alfav { position:static; margin-left:8px; opacity:.4; flex:0 0 auto; }
+  .alrow .alfav.on { opacity:1; }
   .albcard { border:0; background:transparent; padding:0; cursor:pointer; text-align:left; min-width:0; }
   .albcover { aspect-ratio:1; border-radius:6px; overflow:hidden; display:grid; place-items:center;
     background-size:cover; background-position:center; font-size:46px; font-weight:200; color:#fff;
@@ -708,6 +714,7 @@
           <input id="galFind" type="text" placeholder="Filter" autocomplete="off" aria-label="filter gallery">
           <select class="galsort" id="galSort" aria-label="Sort by">
             <option value="added">Recently added</option>
+            <option value="liked">Liked first</option>
             <option value="artist">Artist</option>
             <option value="album">Album</option>
             <option value="tracks">Tracks</option>
@@ -2316,13 +2323,25 @@ function fmtAdded(mtime) {
   return "added " + (d.getFullYear() === new Date().getFullYear() ? day : day + " " + d.getFullYear());
 }
 function sortItems(list) {
+  const favs = favAlbums();
   const by = {
     added:  (a, b) => (b.mtime || 0) - (a.mtime || 0),
+    liked:  (a, b) => (favs[b.id] ? 1 : 0) - (favs[a.id] ? 1 : 0)
+                   || (a.sortArtist || "").localeCompare(b.sortArtist || "") || (a.sortAlbum || "").localeCompare(b.sortAlbum || ""),
     artist: (a, b) => (a.sortArtist || "").localeCompare(b.sortArtist || "") || (a.sortAlbum || "").localeCompare(b.sortAlbum || ""),
     album:  (a, b) => (a.sortAlbum || "").localeCompare(b.sortAlbum || ""),
     tracks: (a, b) => (b.tracks || 0) - (a.tracks || 0),
   };
   return [...list].sort(by[galSort] || by.added);
+}
+
+/* ── liked RECORDS (whole albums, not just tracks) — localStorage like track favs ── */
+const favAlbums = () => { try { return JSON.parse(localStorage.getItem("jam-fav-albums") || "{}"); } catch { return {}; } };
+function toggleFavAlbum(dir) {
+  const f = favAlbums();
+  if (f[dir]) delete f[dir]; else f[dir] = 1;
+  localStorage.setItem("jam-fav-albums", JSON.stringify(f));
+  renderDeskGallery();
 }
 let coverDir = null;
 function setCoverFor(dir) { coverDir = dir; const inp = $("coverFile"); if (inp) { inp.dataset.mode = "cover"; inp.click(); } }
@@ -2435,23 +2454,27 @@ function renderDeskGallery(flashSpot) {
   list = sortItems(list);
   if (galView === "list") g.className = "collgrid aslist";
   const canCover = dtab === "cds" && S.user;
+  const favd = favAlbums();
   g.innerHTML = list.map(it => {
     const a = albBg({ album: it.name, cover_url: it.cover });
     const cov = canCover ? `<span class="setcov" data-cover-dir="${esc(it.id)}" title="Set cover">⤓</span>` +
       `<span class="setgen" data-genre-dir="${esc(it.id)}" data-genres="${esc((it.genres || []).join(", "))}" title="Edit sections">✎</span>` : "";
+    const fav = it.kind === "album"
+      ? `<span class="alfav${favd[it.id] ? " on" : ""}" data-fav-dir="${esc(it.id)}" title="${favd[it.id] ? "Unlike" : "Like"} this record">♥</span>` : "";
     const added = fmtAdded(it.mtime);
     const af = it.kind === "station" ? " artf" : "";
     if (galView === "list")
       return `<button class="alrow" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
         `<div class="althumb${af}" style="background-image:${a.bg}">${a.mono}</div>` +
         `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}</span><span class="alrowsub">${esc(it.sub)}</span></div>` +
-        (added ? `<span class="alrowdate">${added}</span>` : "") + `${cov}</button>`;
+        (added ? `<span class="alrowdate">${added}</span>` : "") + `${fav}${cov}</button>`;
     return `<button class="albcard" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
-      `<div class="albcover${af}" style="background-image:${a.bg}">${a.mono}${cov}</div>` +
+      `<div class="albcover${af}" style="background-image:${a.bg}">${a.mono}${fav}${cov}</div>` +
       `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span>` +
       (added ? `<span class="albdate">${added}</span>` : "") + `</div></button>`;
   }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match."
     : dtab === "attic" ? "The attic is empty — is the shelf server up?" : "No albums yet — rip a CD."}</p>`;
+  g.querySelectorAll(".alfav").forEach(b => b.onclick = (e) => { e.stopPropagation(); toggleFavAlbum(b.dataset.favDir); });
   g.querySelectorAll(".setcov").forEach(b => b.onclick = (e) => { e.stopPropagation(); setCoverFor(b.dataset.coverDir); });
   g.querySelectorAll(".setgen").forEach(b => b.onclick = async (e) => {
     e.stopPropagation();
