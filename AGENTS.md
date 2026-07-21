@@ -38,7 +38,7 @@ brain/app/dj.py              AI DJ: system prompt, TOOLS schema, tool loop
 brain/app/auth.py, mail.py   invite/approve, magic link + 8-char code, sessions; SMTP or console
 brain/app/covers.py          album enrichment: MusicBrainz year/tracklist, Cover Art Archive/iTunes art
 brain/app/spot.py            photograph music in the wild, vision API identifies it
-brain/app/adapters/          one module per audio source (archive.py, library.py, phishin.py, cc.py)
+brain/app/adapters/          one module per audio source (archive.py, library.py, phishin.py, cc.py, attic.py)
 brain/app/db.py              Postgres via a ?->%s facade — no ORM, keep it that way
 brain/app/static/index.html  the whole desktop UI (single file, vanilla JS, no build step)
 brain/app/static/mobile.html the mobile-web FUNNEL (see Clients), served by user-agent
@@ -47,6 +47,8 @@ session/                     "Session" — native SwiftUI clients (SessionCore +
 session/Makefile             make run (mac) · make ios-sim · make ios-phone · make ios-ipad
 liquidsoap/radio.liq         radio engine config (liquidsoap 2.2.x)
 tools/                       host-side CD pipeline: rip-cd.sh, cd-watch.sh, cd-tick.sh, cd-name.py
+tools/attic-server.py        the SHELF SERVER: serves vault music (AFP TC) to the brain over HTTP
+tools/attic-genres.py        one-shot MusicBrainz artist→genre pass -> _genres.json per vault root
 tools/mini/, tools/euler/    launchd plists + helpers (watcher, backups, jam-cdd FDA helper)
 system.toml, slab/           the slab system (jam-brain, jam-icecast, jam-radio)
 docs/                        architecture.html + DESIGN-*.md (auth built; family/network on hold)
@@ -152,15 +154,19 @@ The **welcome email** (`auth.send_key_email`) links all of it: sign-in, `/<handl
 The family-radio vision splits into two independent, composable layers — don't conflate them:
 1. **Sourcing** — how one person turns a big archive into channels on THEIR station. The
    **attic** project (`~/projects/attic`, a wiped Time Capsule vault of ripped/copied music)
-   is the content engine; the planned **"attic" source adapter** streams vault music through
-   jam-station without copying it onto the full mini. **Fully spec'd in
-   `docs/DESIGN-vault-stations.md` (DESIGNED, NOT BUILT — paused 2026-07-20).** Key facts settled
-   there: the vault is AFP-mounted on the **host** at `/tmp/tc-afp/attic-vault/` (~65 GB, artist-
-   organized), the container **can't** see it (AFP doesn't cross into the docker VM) and the mini
-   has only ~22 GB free, so the answer is a stdlib **host music server** (launchd) serving
-   `/catalog.json` + ranged `/file/<path>`, reached from the brain via `host.docker.internal` (or
-   tailnet `100.91.29.30`), plus a remote-URL `attic` adapter (mirror `archive.py`) feeding private
-   stations (**The Vault** shuffle-all, **Artist spotlight**; genre/decade after an enrichment pass).
+   is the content engine; the **"attic" source adapter** streams vault music through
+   jam-station without copying it onto the full mini. **BUILT 2026-07-20** (spec:
+   `docs/DESIGN-vault-stations.md`): the vault is AFP-mounted on the **host** at
+   `/tmp/tc-afp/attic-vault/` (~65 GB, artist-organized), the container can't see it, so
+   `tools/attic-server.py` (stdlib, launchd `run.attic.server.plist`, port 8517) serves the
+   **shelf-server contract** — `/catalog.json` (with `categories` + per-track `genres` from a
+   per-root `_genres.json`, filled by `tools/attic-genres.py`) + ranged `/file/<root>/<path>` +
+   `/health` — and `adapters/attic.py` consumes it via `ATTIC_SERVER_URL`
+   (`http://host.docker.internal:8517`). **The contract is the extension point**: any machine
+   that speaks it can feed stations (dad's Mac over the tailnet, later). Stations: **The Vault**
+   (`vault`, `{"all": true}`, mounted), **Artist Spotlight** (`spotlight`, `{"spotlight": true}`,
+   one random artist per top-up, mounted), and auto-synced **`vault-<genre>` category channels**
+   (`sync_attic_channels`, mix-only like `shelf-*`, from the server's declared categories).
 2. **Carriage** — how a family member's whole STATION appears on your dial: a station-to-station
    relay. Their jam-station makes icecast streams behind their own tunnel; yours carries the
    remote stream as a channel (extends the existing `/stream/<slug>` proxy to a remote URL).
@@ -225,6 +231,16 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   covers.py maps MB tags→buckets falling back release→release-group→artist;
   genre channels (`shelf-*`) are MIX-ONLY — on the dial but never mounted by
   liquidsoap; clients play them as instant on-demand mixes via /api/library/mix.
+- **Attic/vault**: track urls are stored SAME-ORIGIN (`/attic/<root>/<path>`) like `/music/` —
+  the browser plays them through the brain's members-gated proxy (the browser can NOT reach
+  `host.docker.internal`), and `_for_liquidsoap` makes them absolute+keyed for the radio
+  container. `PRIVATE_SOURCES = {"library", "attic"}` drives both channel privacy and the
+  `/stream` gate. Mix-only channels (any `query.genre`, shelf-* AND vault-*) are served by
+  `GET /api/mix?slug=` which dispatches by source (`/api/library/mix` stays for Session
+  back-compat). Shelf server down → attic catalog negative-cached 60s, vault mounts drop from
+  channels.liq (= a jam-radio restart) and stations read OFF AIR — that's degradation, not a
+  bug. NEVER expose port 8517 through the tunnel; the `vault-` slug prefix belongs to
+  `sync_attic_channels` (it retires strays — The Vault is `vault`, Spotlight is `spotlight`).
 - liquidsoap is pinned to `savonet/liquidsoap:v2.2.5`. Its scripting language breaks
   between minor versions — if you bump the pin, re-run `--check` and expect churn.
 - `liquidsoap --check` also RUNS top-level code; with no brain reachable the script

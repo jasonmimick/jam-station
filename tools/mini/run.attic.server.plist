@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>run.attic.server</string>
+  <!-- The shelf server: serves the AFP-mounted TC vault to jam-brain over HTTP
+       (host.docker.internal:8517). Long-running, so KeepAlive. If the TC isn't
+       mounted it serves an empty catalog (vault stations OFF AIR) — it never
+       needs the mount to start. drive08's Music root gets added here once
+       drive03 is proven. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/jason/business/jam-station/tools/attic-server.py</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ATTIC_ROOTS</key>
+    <string>drive03=/tmp/tc-afp/attic-vault/drive-03-inesse-reco/Music</string>
+    <key>ATTIC_PORT</key><string>8517</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>20</integer>
+  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/attic-server.log</string>
+  <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/attic-server.log</string>
+</dict>
+</plist>

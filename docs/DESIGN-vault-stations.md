@@ -1,107 +1,122 @@
 # DESIGN — Vault Stations (streaming the attic music library)
 
-**Status:** DESIGNED, NOT BUILT — paused 2026-07-20 to capture the plan before building.
+**Status:** BUILD IN PROGRESS — spec finalized 2026-07-20 (was: designed + paused earlier same day).
 **Goal:** turn the ~65 GB of personal music archived on the Time Capsule vault into stations
-on jam-station, **without copying it onto the mini** (there isn't room).
+on jam-station, **without copying it onto the mini** (there isn't room) — and do it behind a
+contract that anyone else's machine can implement later (the extensibility story).
 
-This is the **Sourcing** layer for a big local archive — the "attic source adapter" that
-AGENTS.md §Family/affiliate has promised but that was never actually built. (Carriage — a
-family member's whole station relayed onto your dial — is a separate layer, still coming.)
+This is the **Sourcing** layer for a big local archive — the "attic source adapter"
+AGENTS.md §Family/affiliate promised. (Carriage — a family member's whole station relayed
+onto your dial — is a separate layer, still coming.)
 
 ---
 
 ## The problem, precisely
 
 - The vault music lives on the **AFP-mounted Time Capsule**, visible only to the mini's **host
-  OS** at `/tmp/tc-afp/attic-vault/` (also SMB at `/tmp/tc`, but **AFP is ~9× faster** — use AFP).
-  Structure is artist-organized: `drive-03-inesse-reco/Music/<Artist>/<Album>/<tracks>` (~345
-  artists, ~38 GB) and `drive-08-hm500-win/…` (~27 GB music).
-- The **jam-brain container** streams from its own docker volume (`slab-jam-brain-music` →
-  `/music`). It **cannot see the TC** — the AFP mount lives on macOS and does not propagate into
-  the Linux docker VM, so a host bind-mount of the vault into the container will NOT work.
-- The mini has **~22 GB free** vs ~65 GB of music, so we **cannot copy the vault into `/music`**
-  and reuse the `library` adapter. (Copying a curated ~15 GB slice IS possible and needs zero new
-  code — that's the fast fallback if the full build is deferred.)
+  OS** at `/tmp/tc-afp/attic-vault/` (AFP, not SMB — 9× faster). Structure is artist-organized:
+  `drive-03-inesse-reco/Music/<Artist>/<Album>/<tracks>` (~345 artists, ~38 GB) and
+  `drive-08-hm500-win/…` (~27 GB music).
+- The **jam-brain container** streams from its own docker volume. It **cannot see the TC** —
+  the AFP mount lives on macOS and does not propagate into the Linux docker VM.
+- The mini has **~22 GB free** vs ~65 GB of music — copying it in is not an option.
 
-So streaming *all* of it requires a bridge: something on the host (which can read the vault) that
-serves the files to the container over the network.
+So streaming requires a bridge: something on the host (which can read the vault) serving the
+files to the container over HTTP.
 
-## The architecture — two small pieces
+## The shelf-server contract — this is the product
+
+Three endpoints. Anything that speaks them can feed stations (the TC vault today; dad's Mac
+over the tailnet tomorrow):
+
+```
+GET /catalog.json   {"categories": ["Jazz", "Rock", …],
+                     "tracks": [{root, path, artist, album, title, genres, url}]}
+GET /file/<root>/<path>    the bytes — single-range HTTP Range, ../-escape guarded
+GET /health                {ok, roots: {id: {present, files}}}
+```
+
+- `categories` = the sections THIS shelf wants as channels — a server-side decision; each
+  attic says what categories it wants on the dial.
+- `url` is the ready-made `/file/<root>/<quoted-path>` path; the brain only prefixes the
+  server origin. The server owns its URL format.
+- A missing root (TC unmounted) degrades to an empty catalog + `present: false` — stations
+  go OFF AIR, never break.
+
+## The pieces
 
 ```
   TC vault (AFP)                    mini host                         jam-brain container
-  /tmp/tc-afp/attic-vault  ──────►  attic-server (stdlib http)  ◄────  attic adapter
-   Artist/Album/track.mp3           :PORT  /catalog  /file/<path>       (source="attic")
-                                    launchd-managed, like jam-inbox     reaches host via
-                                                                        host.docker.internal:PORT
+  /tmp/tc-afp/attic-vault  ──────►  attic-server.py (stdlib http) ◄──  adapters/attic.py
+   Artist/Album/track.mp3           :8517, launchd-managed             (source="attic")
+                                    _genres.json per root              via host.docker.internal:8517
 ```
 
-### 1. Host music server — `tools/attic-server.py` (new)
-- Plain-stdlib Python HTTP server, run on the **mini host** (has AFP access) under **launchd**
-  (copy the `tools/mini/run.jam.inbox.plist` pattern; KeepAlive). No deps.
-- Roots: the vault Music dirs (`drive-03-.../Music`, `drive-08-.../…`). Config the roots by env.
-- Endpoints:
-  - `GET /catalog.json` — the index: `[{artist, album, path, title}]` (walk once, cache in
-    memory; re-walk on a timer or on a `?refresh=1`). Percent-decoded paths relative to a root id.
-  - `GET /file/<rootid>/<path>` — streams the actual audio file (support HTTP Range so liquidsoap
-    and the browser can seek). Guard against `../` escape like `set_cover` does.
-  - `GET /health`.
-- Bind to `0.0.0.0:PORT` on a **private** port; reachable from the container as
-  `http://host.docker.internal:PORT` (add `--add-host=host.docker.internal:host-gateway` to the
-  jam-brain run if the slab runtime doesn't already provide it), and from the tailnet as
-  `http://100.91.29.30:PORT`. NEVER expose it through the Cloudflare tunnel — this is private music.
+### 1. `tools/attic-server.py` (host, stdlib only)
+- `ThreadingHTTPServer`; env config `ATTIC_ROOTS` (`rootid=path` pairs, comma-sep) and
+  `ATTIC_PORT` (default 8517). Binds 0.0.0.0 — container via `host.docker.internal`, tailnet
+  via `100.91.29.30`. **NEVER exposed through the Cloudflare tunnel** — this is private music.
+- Catalog walk: artist = first dir under root, album = second; title = filename stem, leading
+  track number stripped, `Artist - Title` split honored (same conventions as `library._meta`;
+  the path IS the tags). Skips `._*` AppleDouble + hidden files. In-memory cache, re-walk on
+  ~15 min TTL or `?refresh=1`.
+- **Genres**: per-root sidecar `_genres.json` (`{"Artist Name": ["Jazz", …]}` — artist-level;
+  the vault has no track metadata). Server stamps each track's `genres` from it;
+  `categories` = union of genres present (or explicit `ATTIC_CATEGORIES` env to curate).
+- `tools/attic-genres.py`: one-shot enrichment — MusicBrainz artist lookup → tags → the same
+  BUCKETS covers.py uses → `_genres.json`. ~345 artists at 1 req/s ≈ 6 min. Only fills blanks;
+  the owner's hand-edits are never overwritten.
+- `tools/mini/run.attic.server.plist` — launchd, KeepAlive (the `run.jam.inbox.plist` pattern).
 
-### 2. `attic` source adapter — `brain/app/adapters/attic.py` (new)
-- Mirror `adapters/archive.py` (the *remote-URL* pattern, NOT `library.py` which reads local disk).
-- Reads `ATTIC_SERVER_URL` (e.g. `http://host.docker.internal:PORT`) from config.
-- `pick_tracks(cfg, count)` → hits `/catalog.json`, filters by the channel's query
-  (`{"artist": …}`, `{"letter": "A"}`, `{"all": true}`, later `{"genre": …}`), returns track dicts
-  whose `url` is the **absolute** `…/file/<rootid>/<path>` on the host server (liquidsoap fetches
-  it directly — same as archive.org URLs today).
-- Register: add `"attic"` to `STREAMABLE_SOURCES` and (if it queues like library — random batches,
-  not whole shows) wire it in `channels.ensure_queue()` the way `library` is. Add to
-  `SHOW_ADAPTERS` only if it has show-shaped browsing; otherwise it's a mix/queue source.
-- **Private, like `library`** — derive `private = True` (or by source), never tunnel it, so the
-  public plane (jam-station.runslab.run) never lists or serves vault stations. Tailnet/members only.
-- **Tests** mock the catalog HTTP (httpx.MockTransport, per conftest) and assert pick/queue.
+### 2. `brain/app/adapters/attic.py` (remote-URL pattern, mirror of archive.py)
+- `config.ATTIC_SERVER_URL` (default `""` → adapter returns `[]`; stations honestly
+  unplayable until configured).
+- Catalog cached ~300 s, ~60 s negative cache when unreachable (so a flap can't spam).
+- `pick_tracks(cfg, count)` query forms:
+  - `{"all": true}` — everything (**The Vault**, mounted broadcast channel)
+  - `{"spotlight": true}` — ONE random artist per top-up (**Artist Spotlight**, mounted)
+  - `{"artist": "…"}` — case-insensitive artist match
+  - `{"genre": "Jazz"}` — the category channels (MIX-ONLY, like shelf-*)
+- `build_mix(genre, count)` — twin of `library.build_mix`, for the mix endpoint.
+- Registered in `STREAMABLE_SOURCES`; `_enqueue_attic()` mirrors `_enqueue_library()`;
+  **`PRIVATE_SOURCES = {"library", "attic"}`** drives both `list_channels()` privacy and the
+  `/stream/<slug>` member gate. Tests mock the catalog per conftest.
 
-### 3. Stations (the curation on top)
-Create via `channels.create_channel(...)` with `source="attic"`:
-- **The Vault** — `{"all": true}`, shuffle across everything. The flagship "play it all" station.
-- **Artist spotlight** — rotates one artist (either a channel per pinned artist, or one station
-  whose query rotates). Cheap, no metadata needed.
-- **Later (needs enrichment):** genre and decade stations. The vault has no genre/year metadata;
-  covers.py can backfill via MusicBrainz but that's slow and rate-limited across 345 artists. Do it
-  as a background pass, then add `shelf-*`-style mix stations.
+### 3. Category channels + the generic mix endpoint
+- `channels.sync_attic_channels()` (patterned on `sync_genre_channels`): each declared
+  category with enough tracks → upsert `vault-<slug>` (`query={"genre": name}`); retired when
+  the category vanishes. Runs at startup. The existing `streamable_only` genre filter keeps
+  them out of channels.liq — **mix-only for free, zero new liquidsoap mounts/CPU**.
+- New `GET /api/mix?slug=<channel>&count=` dispatches by the channel's source (library or
+  attic) and returns the same show-shaped mix as `/api/library/mix` (kept for back-compat —
+  Session uses it). The web UI's mix machinery carries the slug instead of a bare genre.
 
 ## Why this shape
-- **No copy, no giant mini disk.** Files stay in the vault; only bytes for what's *playing* move.
-- **Reuses everything downstream.** Once tracks are annotate-URIs, liquidsoap + icecast + the
-  on-demand player + the dial all work unchanged — an adapter is the whole extension point.
-- **Host boundary is honest.** The one thing containers can't do (read an AFP mount) is the one
-  thing the host server does; everything else stays in the brain. Same split as ripping (the rip
-  runs on the host because the container can't see the CD drive).
+- **No copy, no giant mini disk.** Only bytes for what's *playing* move.
+- **Reuses everything downstream.** Tracks become annotate-URIs; liquidsoap + icecast +
+  on-demand + the dial all work unchanged. Category channels reuse the shelf's mix machinery.
+- **Host boundary is honest.** The one thing containers can't do (read an AFP mount) is the
+  one thing the host server does — same split as CD ripping.
+- **The contract is the extension point.** One adapter, N shelf servers; a new source of
+  music is a config row, not new code.
 
-## Open decisions
-1. **Reach from container to host** — confirm `host.docker.internal` resolves under the mini's
-   docker runtime; if not, use the tailnet IP `100.91.29.30:PORT` or a slab-provided host alias.
-2. **AFP mount persistence** — the vault mount must survive reboot (launchd mount, or an
-   `automount`); the attic-server should degrade to "empty catalog / off air", never crash, if the
-   vault is absent (same spirit as a guest station being OFF AIR, not broken).
-3. **Catalog freshness** — re-walk interval vs manual refresh; 345 artists is a cheap walk.
-4. **Metadata** — ship v1 with artist/album/title from the path only (the path IS the tags);
-   enrichment (genre/year/cover) is a later pass.
-5. **`drive-08` music** — same treatment, add its Music root to the server once drive-03 works.
+## Build checklist
+- [ ] `tools/attic-server.py` + `run.attic.server.plist`, verify `/catalog.json` on the mini
+- [ ] `tools/attic-genres.py` → `_genres.json`, verify categories appear in the catalog
+- [ ] `brain/app/adapters/attic.py` + channels/main wiring + `/api/mix` + web UI tune + tests
+- [ ] container→host reach confirmed; `ATTIC_SERVER_URL` set on jam-brain; deploy
+- [ ] create **The Vault** + **Artist Spotlight**; `vault-*` category channels sync at boot
+- [ ] verify: private on the dial, channels.liq stable (exactly +2 lines once), audio plays
+- [ ] AGENTS.md updated (adapter built, contract, env var, flap gotcha)
+- [ ] drive-08's Music root added once drive-03 works
 
-## Build checklist (for next session)
-- [ ] `tools/attic-server.py` + `tools/mini/run.attic.server.plist` (launchd), verify `/catalog.json`
-- [ ] confirm container→host reach (`host.docker.internal` or tailnet IP), set `ATTIC_SERVER_URL`
-- [ ] `brain/app/adapters/attic.py` + register in `STREAMABLE_SOURCES` / `ensure_queue` + tests
-- [ ] create **The Vault** + **Artist spotlight** channels; confirm they mount and stream (private)
-- [ ] AGENTS.md: promote the attic adapter from "planned" to "built", note the server + env var
-- [ ] (later) enrichment pass → genre/decade stations
+## Open items
+- AFP mount doesn't survive reboot (launchd mount TODO — separate from this build; the
+  server degrades to empty catalog / OFF AIR meanwhile).
+- Session apps: vault category mixes not wired yet (they keep using `/api/library/mix` for
+  shelf sections; `/api/mix` adoption is a later Session task).
+- Decade stations: need year metadata — a later enrichment pass.
 
-## Fast fallback (if the full build is deferred)
-Copy a curated ~15 GB slice from the vault into `/music/cds/` (fits the 22 GB free), and it becomes
-`library` stations with **zero new code**. Not "all the music," but stations today. Use only as a
-stopgap — the host-server path is the real answer.
+## Fast fallback (unchanged)
+Copy a curated ~15 GB slice into `/music/cds/` and it becomes `library` stations with zero
+new code. Stopgap only — the shelf-server path is the real answer.

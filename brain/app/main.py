@@ -22,6 +22,10 @@ async def lifespan(_app: FastAPI):
     db.init()
     channels.ensure_seeded()
     channels.sync_genre_channels()
+    try:
+        channels.sync_attic_channels()   # vault categories -> stations; one HTTP call,
+    except Exception:                    # and an absent shelf server must never block boot
+        pass
     auth.ensure_owner()      # the owner is config, not a signup — he never approves himself
     covers.kick()            # backfill album art + year in the background
     yield
@@ -154,10 +158,57 @@ def music(path: str, request: Request, k: str = ""):
     return FileResponse(full, media_type=mt)             # FileResponse honours Range
 
 
+@app.get("/attic/{path:path}")
+async def attic_file(path: str, request: Request, k: str = ""):
+    """Proxy vault audio from the shelf server (attic-server.py on the mini HOST).
+
+    Same story as /music, one hop longer: the browser can't reach
+    host.docker.internal and must not reach the shelf server at all — it's the
+    owner's private music, so the members gate lives HERE, on the brain. One
+    same-origin url then works everywhere: browser (mixes, on-demand, EQ) and
+    liquidsoap (via ?k=, see channels._for_liquidsoap). Range passes through so
+    seeking works end to end.
+    """
+    if k != config.MUSIC_KEY and not _is_member(request):
+        raise HTTPException(403, "members only")
+    if not config.ATTIC_SERVER_URL:
+        raise HTTPException(404, "no shelf server configured")
+    from urllib.parse import quote
+    upstream_url = f"{config.ATTIC_SERVER_URL}/file/{quote(path)}"
+    headers = {}
+    if request.headers.get("range"):
+        headers["Range"] = request.headers["range"]
+    client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
+    try:
+        upstream = await client.send(
+            client.build_request("GET", upstream_url, headers=headers), stream=True)
+    except httpx.HTTPError:
+        await client.aclose()
+        raise HTTPException(502, "shelf server unreachable")
+    if upstream.status_code >= 400:
+        code = upstream.status_code
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(code, "no such track")
+
+    async def body():
+        try:
+            async for chunk in upstream.aiter_raw():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    passthrough = {h: upstream.headers[h] for h in
+                   ("content-length", "content-range", "accept-ranges", "content-type")
+                   if h in upstream.headers}
+    return StreamingResponse(body(), status_code=upstream.status_code, headers=passthrough)
+
+
 @app.get("/stream/{slug}")
 async def stream(slug: str, request: Request):
     ch = channels.get_channel(slug)
-    if ch and ch["source"] == "library" and not _is_member(request):
+    if ch and ch["source"] in channels.PRIVATE_SOURCES and not _is_member(request):
         raise HTTPException(403, "members only")
     client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
     try:
@@ -370,6 +421,29 @@ def api_library_mix(request: Request, genre: str, count: int = 30):
     if not tracks:
         raise HTTPException(404, f"nothing on the shelf under {genre!r}")
     return {"channel": "mix", "album": f"{genre} Mix", "artist": "the shelf",
+            "tracks": tracks, "playing": -1}
+
+
+@app.get("/api/mix")
+def api_mix(request: Request, slug: str, count: int = 30):
+    """A mix for any MIX-ONLY channel (query.genre), dispatched by its source —
+    the shelf's sections AND the vault's categories through one door. The older
+    /api/library/mix stays for back-compat (Session still calls it)."""
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    ch = channels.get_channel(slug)
+    genre = (ch or {}).get("query", {}).get("genre")
+    if not ch or not genre:
+        raise HTTPException(404, "not a mix channel")
+    if ch["source"] == "attic":
+        from .adapters import attic
+        tracks, shelf = attic.build_mix(genre, count), "the vault"
+    else:
+        from .adapters import library
+        tracks, shelf = library.build_mix(genre, count), "the shelf"
+    if not tracks:
+        raise HTTPException(404, f"nothing filed under {genre!r}")
+    return {"channel": "mix", "album": f"{genre} Mix", "artist": shelf,
             "tracks": tracks, "playing": -1}
 
 

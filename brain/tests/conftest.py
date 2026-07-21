@@ -111,11 +111,12 @@ def app_env(tmp_path, monkeypatch):
             pass
     monkeypatch.setattr(config, "DATABASE_URL", test_url)
 
-    from app.adapters import archive, phishin
+    from app.adapters import archive, attic, phishin
     archive.set_client(httpx.Client(transport=httpx.MockTransport(_handler),
                                     base_url="https://archive.org"))
     phishin.set_client(httpx.Client(transport=httpx.MockTransport(_phishin_handler),
                                     base_url="https://phish.in"))
+    attic.set_client(None)   # cold cache; tests that want a shelf server inject their own
 
     from app import db, channels
     # the pool may still hold connections to the previous URL — rebuild it lazily,
@@ -136,6 +137,7 @@ def app_env(tmp_path, monkeypatch):
     yield
     archive.set_client(None)  # type: ignore[arg-type]
     phishin.set_client(None)  # type: ignore[arg-type]
+    attic.set_client(None)
     if db._pool is not None:
         db._pool.close()
         db._pool = None

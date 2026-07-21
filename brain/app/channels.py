@@ -13,11 +13,14 @@ import httpx
 log = logging.getLogger("jam.channels")
 
 from . import config, db
-from .adapters import archive, cc, library, phishin
+from .adapters import archive, attic, cc, library, phishin
 
 # Sources whose channels enqueue whole shows via adapter.pick_show()/get_show().
 SHOW_ADAPTERS = {"archive": archive, "phishin": phishin, "cc": cc}
-STREAMABLE_SOURCES = ("archive", "phishin", "library", "cc")
+STREAMABLE_SOURCES = ("archive", "phishin", "library", "cc", "attic")
+# The owner's own records — never listed or served to anyone but members, never
+# tunneled. Derived from the source (see list_channels), NEVER a toggle.
+PRIVATE_SOURCES = {"library", "attic"}
 
 # The stations jam-station ships with. THESE LIVE IN CODE ON PURPOSE.
 #
@@ -301,20 +304,56 @@ def sync_genre_channels() -> None:
                        "library", {"genre": name})
 
 
+# A vault category earns a mix channel once it holds this many tracks.
+ATTIC_CHANNEL_MIN = 10
+
+
+def sync_attic_channels() -> None:
+    """The shelf server's declared categories become stations: 'The Vault — Jazz'
+    etc, PRIVATE attic channels. Like sync_genre_channels, the source (the shelf
+    server's catalog + its _genres.json) is the truth, never a toggle. These are
+    MIX-ONLY (query.genre keeps them out of channels.liq), so 345 artists' worth
+    of category churn never touches liquidsoap.
+
+    NOTE the slug namespace: category channels are 'vault-<genre>' and are
+    created AND retired here — never hand a non-category channel a 'vault-'
+    slug (The Vault itself is 'vault', Artist Spotlight is 'spotlight')."""
+    import re as _re
+    want = {}
+    for name, count in attic.genre_counts().items():
+        if count >= ATTIC_CHANNEL_MIN:
+            slug = "vault-" + _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+            want[slug] = name
+    for row in db.query("SELECT slug FROM channels WHERE slug LIKE ?", ("vault-%",)):
+        if row["slug"] not in want:
+            db.execute("DELETE FROM channels WHERE slug=?", (row["slug"],))
+    for slug, name in want.items():
+        create_channel(slug, f"The Vault — {name}",
+                       f"{name} from the vault — the rescued collection on shuffle.",
+                       "attic", {"genre": name})
+
+
 def list_channels(streamable_only: bool = False) -> list[dict]:
     rows = db.query("SELECT * FROM channels WHERE enabled=1 ORDER BY created_at, slug")
     out = []
     for r in rows:
         r["query"] = json.loads(r.get("query") or "{}")
-        # A library channel is only real if the files are actually on disk —
+        # A library/attic channel is only real if the music is actually there —
         # otherwise it mounts and broadcasts silence. Surface that as `playable`
         # so the UI can say so, and keep it out of liquidsoap's mount list.
-        r["playable"] = (r["source"] != "library"
-                         or bool(library.pick_tracks(r["query"], count=1)))
-        # PRIVATE IS DERIVED, NOT DECLARED. Your own CDs are your own CDs; everything else
-        # is a public rebroadcast of something already public. Making it a toggle would mean
-        # one wrong click puts a ripped album on the open internet — so there is no toggle.
-        r["private"] = (r["source"] == "library")
+        # (attic probes its cached catalog — cheap after the first fetch, and an
+        # unreachable shelf server honestly reads OFF AIR, not broken.)
+        if r["source"] == "library":
+            r["playable"] = bool(library.pick_tracks(r["query"], count=1))
+        elif r["source"] == "attic":
+            r["playable"] = bool(attic.pick_tracks(r["query"], count=1))
+        else:
+            r["playable"] = True
+        # PRIVATE IS DERIVED, NOT DECLARED. Your own CDs (and the vault) are your own;
+        # everything else is a public rebroadcast of something already public. Making it
+        # a toggle would mean one wrong click puts a ripped album on the open internet —
+        # so there is no toggle.
+        r["private"] = (r["source"] in PRIVATE_SOURCES)
         if streamable_only and (r["source"] not in STREAMABLE_SOURCES or not r["playable"]):
             continue
         # genre stations are MIX-ONLY: clients play them as instant on-demand
@@ -388,6 +427,21 @@ def _enqueue_library(ch: dict) -> int:
     return len(tracks)
 
 
+def _enqueue_attic(ch: dict) -> int:
+    tracks = attic.pick_tracks(ch["query"])
+    if not tracks:
+        return 0
+    # like library: each top-up is its own "show" so On Demand can reconstruct it
+    show_id = f"attic-{ch['slug']}-{int(time.time())}"
+    db.executemany(
+        "INSERT INTO queue(channel, url, title, artist, album, show_id) VALUES(?,?,?,?,?,?)",
+        [(ch["slug"], t["url"], t["title"], t["artist"], t["album"], show_id) for t in tracks],
+    )
+    log.info("enqueue_attic: channel=%s queued=%d artists=%d show_id=%s",
+             ch["slug"], len(tracks), len({t["artist"] for t in tracks}), show_id)
+    return len(tracks)
+
+
 def ensure_queue(slug: str) -> int:
     """Top up a channel if it's running low. Returns number of tracks added."""
     ch = get_channel(slug)
@@ -405,6 +459,8 @@ def ensure_queue(slug: str) -> int:
             return _enqueue_show_channel(ch, SHOW_ADAPTERS[ch["source"]])
         if ch["source"] == "library":
             return _enqueue_library(ch)
+        if ch["source"] == "attic":
+            return _enqueue_attic(ch)
         return 0
     finally:
         lock.release()
@@ -462,11 +518,12 @@ def _annotate(row: dict) -> str:
 
 
 def _for_liquidsoap(url: str) -> str:
-    """The queue stores library tracks as same-origin urls ("/music/x.mp3") so the BROWSER
-    can play them directly (on-demand + the Web Audio EQ). liquidsoap is a different
-    container and needs an absolute one it can actually fetch."""
+    """The queue stores library/attic tracks as same-origin urls ("/music/x.mp3",
+    "/attic/<root>/x.mp3") so the BROWSER can play them directly (on-demand + the Web
+    Audio EQ). liquidsoap is a different container and needs an absolute one it can
+    actually fetch."""
     return (f"{config.INTERNAL_URL}{url}?k={config.MUSIC_KEY}"
-            if url.startswith("/music/") else url)
+            if url.startswith(("/music/", "/attic/")) else url)
 
 
 def next_track(slug: str) -> str:

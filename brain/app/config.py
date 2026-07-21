@@ -44,6 +44,11 @@ SMTP_PORT    = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER    = os.environ.get("SMTP_USER", "")
 SMTP_PASS    = os.environ.get("SMTP_PASS", "")
 
+# The shelf server (tools/attic-server.py on the mini HOST) serving the vault music
+# the container can't see. Blank = no shelf server: vault stations honestly unplayable.
+# e.g. http://host.docker.internal:8517 (or the tailnet IP if docker can't see the host).
+ATTIC_SERVER_URL = os.environ.get("ATTIC_SERVER_URL", "").rstrip("/")
+
 # liquidsoap is a DIFFERENT container and slab volumes are per-app, so it can never
 # see the brain's /music files. It CAN fetch a URL — that's how archive.org already
 # works. So the brain serves the library over HTTP and hands out urls, not paths.

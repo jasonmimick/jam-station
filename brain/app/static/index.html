@@ -926,7 +926,7 @@ async function advanceOnDemand() {
   // a mix never runs out: pull the next shuffled batch before the needle lifts
   if (S.channel && S.channel.startsWith(MIX) && S.show && S.idx >= S.show.tracks.length - 2) {
     try {
-      const more = await (await fetch(`/api/library/mix?genre=${encodeURIComponent(S.channel.slice(MIX.length))}&count=40`)).json();
+      const more = await (await fetch(`/api/mix?slug=${encodeURIComponent(S.channel.slice(MIX.length))}&count=40`)).json();
       if (more.tracks && more.tracks.length) { S.show.tracks.push(...more.tracks); renderSetlist(); }
     } catch {}
   }
@@ -1069,10 +1069,11 @@ $("mOnDemand").onclick = () => setMode("ondemand");
 
 /* ── radio ───────────────────────────────────────────────────────────────── */
 function tune(slug) {
-  // Shelf sections are MIX-ONLY: no icecast mount exists (each listener has their own
-  // "now"), so tuning one becomes an instant endless on-demand mix — same as the apps.
+  // Shelf sections AND vault categories are MIX-ONLY: no icecast mount exists (each
+  // listener has their own "now"), so tuning one becomes an instant endless on-demand
+  // mix — same as the apps. The slug rides along; /api/mix dispatches by source.
   const shelf = (S.channels || []).find(c => c.slug === slug && c.query && c.query.genre);
-  if (shelf) return tuneMix(shelf.query.genre);
+  if (shelf) return tuneMix(shelf.slug);
   S.channel = slug;
   localStorage.setItem("jam-last", JSON.stringify({ channel: slug, mode: S.mode }));
   $("play").disabled = false; $("next").disabled = false;
@@ -1098,9 +1099,11 @@ function tuneFavs() {
   renderStations();
 }
 
-/* ── shelf-section mix (on demand, endless — the web twin of the apps' mixes) ── */
-function tuneMix(genre) {
-  const id = MIX + genre;
+/* ── mix channels (on demand, endless — the web twin of the apps' mixes).
+      Carries the channel SLUG (shelf-jazz, vault-jazz), not a bare genre —
+      /api/mix looks the channel up and mixes from its own source. ─────────── */
+function tuneMix(slug) {
+  const id = MIX + slug;
   if (S.channel !== id) S.idx = 0;
   S.channel = id;
   localStorage.setItem("jam-last", JSON.stringify({ channel: id, mode: "ondemand" }));
@@ -1126,11 +1129,11 @@ function tuneAlbum(dir) {
 async function loadShow(autoplay) {
   if (!S.channel) return;
   if (S.channel.startsWith(MIX)) {
-    const genre = S.channel.slice(MIX.length);
-    try { S.show = await (await fetch(`/api/library/mix?genre=${encodeURIComponent(genre)}&count=40`)).json(); }
+    const slug = S.channel.slice(MIX.length);
+    try { S.show = await (await fetch(`/api/mix?slug=${encodeURIComponent(slug)}&count=40`)).json(); }
     catch { return; }
     if (!S.show.tracks || !S.show.tracks.length) { $("showWrap").style.display = "none"; return; }
-    S.show.album = `From the Shelf — ${genre}`;
+    S.show.album = chName(slug);       // "From the Shelf — Jazz" / "The Vault — Jazz"
     S.idx = Math.min(Math.max(0, S.idx), S.show.tracks.length - 1);
     renderSetlist();
     if (autoplay) playIdx(S.idx);
@@ -1446,7 +1449,7 @@ function chLabel(slug) {
   const ch = (S.channels || []).find(c => c.slug === slug);
   if (ch) return ch.name;
   if (slug === FAVS) return "Favourites";
-  if (String(slug).startsWith(MIX)) return slug.slice(MIX.length) + " mix";
+  if (String(slug).startsWith(MIX)) return chName(slug.slice(MIX.length)) + " mix";
   if (String(slug).startsWith("cds/") || String(slug).startsWith(ALBUM)) return "the collection";
   return "on demand";
 }
