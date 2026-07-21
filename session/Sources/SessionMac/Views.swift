@@ -135,6 +135,21 @@ struct NowPlayingPane: View {
                     if !byline.isEmpty {
                         Text(byline).font(.system(size: 12.5)).foregroundStyle(t.muted).lineLimit(2)
                     }
+                    if player.now.url.hasPrefix("/attic/") {
+                        HStack(spacing: 6) {
+                            if let dir = player.atticRecordDir(fromTrackURL: player.now.url) {
+                                AtticChip(label: "▸ THE RECORD", t: t) {
+                                    player.playAtticRecord(dir: dir)
+                                }
+                            }
+                            if !player.now.artist.isEmpty {
+                                AtticChip(label: "▸ THE ARTIST", t: t) {
+                                    player.playAtticArtist(player.now.artist)
+                                }
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
                     Text(spec)
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(t.faint)
@@ -265,6 +280,25 @@ struct MacNetImage: View {
                 imgLog.error("error \(url.absoluteString, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+}
+
+/// Jump chips for a playing attic track — this record, or everything by them.
+struct AtticChip: View {
+    let label: String
+    let t: Theme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 9, weight: .heavy)).tracking(0.8)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .foregroundStyle(t.muted)
+                .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

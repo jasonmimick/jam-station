@@ -109,6 +109,23 @@ public struct StationAPI {
         try await get("api/library/mix", ["genre": genre, "count": String(count)])
     }
 
+    /// The generic mix door — works for EVERY mix-only channel (shelf-* and
+    /// vault-*), dispatching by source server-side. The forward path.
+    public func mixChannel(slug: String, count: Int = 40) async throws -> Show {
+        try await get("api/mix", ["slug": slug, "count": String(count)])
+    }
+
+    // ── the attic: the family's rescued music, streamed off the vault ──
+
+    public func atticAlbums() async throws -> [Album] {
+        try await get("api/attic/albums")
+    }
+
+    /// Everything by one artist, shuffled server-side; re-fetch + append when dry.
+    public func atticArtist(name: String, count: Int = 60) async throws -> Show {
+        try await get("api/attic/artist", ["name": name, "count": String(count)])
+    }
+
     public func setGenres(dir: String, genres: [String]) async {
         _ = try? await post("api/library/genre", json: ["dir": dir, "genres": genres])
     }

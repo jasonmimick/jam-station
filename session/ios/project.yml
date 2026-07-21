@@ -22,7 +22,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 72GFWM4D2B   # Jason's free personal team (euler cert)
         MARKETING_VERSION: 0.1.0
-        CURRENT_PROJECT_VERSION: 33
+        CURRENT_PROJECT_VERSION: 34
         TARGETED_DEVICE_FAMILY: "1,2"   # iPhone + iPad
         SWIFT_VERSION: 5.9
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

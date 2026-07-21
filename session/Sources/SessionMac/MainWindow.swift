@@ -7,7 +7,7 @@ import SessionCore
 /// visit, not permanent rails; the genre sections sit in the sidebar with
 /// MIX / TUNE IN one click away; the transport never leaves the bottom edge.
 enum MacDest: Hashable {
-    case stage, dial, shelf, records, favs, history, you
+    case stage, dial, shelf, records, attic, favs, history, you
     case genre(String)
 }
 
@@ -114,6 +114,11 @@ struct MainWindowView: View {
             .id(g)      // fresh state per section
         case .records:
             RecordWall(t: t)
+        case .attic:
+            AtticGallery(t: t) { al in
+                player.browseAlbum(al)
+                dest = .stage
+            }
         case .favs:
             FavList(t: t)
         case .history:
@@ -141,6 +146,10 @@ struct Sidebar: View {
                 if !player.vinyl.isEmpty {
                     SideItem(label: "The Records", glyph: "◉", sel: dest == .records, t: t,
                              badge: "\(player.vinyl.count)") { dest = .records }
+                }
+                if !player.attic.isEmpty {
+                    SideItem(label: "The Attic", glyph: "⌂", sel: dest == .attic, t: t,
+                             badge: "\(player.attic.count)") { dest = .attic }
                 }
                 if player.member != nil {
                     SideItem(label: "Favourites", glyph: "♥", sel: dest == .favs, t: t,
@@ -635,6 +644,122 @@ struct RecordWall: View {
                         }
                     }
                     .padding(.horizontal, 18).padding(.bottom, 24)
+                }
+            }
+        }
+    }
+}
+
+/// The Attic crate — the family's rescued music off the vault. Placard tiles
+/// ONLY (no art prefetch — 1,300 cold iTunes lookups would melt the limits);
+/// covers arrive lazily when a record plays. Duplicates are real: the vault
+/// keeps every copy it rescued.
+struct AtticGallery: View {
+    @EnvironmentObject var player: Player
+    let t: Theme
+    let onPick: (Album) -> Void
+    @State private var find = ""
+    @AppStorage("atticView") var atticView = "list"
+
+    var albums: [Album] {
+        find.isEmpty ? player.attic
+        : player.attic.filter {
+            $0.album.localizedCaseInsensitiveContains(find)
+            || $0.artist.localizedCaseInsensitiveContains(find)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("THE ATTIC").font(.system(size: 12, weight: .heavy)).tracking(2)
+                    .foregroundStyle(t.ink)
+                TextField("search the attic", text: $find)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .frame(maxWidth: 220)
+                    .background(t.board)
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(t.line, lineWidth: 1))
+                HStack(spacing: 0) {
+                    ForEach([("grid", "▦"), ("list", "☰")], id: \.0) { mode, glyph in
+                        Button {
+                            atticView = mode
+                        } label: {
+                            Text(glyph).font(.system(size: 12))
+                                .frame(width: 30, height: 26)
+                                .background(atticView == mode ? t.accent : t.panel)
+                                .foregroundStyle(atticView == mode ? t.onAccent : t.muted)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(t.line, lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                Spacer()
+                Text("\(albums.count) RESCUED RECORDS")
+                    .font(.system(size: 9, weight: .heavy)).tracking(1)
+                    .foregroundStyle(t.faint)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 12)
+            if atticView == "grid" {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 16)], spacing: 20) {
+                        ForEach(albums) { al in
+                            Button {
+                                onPick(al)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    CoverTile(al: al, t: t, corner: 6)
+                                        .aspectRatio(1, contentMode: .fit)
+                                    Text(al.album)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(t.ink).lineLimit(1).padding(.top, 7)
+                                    Text(al.artist)
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(t.muted).lineLimit(1)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 18).padding(.bottom, 24)
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(albums) { al in
+                            Button {
+                                onPick(al)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    CoverTile(al: al, t: t, corner: 4)
+                                        .frame(width: 36, height: 36)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(al.album)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(t.ink).lineLimit(1)
+                                        Text(al.artist)
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(t.muted).lineLimit(1)
+                                    }
+                                    Spacer()
+                                    Text("\(al.trackCount) TRK")
+                                        .font(.system(size: 9, weight: .heavy)).tracking(1)
+                                        .foregroundStyle(t.faint)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 6)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .overlay(alignment: .bottom) {
+                                Rectangle().fill(t.line).frame(height: 1).padding(.leading, 62)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 24)
                 }
             }
         }

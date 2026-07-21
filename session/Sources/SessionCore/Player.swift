@@ -171,6 +171,7 @@ public final class Player: ObservableObject {
     @Published public private(set) var genres: [GenreCount] = []
     @Published public private(set) var vinyl: [VinylRecord] = []
     @Published public private(set) var vinylSections: [GenreCount] = []
+    @Published public private(set) var attic: [Album] = []   // the rescued crate
     @Published public private(set) var dialNow: [String: NowPlaying] = [:]
 
     public func refreshDial() async {
@@ -190,6 +191,7 @@ public final class Player: ObservableObject {
             genres = (try? await api.genres()) ?? genres
             vinyl = (try? await api.vinyl()) ?? vinyl
             vinylSections = (try? await api.vinylSections()) ?? vinylSections
+            attic = (try? await api.atticAlbums()) ?? attic
             await refreshChannels()               // private channels appear
         } else {
             albums = []                            // server CONFIRMED anonymous
@@ -198,6 +200,7 @@ public final class Player: ObservableObject {
             genres = []
             vinyl = []
             vinylSections = []
+            attic = []
         }
     }
 
@@ -315,19 +318,48 @@ public final class Player: ObservableObject {
         }
     }
 
-    /// "A jazz mix from the shelf": the whole section, shuffled, on the tape deck.
-    private var lastMixGenre: String?
+    /// Endless feeds: a shelf-section mix, a mix-only channel (shelf-*/vault-*),
+    /// or an attic artist. One engine — fetch, splice/replace, append before dry.
+    public enum MixFeed: Equatable {
+        case genre(String)      // /api/library/mix?genre=
+        case slug(String)       // /api/mix?slug=      (the forward path)
+        case artist(String)     // /api/attic/artist?name=
+    }
+    private var mixFeed: MixFeed?
+    private var feedTopUp = false           // an append is already in flight
+
+    private func fetchFeed(_ feed: MixFeed) async -> Show? {
+        switch feed {
+        case .genre(let g): return try? await api.mix(genre: g)
+        case .slug(let s): return try? await api.mixChannel(slug: s)
+        case .artist(let a): return try? await api.atticArtist(name: a)
+        }
+    }
 
     public func playMix(_ genre: String, label: String? = nil, seamless: Bool = true) {
+        startFeed(.genre(genre), label: label ?? "\(genre) Mix", seamless: seamless)
+    }
+
+    /// Tune a mix-only channel (shelf-* / vault-*) — instant personal lineup.
+    public func playMixChannel(_ channel: Channel, seamless: Bool = true) {
+        startFeed(.slug(channel.slug), label: channel.name, seamless: seamless)
+    }
+
+    /// Everything by an attic artist, shuffled, endless.
+    public func playAtticArtist(_ name: String) {
+        startFeed(.artist(name), label: "\(name) — from the attic", seamless: true)
+    }
+
+    private func startFeed(_ feed: MixFeed, label: String, seamless: Bool) {
         Task {
-            guard let sh = try? await api.mix(genre: genre), !sh.tracks.isEmpty else {
-                engineLog.error("playMix(\(genre, privacy: .public)): empty mix")
+            guard let sh = await fetchFeed(feed), !sh.tracks.isEmpty else {
+                engineLog.error("startFeed \(String(describing: feed), privacy: .public): empty")
                 return
             }
             currentAlbum = nil
             browsed = nil
-            lastMixGenre = genre
-            let title = label ?? sh.album
+            mixFeed = feed
+            let title = label
             // Seamless handoff: if a song is already playing on-demand, it KEEPS
             // playing — the station's lineup queues up behind it. No cut.
             // ONLY valid while a live player item actually exists: at end-of-mix
@@ -346,14 +378,30 @@ public final class Player: ObservableObject {
                         player.insert(item, after: player.items().last)
                     }
                 }
-                engineLog.info("playMix handoff: \(genre, privacy: .public) behind '\(cur.title, privacy: .public)' items=\(self.player.items().count)")
+                engineLog.info("feed handoff: \(title, privacy: .public) behind '\(cur.title, privacy: .public)' items=\(self.player.items().count)")
                 pushNowPlayingInfo()
             } else {
                 show = Show(channel: "mix", album: title, tracks: sh.tracks)
                 source = .tape
-                engineLog.info("playMix fresh: \(genre, privacy: .public) tracks=\(sh.tracks.count) seamless=\(seamless) hadItem=\(self.player.currentItem != nil)")
+                engineLog.info("feed fresh: \(title, privacy: .public) tracks=\(sh.tracks.count) seamless=\(seamless)")
                 playTrack(0)
             }
+        }
+    }
+
+    /// The doc's endless pattern: two tracks from the end, fetch the next batch
+    /// and APPEND — the feed never has an edge to fall off.
+    private func topUpFeed() {
+        guard let feed = mixFeed, !feedTopUp,
+              let sh = show, sh.channel == "mix",
+              trackIndex >= sh.tracks.count - 2 else { return }
+        feedTopUp = true
+        Task {
+            defer { feedTopUp = false }
+            guard let more = await fetchFeed(feed), !more.tracks.isEmpty,
+                  let cur = show, cur.channel == "mix" else { return }
+            show = Show(channel: "mix", album: cur.album, tracks: cur.tracks + more.tracks)
+            engineLog.info("feed top-up: +\(more.tracks.count) → \(self.show?.tracks.count ?? 0)")
         }
     }
 
@@ -367,8 +415,12 @@ public final class Player: ObservableObject {
         var contextGenres: [String] = []
         if source == .cd, let al = currentAlbum {
             contextGenres = al.genres
-        } else if show?.channel == "mix", let g = lastMixGenre {
-            contextGenres = [g]
+        } else if show?.channel == "mix" {
+            switch mixFeed {
+            case .genre(let g): contextGenres = [g]
+            case .slug(let s): contextGenres = channels.first { $0.slug == s }?.mixGenre.map { [$0] } ?? []
+            default: break
+            }
         }
         for g in contextGenres {
             if let ch = shelfStation(for: g) { tune(ch); return }
@@ -398,6 +450,34 @@ public final class Player: ObservableObject {
             await api.setGenres(dir: album.dir, genres: newGenres)
             albums = (try? await api.albums()) ?? albums
             genres = (try? await api.genres()) ?? genres
+        }
+    }
+
+    // ── attic jumps: from a playing vault track to its record / artist ──
+
+    /// "/attic/root/folder/file.mp3" (percent-encoded) → the record's opaque
+    /// key "attic:root/folder" — the same door /api/library/album opens.
+    public func atticRecordDir(fromTrackURL url: String) -> String? {
+        guard url.hasPrefix("/attic/") else { return nil }
+        let decoded = url.removingPercentEncoding ?? url
+        var parts = decoded.dropFirst("/attic/".count).split(separator: "/")
+        guard parts.count >= 2 else { return nil }
+        parts.removeLast()                        // drop the filename
+        return "attic:" + parts.joined(separator: "/")
+    }
+
+    /// Play the record the current attic track came from, in order.
+    public func playAtticRecord(dir: String) {
+        if let al = attic.first(where: { $0.dir == dir }) {
+            playAlbum(al)                         // full CD treatment: chip, art, tracklist
+            return
+        }
+        Task {                                    // crate not loaded / stale — play it anyway
+            guard let sh = try? await api.album(dir: dir), !sh.tracks.isEmpty else { return }
+            currentAlbum = nil; browsed = nil; mixFeed = nil
+            show = Show(channel: "mix", album: sh.album, tracks: sh.tracks)
+            source = .tape
+            playTrack(0)
         }
     }
 
@@ -431,8 +511,8 @@ public final class Player: ObservableObject {
         current = channel
         // a genre station is mix-only: the song changes NOW and the lineup
         // queues behind it — no live stream to join mid-song
-        if let g = channel.mixGenre {
-            playMix(g, label: channel.name)   // wears the station's name
+        if channel.mixGenre != nil {
+            playMixChannel(channel)           // the generic mix door, station's name on
             return
         }
         source = .radio
@@ -548,8 +628,8 @@ public final class Player: ObservableObject {
            sh.channel == current?.slug, currentAlbum == nil {
             setSource(.radio)                    // ran off the tape's end → back to LIVE
         } else if let sh = show, trackIndex + 1 >= sh.tracks.count,
-                  sh.channel == "mix", let g = lastMixGenre {
-            playMix(g, seamless: false)          // a skip CUTS — next batch, track 1, now
+                  sh.channel == "mix", let feed = mixFeed {
+            startFeed(feed, label: sh.album, seamless: false)   // a skip CUTS — next batch, now
         } else {
             nextTrack()
         }
@@ -615,9 +695,9 @@ public final class Player: ObservableObject {
     private func advancedInQueue() {
         guard source != .radio, let sh = show, trackIndex + 1 < sh.tracks.count else {
             // a mix never runs dry — fetch the next shuffled batch and roll on
-            if show?.channel == "mix", let g = lastMixGenre {
-                engineLog.info("mix ran dry → refill \(g, privacy: .public)")
-                playMix(g)
+            if let sh2 = show, sh2.channel == "mix", let feed = mixFeed {
+                engineLog.info("feed ran dry → restart")
+                startFeed(feed, label: sh2.album, seamless: false)
             } else {
                 engineLog.info("show ended (idx=\(self.trackIndex)) → paused")
                 status = .paused
@@ -628,6 +708,7 @@ public final class Player: ObservableObject {
         trackIndex += 1
         let t = sh.tracks[trackIndex]
         engineLog.info("advanced → \(self.trackIndex): '\(t.title, privacy: .public)' items=\(self.player.items().count)")
+        topUpFeed()                               // append before a feed can run dry
         now = NowPlaying(title: t.title, artist: t.artist, album: t.album, url: t.url)
         position = 0; duration = 0
         if let cur = player.currentItem { watch(cur) }

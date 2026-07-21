@@ -186,6 +186,38 @@ struct PlayerSheet: View {
                 .lineLimit(1).padding(.top, 3)
             specLine.padding(.top, 8)
 
+            if player.now.url.hasPrefix("/attic/") {
+                HStack(spacing: 8) {
+                    if let dir = player.atticRecordDir(fromTrackURL: player.now.url) {
+                        Button {
+                            tapHaptic()
+                            player.playAtticRecord(dir: dir)
+                        } label: {
+                            Text("▸ THE RECORD")
+                                .font(.system(size: 10, weight: .heavy)).tracking(0.8)
+                                .padding(.horizontal, 11).padding(.vertical, 7)
+                                .foregroundStyle(t.muted)
+                                .overlay(Capsule().stroke(t.line, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if !player.now.artist.isEmpty {
+                        Button {
+                            tapHaptic()
+                            player.playAtticArtist(player.now.artist)
+                        } label: {
+                            Text("▸ THE ARTIST")
+                                .font(.system(size: 10, weight: .heavy)).tracking(0.8)
+                                .padding(.horizontal, 11).padding(.vertical, 7)
+                                .foregroundStyle(t.muted)
+                                .overlay(Capsule().stroke(t.line, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 8)
+            }
+
             if player.source != .radio {
                 HStack(spacing: 10) {
                     Text(mmss(player.position))

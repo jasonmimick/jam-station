@@ -163,6 +163,13 @@ struct PadSidebar: View {
                         nav.tab = "shelf"
                     }
                 }
+                if !player.attic.isEmpty {
+                    PadSideItem(label: "The Attic", glyph: "house.lodge", sel: false, t: t,
+                                badge: "\(player.attic.count)") {
+                        nav.shelfCrate = "attic"
+                        nav.tab = "shelf"
+                    }
+                }
                 PadSideItem(label: "You", glyph: "circle.circle", sel: nav.tab == "you", t: t) {
                     nav.tab = "you"
                 }
@@ -746,18 +753,28 @@ struct ShelfTab: View {
     var body: some View {
         VStack(spacing: 0) {
             SignageHeader(t: t)
-            if !player.vinyl.isEmpty {
-                HStack(spacing: 7) {
-                    SectionChip(label: "SHELF · \(player.albums.count)",
-                                on: crate == "cds", t: t) { crate = "cds" }
-                    SectionChip(label: "RECORDS · \(player.vinyl.count)",
-                                on: crate == "vinyl", t: t) { crate = "vinyl" }
-                    Spacer()
+            if !player.vinyl.isEmpty || !player.attic.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        SectionChip(label: "SHELF · \(player.albums.count)",
+                                    on: crate == "cds", t: t) { crate = "cds" }
+                        if !player.vinyl.isEmpty {
+                            SectionChip(label: "RECORDS · \(player.vinyl.count)",
+                                        on: crate == "vinyl", t: t) { crate = "vinyl" }
+                        }
+                        if !player.attic.isEmpty {
+                            SectionChip(label: "ATTIC · \(player.attic.count)",
+                                        on: crate == "attic", t: t) { crate = "attic" }
+                        }
+                    }
+                    .padding(.horizontal, 14)
                 }
-                .padding(.horizontal, 14).padding(.bottom, 8)
+                .padding(.bottom, 8)
             }
             if crate == "vinyl" {
                 VinylWalliOS(t: t)
+            } else if crate == "attic" {
+                AtticWalliOS(t: t, openPlayer: openPlayer)
             } else {
             if let rip = player.rip, rip.ripping {
                 HStack(spacing: 8) {
@@ -951,6 +968,74 @@ struct ShelfTab: View {
         .onAppear {
             if let s = nav.shelfSection { section = s; nav.shelfSection = nil }
             if let c = nav.shelfCrate { crate = c; nav.shelfCrate = nil }
+        }
+    }
+}
+
+/// The attic on iOS — the rescued crate off the vault. Placard tiles only
+/// (art loads lazily when a record plays; no bulk prefetch). Tap = play.
+struct AtticWalliOS: View {
+    @EnvironmentObject var player: Player
+    let t: IOSTheme
+    let openPlayer: () -> Void
+    @State private var find = ""
+
+    var albums: [Album] {
+        find.isEmpty ? player.attic
+        : player.attic.filter {
+            $0.album.localizedCaseInsensitiveContains(find)
+            || $0.artist.localizedCaseInsensitiveContains(find)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            FindField(text: $find, prompt: "search the attic", t: t)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(albums) { al in
+                        Button {
+                            tapHaptic()
+                            player.playAlbum(al)
+                            openPlayer()
+                        } label: {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    let hue = Double(abs(al.album.hashValue % 360)) / 360.0
+                                    LinearGradient(
+                                        colors: [Color(hue: hue, saturation: 0.30, brightness: 0.34),
+                                                 Color(hue: hue, saturation: 0.38, brightness: 0.12)],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing)
+                                    Text(String(al.album.prefix(1)))
+                                        .font(.system(size: 16, weight: .light))
+                                        .foregroundStyle(.white.opacity(0.9))
+                                }
+                                .frame(width: 40, height: 40)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(al.album)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(t.ink).lineLimit(1)
+                                    Text(al.artist)
+                                        .font(.system(size: 11.5))
+                                        .foregroundStyle(t.muted).lineLimit(1)
+                                }
+                                Spacer()
+                                Text("\(al.trackCount)")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(t.faint)
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(t.line).frame(height: 1).padding(.leading, 66)
+                        }
+                    }
+                }
+                .padding(.bottom, 20)
+            }
         }
     }
 }
