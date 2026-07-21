@@ -120,6 +120,42 @@ def build_mix(genre: str, count: int = 30) -> list[dict]:
     return tracks[:max(1, min(count, 100))]
 
 
+def list_albums() -> list[dict]:
+    """The attic crate: one entry per album folder in the vault catalog — the browse
+    view of "what's in the attic". NO cover_url here, deliberately: the grid renders
+    hundreds of tiles at once and every cover is a lazy iTunes fetch — the UI's
+    generated placard carries the grid, and the real sleeve loads when an album is
+    opened or played (per-track cover_url)."""
+    seen: dict = {}
+    for t in _catalog().get("tracks") or []:
+        d = t["path"].rsplit("/", 1)[0] if "/" in t["path"] else ""
+        e = seen.get((t["root"], d))
+        if e is None:
+            seen[(t["root"], d)] = e = {
+                "dir": f"attic:{t['root']}/{d}",
+                "artist": t.get("artist", ""),
+                "album": t.get("album", "") or "Loose Tracks",
+                "tracks": 0, "mtime": 0, "src": "attic",
+            }
+        e["tracks"] += 1
+    out = list(seen.values())
+    out.sort(key=lambda a: ((a["artist"] or "").lower(), (a["album"] or "").lower()))
+    return out
+
+
+def album_tracks(dir_key: str) -> list[dict]:
+    """One attic album as an ordered tracklist (filenames carry the running order).
+    `dir_key` is "attic:<root>/<folder path>" straight from list_albums."""
+    if not dir_key.startswith("attic:"):
+        return []
+    root, _, d = dir_key[len("attic:"):].partition("/")
+    ts = [t for t in _catalog().get("tracks") or []
+          if t["root"] == root
+          and (t["path"].rsplit("/", 1)[0] if "/" in t["path"] else "") == d]
+    ts.sort(key=lambda t: t["path"])
+    return [_track(t) for t in ts]
+
+
 def categories() -> list[str]:
     """The sections this shelf server declared it wants as channels."""
     return list(_catalog().get("categories") or [])

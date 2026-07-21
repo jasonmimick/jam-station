@@ -390,10 +390,21 @@ def set_cover(request: Request, dir: str = Form(...), photo: UploadFile = File(.
 
 @app.get("/api/library/album")
 def api_library_album(request: Request, dir: str):
-    """One album as a playable, ordered tracklist — the on-demand counterpart to a station."""
+    """One album as a playable, ordered tracklist — the on-demand counterpart to a station.
+    Attic albums come through the same door ("attic:<root>/<path>" dirs from
+    /api/attic/albums), so the gallery's tuneAlbum path plays vault records unchanged."""
     from .adapters import library
     if not _is_member(request):
         raise HTTPException(403, "members only")
+    if dir.startswith("attic:"):
+        from .adapters import attic
+        tracks = attic.album_tracks(dir)
+        if not tracks:
+            raise HTTPException(404, "no such album")
+        images = ([{"type": "front", "url": tracks[0]["cover_url"]}]
+                  if tracks[0].get("cover_url") else [])
+        return {"dir": dir, "album": tracks[0]["album"], "artist": tracks[0]["artist"],
+                "tracks": tracks, "images": images, "playing": -1}
     tracks = library.album_tracks(dir)
     if not tracks:
         raise HTTPException(404, "no such album")
@@ -455,6 +466,18 @@ def api_library_mix(request: Request, genre: str, count: int = 30):
             "tracks": tracks, "playing": -1}
 
 
+@app.get("/api/attic/albums")
+def api_attic_albums(request: Request, response: Response):
+    """Browse the attic: one entry per vault album — 'what's in the attic', the crate
+    view. [] for anonymous (same spirit as the CD catalog: the UI shows nothing rather
+    than erroring; audio stays gated at /attic)."""
+    response.headers["Cache-Control"] = "no-store"
+    if not _is_member(request):
+        return []
+    from .adapters import attic
+    return attic.list_albums()
+
+
 @app.get("/api/attic/cover")
 def api_attic_cover(request: Request, artist: str, album: str, k: str = ""):
     """Album art for vault tracks, fetched LAZILY: the vault has no curated covers and
@@ -474,7 +497,11 @@ def api_attic_cover(request: Request, artist: str, album: str, k: str = ""):
         return FileResponse(dest, media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=86400"})
     if os.path.exists(dest + ".none"):
-        raise HTTPException(404, "no art found")
+        # a miss isn't forever — iTunes rate-limiting a browse spree shouldn't
+        # permanently strip an album of its sleeve. Retry after a week.
+        if time.time() - os.path.getmtime(dest + ".none") < 7 * 86400:
+            raise HTTPException(404, "no art found")
+        os.unlink(dest + ".none")
     if covers._itunes_cover(artist, album, dest):
         return FileResponse(dest, media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=86400"})

@@ -635,6 +635,7 @@
         <button data-dt="playing" class="on">▶ Playing</button>
         <button data-dt="stations">Stations</button>
         <button data-dt="cds">CDs</button>
+        <button data-dt="attic">The Attic</button>
         <button data-dt="spots">Spots</button>
         <span class="dnp" id="dnp"></span>
       </div>
@@ -815,7 +816,7 @@
   </div>
 
 <script>
-const S = { channel:null, channels:[], albums:[], spots:[], msgs:[], mode:"radio", status:"idle", filter:"",
+const S = { channel:null, channels:[], albums:[], attic:[], spots:[], msgs:[], mode:"radio", status:"idle", filter:"",
             histScope:"channel", audio:new Audio(), show:null, idx:-1, np:null, userPaused:false };
 const ALBUM = "album:";                       // virtual-station prefix for a catalog album
 const MIX = "mix:";                           // virtual-station prefix for a shelf-section mix
@@ -950,6 +951,11 @@ async function loadCatalog() {
   // Members only server-side; anonymous gets [] and the catalog simply doesn't appear.
   try { S.albums = await (await fetch("/api/library/albums")).json(); } catch { S.albums = []; }
   renderStations();
+  refreshDeskGallery();
+}
+async function loadAttic() {
+  // The vault crate — every album the shelf server catalogs. Members only, [] otherwise.
+  try { S.attic = await (await fetch("/api/attic/albums")).json(); } catch { S.attic = []; }
   refreshDeskGallery();
 }
 async function loadSpots() {
@@ -1859,10 +1865,14 @@ async function refresh() {
       flapTo(np.title);
       $("byline").innerHTML = `${esc(np.artist)} <span class="sm">· ${esc(np.album)}</span>`;
     }
-    const show = np.album || "";
+    // Archive channels play SHOWS (one band, an album groups the set); vault channels
+    // play a shuffle — grouping by album would leave a one-line "show" with no artist.
+    // For those, the panel becomes the broadcast queue: what played, what's next, who by.
+    const shuffle = (((S.channels||[]).find(x=>x.slug===c)||{}).source) === "attic";
+    const show = shuffle ? chName(c) : (np.album || "");
     if (show) {
-      const played = hist.filter(t=>t.album===show).reverse();
-      const ahead  = (q.upcoming||[]).filter(t=>t.album===show);
+      const played = (shuffle ? hist.slice(0,12) : hist.filter(t=>t.album===show)).reverse();
+      const ahead  = shuffle ? (q.upcoming||[]) : (q.upcoming||[]).filter(t=>t.album===show);
       const set = [...played, ...ahead], pos = played.length;
       $("showWrap").style.display = "";
       $("showName").textContent = show;
@@ -1876,7 +1886,7 @@ async function refresh() {
         return `<div class="r ${now?"now":done?"done":""}">
           <span class="mk">${now?"▶":done?"✓":"·"}</span>
           <span class="n num">${String(i+1).padStart(2,"0")}</span>
-          <span class="ti">${esc(x.title)}</span>
+          <span class="ti">${esc(x.title)}${shuffle && x.artist ? ` <span style="color:var(--muted);font-weight:400">${esc(x.artist)}</span>` : ""}</span>
           <span class="st">${now?"Now":done?"Played":"Next"}</span></div>`;
       }).join("");
     } else $("showWrap").style.display = "none";
@@ -2220,6 +2230,7 @@ function setDtab(t, flashSpot) {
   $("galleryView").style.display = playing ? "none" : "";
   if (!playing) {
     if (t === "cds") loadCatalog();            // freshest covers/years before the grid draws
+    if (t === "attic") loadAttic();            // the vault crate, straight off the shelf server
     if (t === "spots") loadSpots();
     $("galFind").value = ""; renderDeskGallery(flashSpot);
   }
@@ -2229,6 +2240,10 @@ function deskItems() {
     .map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio",
                  cover: c.art_url || stationArt(c.name),
                  sortArtist: (c.name || "").toLowerCase(), sortAlbum: (c.name || "").toLowerCase(), mtime: 0, tracks: 0 }));
+  if (dtab === "attic") return (S.attic || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
+    sub: al.artist || "—", cover: "",     // no cover in the grid — sleeves load lazily when an album opens
+    sortArtist: (al.artist || "").toLowerCase(), sortAlbum: (al.album || "").toLowerCase(),
+    mtime: 0, tracks: al.tracks || 0, genres: [] }));
   return (S.albums || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
     sub: (al.artist || "—") + (al.year ? " · " + al.year : ""), cover: al.cover_url || "",
     sortArtist: (al.artist || "").toLowerCase(), sortAlbum: (al.album || "").toLowerCase(),
@@ -2346,7 +2361,8 @@ function renderDeskGallery(flashSpot) {
   const g = $("dgallery"); if (!g) return;
   g.className = "collgrid";
   const q = ($("galFind").value || "").toLowerCase().trim();
-  $("galLbl").textContent = dtab === "stations" ? "Stations" : dtab === "cds" ? `Your collection · ${S.albums.length}` : "Spotted";
+  $("galLbl").textContent = dtab === "stations" ? "Stations" : dtab === "cds" ? `Your collection · ${S.albums.length}`
+    : dtab === "attic" ? `The Attic · ${S.attic.length} albums` : "Spotted";
   if (dtab === "spots") {
     if (!S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to keep spots.</p>`; return; }
     let list = q ? S.spots.filter(s => (s.artist + " " + s.title + " " + s.album + " " + (s.saw || "")).toLowerCase().includes(q)) : S.spots;
@@ -2355,7 +2371,7 @@ function renderDeskGallery(flashSpot) {
     wireDeskSpots(); if (flashSpot) flashCard(flashSpot);
     return;
   }
-  if (dtab === "cds" && !S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to see your CDs.</p>`; return; }
+  if ((dtab === "cds" || dtab === "attic") && !S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to see your ${dtab === "attic" ? "attic" : "CDs"}.</p>`; return; }
   renderGenreChips();
   let list = deskItems();
   if (dtab === "cds" && S.galGenre)
@@ -2379,7 +2395,8 @@ function renderDeskGallery(flashSpot) {
       `<div class="albcover${af}" style="background-image:${a.bg}">${a.mono}${cov}</div>` +
       `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span>` +
       (added ? `<span class="albdate">${added}</span>` : "") + `</div></button>`;
-  }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match." : "No albums yet — rip a CD."}</p>`;
+  }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match."
+    : dtab === "attic" ? "The attic is empty — is the shelf server up?" : "No albums yet — rip a CD."}</p>`;
   g.querySelectorAll(".setcov").forEach(b => b.onclick = (e) => { e.stopPropagation(); setCoverFor(b.dataset.coverDir); });
   g.querySelectorAll(".setgen").forEach(b => b.onclick = async (e) => {
     e.stopPropagation();

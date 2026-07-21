@@ -181,6 +181,30 @@ def test_attic_cover_fetches_once_then_caches(shelf, monkeypatch):
         assert calls.count("miss") == 1
 
 
+def test_attic_crate_lists_and_plays_albums(shelf):
+    albums = attic.list_albums()
+    assert {a["album"] for a in albums} == {"Kind of Blue", "Giant Steps", "Harvest"}
+    kob = [a for a in albums if a["album"] == "Kind of Blue"][0]
+    assert kob["tracks"] == 6 and kob["dir"] == "attic:drive03/Miles Davis/Kind of Blue"
+    tracks = attic.album_tracks(kob["dir"])
+    assert [t["title"] for t in tracks] == [f"Song {i}" for i in range(1, 7)]  # running order
+    assert attic.album_tracks("attic:drive03/Nobody/Nothing") == []
+
+
+def test_attic_albums_api_and_album_door(shelf):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as client:
+        assert client.get("/api/attic/albums").json() == []          # anonymous: empty, not 403
+        _member_cookie(client)
+        albums = client.get("/api/attic/albums").json()
+        assert len(albums) == 3
+        # attic albums play through the SAME album door the CD gallery uses
+        show = client.get("/api/library/album",
+                          params={"dir": albums[0]["dir"]}).json()
+        assert show["tracks"] and all(t["url"].startswith("/attic/") for t in show["tracks"])
+
+
 def test_api_mix_dispatches_by_source(shelf):
     from fastapi.testclient import TestClient
     from app.main import app
