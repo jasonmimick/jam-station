@@ -69,6 +69,64 @@ def _ffmpeg() -> str | None:
 
 FFMPEG = _ffmpeg()
 
+# Transcodes are cached as REAL FILES and served sized + seekable. Streaming the ffmpeg
+# stdout (no Content-Length, no Range, unknown duration) was the one response shape old
+# browsers (Silk on a Fire tablet) choke on — every other audio we serve is a plain file.
+TRANSCODE_DIR = os.environ.get("ATTIC_TRANSCODE_DIR",
+                               os.path.expanduser("~/.attic-transcode"))
+TRANSCODE_CACHE_MB = int(os.environ.get("ATTIC_TRANSCODE_CACHE_MB", "2000"))
+
+
+def _evict_transcodes() -> None:
+    try:
+        files = [(os.path.getmtime(p), os.path.getsize(p), p)
+                 for p in (os.path.join(TRANSCODE_DIR, f) for f in os.listdir(TRANSCODE_DIR))
+                 if os.path.isfile(p)]
+    except OSError:
+        return
+    total = sum(s for _, s, _ in files)
+    for _, s, p in sorted(files):                      # oldest first
+        if total <= TRANSCODE_CACHE_MB * 1_000_000:
+            break
+        try:
+            os.unlink(p)
+            total -= s
+        except OSError:
+            pass
+
+
+def transcoded(src: str) -> str | None:
+    """The cached mp3 for a wma source — transcoding it first if needed (a few seconds,
+    once per track; LRU-capped cache). None = transcode failed, caller serves raw."""
+    import hashlib
+    import subprocess
+    os.makedirs(TRANSCODE_DIR, exist_ok=True)
+    dest = os.path.join(TRANSCODE_DIR,
+                        hashlib.sha1(src.encode()).hexdigest()[:24] + ".mp3")
+    if os.path.exists(dest):
+        try:
+            os.utime(dest)                             # LRU touch
+        except OSError:
+            pass
+        return dest
+    tmp = f"{dest}.tmp{os.getpid()}.{threading.get_ident()}"
+    try:
+        r = subprocess.run([FFMPEG, "-v", "error", "-y", "-i", src,
+                            "-codec:a", "libmp3lame", "-b:a", "256k", "-f", "mp3", tmp],
+                           capture_output=True, timeout=300)
+        if r.returncode != 0 or not os.path.exists(tmp) or os.path.getsize(tmp) < 1000:
+            raise OSError(r.stderr.decode(errors="replace")[:200])
+        os.replace(tmp, dest)
+    except Exception as e:
+        print(f"attic-server: transcode failed for {src}: {e}", flush=True)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return None
+    _evict_transcodes()
+    return dest
+
 
 def parse_roots(spec: str) -> dict[str, str]:
     roots = {}
@@ -263,10 +321,12 @@ class Handler(BaseHTTPRequestHandler):
         if not full:
             return self._json({"error": "no such file"}, 404)
         ext = os.path.splitext(full)[1].lower()
-        if ext in TRANSCODE_EXTENSIONS and FFMPEG:
-            return self._transcode(full)
-        size = os.path.getsize(full)
         mime = _MIME.get(ext, "application/octet-stream")
+        if ext in TRANSCODE_EXTENSIONS and FFMPEG:
+            mp3 = transcoded(full)
+            if mp3:                       # a real, sized, seekable file — like every other
+                full, mime = mp3, "audio/mpeg"
+        size = os.path.getsize(full)
 
         start, end = 0, size - 1
         rng = self.headers.get("Range", "")
@@ -303,33 +363,6 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
                 remaining -= len(chunk)
-
-    def _transcode(self, full: str) -> None:
-        """Stream a WMA as MP3, transcoded live. No Content-Length (we don't know it)
-        and no Range (there's nothing to seek in) — connection-close delimits the body,
-        which every client here (browsers, liquidsoap, httpx) handles. One ffmpeg per
-        concurrent listener; audio transcode is a rounding error on the M1."""
-        import subprocess
-        self.send_response(200)
-        self.send_header("Content-Type", "audio/mpeg")
-        self.send_header("Connection", "close")
-        self.end_headers()
-        self.close_connection = True
-        proc = subprocess.Popen(
-            [FFMPEG, "-v", "error", "-i", full, "-f", "mp3", "-codec:a", "libmp3lame",
-             "-b:a", "256k", "-"],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        try:
-            while True:
-                chunk = proc.stdout.read(1 << 16)
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
-        finally:
-            proc.stdout.close()
-            if proc.poll() is None:
-                proc.kill()           # listener hung up mid-song: stop burning CPU
-            proc.wait()
 
 
 def main() -> None:
