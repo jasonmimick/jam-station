@@ -2408,6 +2408,10 @@ function renderGenreChips() {
     names.map(n => `<button data-g="${esc(n)}" class="${S.galGenre === n ? "on" : ""}">${esc(n)} · ${counts[n]}</button>`).join("");
   w.querySelectorAll("button").forEach(b => b.onclick = () => { S.galGenre = b.dataset.g || ""; renderDeskGallery(); });
 }
+// The filter box was read at render time but never TRIGGERED a render — typing only
+// appeared to work on tabs the 30s data poll happened to repaint. Filter as you type.
+$("galFind").oninput = () => renderDeskGallery();
+
 function renderDeskGallery(flashSpot) {
   const g = $("dgallery"); if (!g) return;
   g.className = "collgrid";
