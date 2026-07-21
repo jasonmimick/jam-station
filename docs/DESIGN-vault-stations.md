@@ -113,8 +113,8 @@ GET /health                {ok, roots: {id: {present, files}}}
 ## Open items
 - AFP mount doesn't survive reboot (launchd mount TODO — separate from this build; the
   server degrades to empty catalog / OFF AIR meanwhile).
-- Session apps: vault category mixes not wired yet (they keep using `/api/library/mix` for
-  shelf sections; `/api/mix` adoption is a later Session task).
+- Session apps: attic not wired yet — full handoff spec for the Session agent in
+  `docs/DESIGN-session-attic.md` (dial + mixes + crate + record/artist jump + art).
 - Decade stations: need year metadata — a later enrichment pass.
 
 ## Fast fallback (unchanged)
