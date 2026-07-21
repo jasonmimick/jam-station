@@ -1,6 +1,6 @@
 # DESIGN — Vault Stations (streaming the attic music library)
 
-**Status:** BUILD IN PROGRESS — spec finalized 2026-07-20 (was: designed + paused earlier same day).
+**Status:** BUILT & ON AIR 2026-07-20 — The Vault, Artist Spotlight, and 12 vault-<genre> category stations live.
 **Goal:** turn the ~65 GB of personal music archived on the Time Capsule vault into stations
 on jam-station, **without copying it onto the mini** (there isn't room) — and do it behind a
 contract that anyone else's machine can implement later (the extensibility story).
@@ -102,7 +102,7 @@ GET /health                {ok, roots: {id: {present, files}}}
 
 ## Build checklist
 - [x] `tools/attic-server.py` + `run.attic.server.plist`, verify `/catalog.json` on the mini
-- [ ] `tools/attic-genres.py` → `_genres.json`, verify categories appear in the catalog
+- [x] `tools/attic-genres.py` → `_genres.json` (both roots; 584/717 artists mapped, 12 categories)
 - [x] `brain/app/adapters/attic.py` + channels/main wiring + `/api/mix` + web UI tune + tests
 - [x] container→host reach confirmed; `ATTIC_SERVER_URL` set on jam-brain; deploy
 - [x] create **The Vault** + **Artist Spotlight**; `vault-*` category channels sync at boot
