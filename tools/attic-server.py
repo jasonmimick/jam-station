@@ -84,6 +84,19 @@ CATEGORIES_ENV = [c.strip() for c in os.environ.get("ATTIC_CATEGORIES", "").spli
 
 _TRACK_NUM = re.compile(r"^(\d{1,3})[ .\-_]+(.+)$")
 
+# Library-manager nesting that is NOT an artist: drive03 carries a whole
+# "iTunes/iTunes Media/Music/<Artist>/<Album>" subtree, which parsed as
+# artist "iTunes", album "iTunes Media". Strip these wrappers before the
+# Artist/Album derivation — the path IS the tags, but only the real path.
+_LIBRARY_DIRS = {"itunes", "itunes media", "itunes music", "music", "my music",
+                 "amazon music", "amazon mp3", "media"}
+
+
+def _strip_library_dirs(parts: list[str]) -> list[str]:
+    while len(parts) > 1 and parts[0].lower() in _LIBRARY_DIRS:
+        parts = parts[1:]
+    return parts
+
 
 def _title_artist(stem: str, dir_artist: str) -> tuple[str, str]:
     """Filename stem -> (title, artist). Same conventions as the brain's library._meta:
@@ -111,7 +124,7 @@ def _walk_root(rootid: str, root: str) -> list[dict]:
             if fn.startswith(("._", ".")) or not fn.lower().endswith(AUDIO_EXTENSIONS):
                 continue
             rel = os.path.relpath(os.path.join(dirpath, fn), root)
-            parts = rel.split(os.sep)
+            parts = _strip_library_dirs(rel.split(os.sep))
             artist = parts[0] if len(parts) > 1 else ""
             album = parts[1] if len(parts) > 2 else ""
             title, t_artist = _title_artist(os.path.splitext(fn)[0], artist)

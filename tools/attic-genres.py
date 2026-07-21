@@ -87,8 +87,27 @@ def main() -> None:
     except Exception:
         known = {}
 
-    artists = sorted(d for d in os.listdir(root)
-                     if os.path.isdir(os.path.join(root, d)) and not d.startswith("."))
+    # Descend through library-manager wrappers (iTunes/iTunes Media/Music/...) the same
+    # way attic-server does — those folders are nesting, not artists.
+    LIBRARY_DIRS = {"itunes", "itunes media", "itunes music", "music", "my music",
+                    "amazon music", "amazon mp3", "media"}
+
+    def artist_dirs(base: str) -> list[str]:
+        out = []
+        try:
+            entries = sorted(os.listdir(base))
+        except OSError:
+            return out
+        for d in entries:
+            if d.startswith(".") or not os.path.isdir(os.path.join(base, d)):
+                continue
+            if d.lower() in LIBRARY_DIRS:
+                out += artist_dirs(os.path.join(base, d))
+            else:
+                out.append(d)
+        return out
+
+    artists = sorted(set(artist_dirs(root)))
     todo = [a for a in artists if a not in known]
     print(f"{len(artists)} artist folders, {len(known)} already mapped, {len(todo)} to look up")
 
