@@ -1313,6 +1313,16 @@ function initAudio() {
     });
     analyser = actx.createAnalyser(); analyser.fftSize = 64;
     node.connect(analyser); analyser.connect(actx.destination);
+    // A suspended context MUTES the element it routes (the iOS trap) — and Silk in
+    // desktop mode sails past the UA gate with mobile autoplay rules underneath, so a
+    // Fire tablet played everything silently until the EQ click resumed the context.
+    // Resume now; if the browser insists on a gesture, the next tap/keypress does it.
+    if (actx.state === "suspended") {
+      actx.resume();
+      const wake = () => { if (actx && actx.state === "suspended") actx.resume(); };
+      document.addEventListener("pointerdown", wake, { capture: true });
+      document.addEventListener("keydown", wake, { capture: true });
+    }
     drawViz();
   } catch { actx = null; }
 }
