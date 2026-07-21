@@ -147,6 +147,40 @@ def test_attic_channels_hidden_from_anonymous(shelf):
         assert "vault" in seen
 
 
+def test_tracks_carry_lazy_cover_url(shelf):
+    t = attic.pick_tracks({"artist": "Miles Davis"}, count=1)[0]
+    assert t["cover_url"].startswith("/api/attic/cover?")
+    assert "Kind+of+Blue" in t["cover_url"] or "Kind%20of%20Blue" in t["cover_url"]
+
+
+def test_attic_cover_fetches_once_then_caches(shelf, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import covers
+    from app.main import app
+    calls = []
+
+    def fake_itunes(artist, album, dest):
+        calls.append(album)
+        with open(dest, "wb") as f:
+            f.write(b"\xff\xd8fakejpg")
+        return True
+
+    monkeypatch.setattr(covers, "_itunes_cover", fake_itunes)
+    with TestClient(app) as client:
+        url = "/api/attic/cover?artist=Miles+Davis&album=Kind+of+Blue"
+        assert client.get(url).status_code == 403          # members only
+        _member_cookie(client)
+        assert client.get(url).status_code == 200          # fetched
+        assert client.get(url).status_code == 200          # cached
+        assert calls == ["Kind of Blue"]                   # iTunes hit exactly once
+        # a miss is cached too — one lookup, then 404s forever
+        monkeypatch.setattr(covers, "_itunes_cover", lambda *a: calls.append("miss") or False)
+        miss = "/api/attic/cover?artist=Obscure&album=Nothing"
+        assert client.get(miss).status_code == 404
+        assert client.get(miss).status_code == 404
+        assert calls.count("miss") == 1
+
+
 def test_api_mix_dispatches_by_source(shelf):
     from fastapi.testclient import TestClient
     from app.main import app

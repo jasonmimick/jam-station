@@ -65,12 +65,19 @@ def _catalog() -> dict:
 
 def _track(entry: dict) -> dict:
     # "/file/<root>/<path>" (the server's url) -> "/attic/<root>/<path>" (the brain's proxy)
-    return {
+    t = {
         "url": "/attic/" + entry["url"][len("/file/"):],
         "title": entry.get("title", ""),
         "artist": entry.get("artist", ""),
         "album": entry.get("album", ""),
     }
+    if t["artist"] and t["album"]:
+        # art is fetched lazily the first time a client looks (see /api/attic/cover) —
+        # 16k tracks will never be hand-curated, and don't need to be
+        from urllib.parse import urlencode
+        t["cover_url"] = "/api/attic/cover?" + urlencode(
+            {"artist": t["artist"], "album": t["album"]})
+    return t
 
 
 def _filtered(cfg: dict) -> list[dict]:

@@ -424,6 +424,33 @@ def api_library_mix(request: Request, genre: str, count: int = 30):
             "tracks": tracks, "playing": -1}
 
 
+@app.get("/api/attic/cover")
+def api_attic_cover(request: Request, artist: str, album: str, k: str = ""):
+    """Album art for vault tracks, fetched LAZILY: the vault has no curated covers and
+    nobody is going to hand-curate 16,000 tracks — so the first time a client looks at
+    an album, we ask iTunes (covers._itunes_cover, same fallback the shelf uses), cache
+    the sleeve on the cache volume, and every later look is instant. A miss is cached
+    too (.none marker) so an obscure album can't make every render re-hit iTunes."""
+    if k != config.MUSIC_KEY and not _is_member(request):
+        raise HTTPException(403, "members only")
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{artist} {album}".lower()).strip("-")[:80]
+    if not slug:
+        raise HTTPException(404, "no art")
+    art_dir = os.path.join(config.CACHE_DIR, "attic-art")
+    os.makedirs(art_dir, exist_ok=True)
+    dest = os.path.join(art_dir, slug + ".jpg")
+    if os.path.exists(dest):
+        return FileResponse(dest, media_type="image/jpeg",
+                            headers={"Cache-Control": "public, max-age=86400"})
+    if os.path.exists(dest + ".none"):
+        raise HTTPException(404, "no art found")
+    if covers._itunes_cover(artist, album, dest):
+        return FileResponse(dest, media_type="image/jpeg",
+                            headers={"Cache-Control": "public, max-age=86400"})
+    open(dest + ".none", "w").close()
+    raise HTTPException(404, "no art found")
+
+
 @app.get("/api/mix")
 def api_mix(request: Request, slug: str, count: int = 30):
     """A mix for any MIX-ONLY channel (query.genre), dispatched by its source —
