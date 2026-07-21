@@ -492,6 +492,15 @@ def api_attic_artist(request: Request, name: str, count: int = 60):
             "tracks": tracks, "playing": -1}
 
 
+@app.get("/api/attic/stats")
+def api_attic_stats(request: Request):
+    """The headline: how much music is in the attic. Members only."""
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    from .adapters import attic
+    return attic.stats()
+
+
 @app.get("/api/attic/cover")
 def api_attic_cover(request: Request, artist: str, album: str, k: str = ""):
     """Album art for vault tracks, fetched LAZILY: the vault has no curated covers and

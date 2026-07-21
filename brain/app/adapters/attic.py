@@ -172,6 +172,21 @@ def artist_mix(name: str, count: int = 60) -> list[dict]:
     return tracks[:max(1, min(count, 200))]
 
 
+def stats() -> dict:
+    """How much music we have — the headline numbers for the crate and anywhere
+    else that wants to brag. Bytes come from the shelf server's walk; the rest
+    derives from the catalog."""
+    cat = _catalog()
+    tracks = cat.get("tracks") or []
+    albums = {(t["root"], t["path"].rsplit("/", 1)[0] if "/" in t["path"] else "")
+              for t in tracks}
+    return {"tracks": len(tracks),
+            "albums": len(albums),
+            "artists": len({t.get("artist", "") for t in tracks if t.get("artist")}),
+            "bytes": int(cat.get("bytes") or 0),
+            "categories": len(cat.get("categories") or [])}
+
+
 def categories() -> list[str]:
     """The sections this shelf server declared it wants as channels."""
     return list(_catalog().get("categories") or [])

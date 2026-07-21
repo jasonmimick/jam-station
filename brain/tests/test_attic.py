@@ -21,7 +21,7 @@ def _catalog():
                 "url": "/file/drive03/" + path.replace(" ", "%20"),
             })
     # Rock has 3 tracks — below ATTIC_CHANNEL_MIN, so it never earns a channel
-    return {"categories": ["Jazz", "Rock"], "tracks": tracks}
+    return {"categories": ["Jazz", "Rock"], "tracks": tracks, "bytes": 123_456_789}
 
 
 @pytest.fixture()
@@ -203,6 +203,17 @@ def test_attic_albums_api_and_album_door(shelf):
         show = client.get("/api/library/album",
                           params={"dir": albums[0]["dir"]}).json()
         assert show["tracks"] and all(t["url"].startswith("/attic/") for t in show["tracks"])
+
+
+def test_stats_headline(shelf):
+    assert attic.stats() == {"tracks": 15, "albums": 3, "artists": 3,
+                             "bytes": 123_456_789, "categories": 2}
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as client:
+        assert client.get("/api/attic/stats").status_code == 403
+        _member_cookie(client)
+        assert client.get("/api/attic/stats").json()["tracks"] == 15
 
 
 def test_artist_mix_and_api(shelf):

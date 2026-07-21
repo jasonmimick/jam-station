@@ -991,6 +991,7 @@ async function loadCatalog() {
 async function loadAttic() {
   // The vault crate — every album the shelf server catalogs. Members only, [] otherwise.
   try { S.attic = await (await fetch("/api/attic/albums")).json(); } catch { S.attic = []; }
+  try { S.atticStats = await (await fetch("/api/attic/stats")).json(); } catch { S.atticStats = null; }
   refreshDeskGallery();
 }
 async function loadSpots() {
@@ -2435,8 +2436,12 @@ function renderDeskGallery(flashSpot) {
   const g = $("dgallery"); if (!g) return;
   g.className = "collgrid";
   const q = ($("galFind").value || "").toLowerCase().trim();
+  const atticLbl = (st => st && st.tracks
+    ? `The Attic · ${st.albums.toLocaleString()} records · ${st.artists.toLocaleString()} artists · ` +
+      `${st.tracks.toLocaleString()} songs${st.bytes ? ` · ${(st.bytes / 1e9).toFixed(0)} GB` : ""}`
+    : `The Attic · ${S.attic.length} albums`)(S.atticStats);
   $("galLbl").textContent = dtab === "stations" ? "Stations" : dtab === "cds" ? `Your collection · ${S.albums.length}`
-    : dtab === "attic" ? `The Attic · ${S.attic.length} albums` : "Spotted";
+    : dtab === "attic" ? atticLbl : "Spotted";
   if (dtab === "spots") {
     if (!S.user) { g.innerHTML = `<p class="msub" style="padding:20px">Sign in to keep spots.</p>`; return; }
     let list = q ? S.spots.filter(s => (s.artist + " " + s.title + " " + s.album + " " + (s.saw || "")).toLowerCase().includes(q)) : S.spots;

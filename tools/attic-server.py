@@ -123,7 +123,12 @@ def _walk_root(rootid: str, root: str) -> list[dict]:
         for fn in sorted(files):
             if fn.startswith(("._", ".")) or not fn.lower().endswith(AUDIO_EXTENSIONS):
                 continue
-            rel = os.path.relpath(os.path.join(dirpath, fn), root)
+            full = os.path.join(dirpath, fn)
+            try:
+                _walk_bytes[0] += os.path.getsize(full)
+            except OSError:
+                pass
+            rel = os.path.relpath(full, root)
             parts = _strip_library_dirs(rel.split(os.sep))
             artist = parts[0] if len(parts) > 1 else ""
             album = parts[1] if len(parts) > 2 else ""
@@ -146,8 +151,12 @@ _cache_lock = threading.Lock()
 _walk_lock = threading.Lock()             # single-flight: one AFP walk at a time, ever
 
 
+_walk_bytes = [0]                         # accumulated by _walk_root during a walk
+
+
 def _do_walk() -> dict:
     tracks = []
+    _walk_bytes[0] = 0
     for rootid, root in ROOTS.items():
         if os.path.isdir(root):
             try:
@@ -158,7 +167,7 @@ def _do_walk() -> dict:
         categories = CATEGORIES_ENV
     else:
         categories = sorted({g for t in tracks for g in t["genres"]})
-    cat = {"categories": categories, "tracks": tracks}
+    cat = {"categories": categories, "tracks": tracks, "bytes": _walk_bytes[0]}
     with _cache_lock:
         _cache.update(at=time.time(), catalog=cat)
     return cat
