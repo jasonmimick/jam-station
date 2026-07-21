@@ -111,6 +111,12 @@ use `ssh -i ~/.ssh/id_euler`. Verify after: `curl -s https://jam-station.runslab
   `channels._annotate()`; keep double quotes out of values.
 - **UI state lives in localStorage** (accent, dance, screensaver pick, pane collapse,
   column widths, favourites) — no server round-trips for taste.
+- **Site banner + machine /health.** Owner sets a banner (account panel ☺ → Site banner;
+  `POST /api/owner/banner`, stored in the `settings` table) — deploy heads-ups/news, shown
+  atop desktop + mobile via public `GET /api/banner`, dismissible per MESSAGE (a new text
+  re-shows). `GET /health` is machine-readable for agents/monitors: `ok` keeps its original
+  meaning (brain+db up — every old verify still works); `db`/`icecast`/`shelf`/`channels`/
+  `banner` say which piece is down. Check /health before diagnosing "the station is broken".
 
 ## Auth, in one breath
 
