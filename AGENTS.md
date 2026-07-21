@@ -83,7 +83,20 @@ use `ssh -i ~/.ssh/id_euler`. Verify after: `curl -s https://jam-station.runslab
   psycopg. No ORM, no task queue, no frontend framework. The web UIs are single static
   files with vanilla JS — they must work from a browser with no build step.
 - **The path IS the tags.** The catalog reads artist/album/title from folder and file
-  names (`Artist - Album/07 Title.mp3`), never from ID3. Fix names, not tags.
+  names, never from ID3. Fix names, not tags. Three filename forms (`adapters/library._meta`):
+  `Artist - Title.mp3` (loose), `Artist - Album/07 Title.mp3` (a normal ripped CD — artist from the
+  folder), and **`Various Artists - iSS.1/03 Pink Floyd - Speak to Me.mp3`** (a mix — the track
+  number is stripped FIRST so a per-track artist survives). For a Various-Artists comp: folder
+  `Various Artists - <Album>`, files `NN <Artist> - <Title>.ext`, and a `_album.json` with an
+  explicit `"artist"` (e.g. `"Various Artists"`) — that overrides the first-track artist on the
+  shelf card. (`iSS.1` — "Isabella + Sofia Songs #1", a homemade disc — is the worked example.)
+- **Album art = files in the album folder, no DB.** `_cover.jpg` is the single primary front cover
+  (grid/now-playing/lock-screen). Additional typed images are `_art-<slug>.jpg`
+  (`tracklist`/`back`/`disc`/…). `library.album_images(dir)` returns `[{type,url}]` (front first);
+  `api_library_album` includes `images`; upload is `POST /api/library/cover` with a `type` form
+  field (`front`→`_cover.jpg`, else `_art-<slug>.jpg`). Enricher only ever manages `_cover.jpg`.
+  Mark a homemade comp's `_album.json` `{"tried":true,"itunes":true,"genres":[]}` so covers.py
+  leaves it alone.
 - **Adapters are the extension point.** A new audio source = a new module in
   `brain/app/adapters/` exposing track dicts (`url`, `title`, `artist`, `album`),
   plus a `source` value handled in `channels.ensure_queue()`.
@@ -140,8 +153,14 @@ The family-radio vision splits into two independent, composable layers — don't
 1. **Sourcing** — how one person turns a big archive into channels on THEIR station. The
    **attic** project (`~/projects/attic`, a wiped Time Capsule vault of ripped/copied music)
    is the content engine; the planned **"attic" source adapter** streams vault music through
-   jam-station without copying it onto the full mini (host music server on the mini +
-   `host.docker.internal` reach from the brain + a `/attic/<path>` proxy for browser+liquidsoap).
+   jam-station without copying it onto the full mini. **Fully spec'd in
+   `docs/DESIGN-vault-stations.md` (DESIGNED, NOT BUILT — paused 2026-07-20).** Key facts settled
+   there: the vault is AFP-mounted on the **host** at `/tmp/tc-afp/attic-vault/` (~65 GB, artist-
+   organized), the container **can't** see it (AFP doesn't cross into the docker VM) and the mini
+   has only ~22 GB free, so the answer is a stdlib **host music server** (launchd) serving
+   `/catalog.json` + ranged `/file/<path>`, reached from the brain via `host.docker.internal` (or
+   tailnet `100.91.29.30`), plus a remote-URL `attic` adapter (mirror `archive.py`) feeding private
+   stations (**The Vault** shuffle-all, **Artist spotlight**; genre/decade after an enrichment pass).
 2. **Carriage** — how a family member's whole STATION appears on your dial: a station-to-station
    relay. Their jam-station makes icecast streams behind their own tunnel; yours carries the
    remote stream as a channel (extends the existing `/stream/<slug>` proxy to a remote URL).
@@ -210,6 +229,21 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   between minor versions — if you bump the pin, re-run `--check` and expect churn.
 - `liquidsoap --check` also RUNS top-level code; with no brain reachable the script
   intentionally exits 1 via `shutdown()`. Exit 1 with no output ≠ a syntax error.
+- **`/api/channels.liq` MUST be deterministic** (byte-identical when the channel set is
+  unchanged). `radio.liq` restarts the whole radio container whenever that text differs from its
+  boot snapshot, dropping every live stream mid-song. A nondeterministic `ORDER BY created_at`
+  (ties on bulk-seeded rows) caused a 290-restart phantom loop (fixed 2026-07-20): the endpoint now
+  `sorted()`s its lines and `list_channels` orders `created_at, slug`. Never emit anything volatile
+  (timestamps, RANDOM order, now-playing) into that endpoint. The radio container is
+  **`slab-jam-radio`** (liquidsoap), separate from `slab-jam-brain` (FastAPI) and `slab-jam-icecast`.
+- **Mini ops (from euler).** `ssh -o IdentitiesOnly=yes -i ~/.ssh/id_euler jason@jasons-mac-mini`
+  (bare ssh has no key). Docker binary is **`/usr/local/bin/docker`** (not on the non-login PATH);
+  containers `slab-jam-brain` / `slab-jam-radio` / `slab-jam-icecast`. To run brain code/one-offs
+  (invites, tagging, catalog checks) avoid ssh→docker→sh→python quoting hell — **base64 the python**:
+  `B64=$(printf '%s' "$PY" | base64); ssh … "/usr/local/bin/docker exec slab-jam-brain sh -c 'cd /app && echo $B64 | base64 -d | python'"` (pipe through `grep -v -i warning`). Send an invite this
+  way: `auth.create_key_member(name, email=…)` then `auth.send_key_email(name, email, link, code,
+  cc=…)` (`cc` is optional, copies the owner). The mini's docker `/music` is a **volume**, not the
+  host FS — `docker cp` (or a `/music/_incoming` staging dir) to get host files in.
 
 ## Roadmap (safe next tasks — see BACKLOG.md for the full list)
 
