@@ -182,11 +182,12 @@ def _walk_root(rootid: str, root: str) -> list[dict]:
             if fn.startswith(("._", ".")) or not fn.lower().endswith(AUDIO_EXTENSIONS):
                 continue
             full = os.path.join(dirpath, fn)
+            rel = os.path.relpath(full, root)
             try:
-                _walk_bytes[0] += os.path.getsize(full)
+                fkey = (rootid, rel.rsplit("/", 1)[0] if "/" in rel else "")
+                _folder_bytes[fkey] = _folder_bytes.get(fkey, 0) + os.path.getsize(full)
             except OSError:
                 pass
-            rel = os.path.relpath(full, root)
             parts = _strip_library_dirs(rel.split(os.sep))
             artist = parts[0] if len(parts) > 1 else ""
             album = parts[1] if len(parts) > 2 else ""
@@ -209,25 +210,100 @@ _cache_lock = threading.Lock()
 _walk_lock = threading.Lock()             # single-flight: one AFP walk at a time, ever
 
 
-_walk_bytes = [0]                         # accumulated by _walk_root during a walk
+_folder_bytes: dict = {}                  # (root, dir) -> bytes, filled by _walk_root
+
+# ── dedup: the vault keeps every rescued copy on DISK; the CATALOG shows one ──
+# The collection exists ~3×: the same wma rips on drive03 and drive08, plus iTunes
+# m4a re-rips. Canonical pick: most tracks first (completeness), then best format
+# (m4a beats wma — native everywhere, no transcode), then first-configured root.
+# Owner overrides via _dedup.json in any root:
+#   {"force": {"artist - album": "drive03/<folder path>"}, "keep_all": ["artist - album"]}
+_FMT_RANK = {".flac": 0, ".m4a": 0, ".mp3": 1, ".aac": 2, ".ogg": 2, ".opus": 2,
+             ".wav": 2, ".wma": 3}
+
+
+def _load_dedup_overrides() -> tuple[dict, set]:
+    force, keep_all = {}, set()
+    for root in ROOTS.values():
+        try:
+            with open(os.path.join(root, "_dedup.json")) as f:
+                d = json.load(f)
+        except Exception:
+            continue
+        for k, v in (d.get("force") or {}).items():
+            force[k.strip().lower()] = v
+        for k in d.get("keep_all") or []:
+            keep_all.add(k.strip().lower())
+    return force, keep_all
+
+
+def _dedup(tracks: list[dict]) -> tuple[list[dict], list[dict], int]:
+    """Hide non-canonical duplicate album folders. Returns (kept tracks, report,
+    hidden bytes). Matching is normalized artist+album; loose-track folders never
+    dedup (no album name to trust)."""
+    force, keep_all = _load_dedup_overrides()
+    folders: dict = {}
+    for t in tracks:
+        d = t["path"].rsplit("/", 1)[0] if "/" in t["path"] else ""
+        f = folders.setdefault((t["root"], d), {
+            "root": t["root"], "dir": d, "artist": t["artist"], "album": t["album"],
+            "n": 0, "exts": {}})
+        f["n"] += 1
+        ext = os.path.splitext(t["path"])[1].lower()
+        f["exts"][ext] = f["exts"].get(ext, 0) + 1
+    groups: dict = {}
+    for f in folders.values():
+        if f["album"]:
+            groups.setdefault((f["artist"].strip().lower(), f["album"].strip().lower()),
+                              []).append(f)
+    root_order = list(ROOTS)
+    suppressed, report = set(), []
+    for (art, alb), fs in sorted(groups.items()):
+        if len(fs) < 2 or f"{art} - {alb}" in keep_all:
+            continue
+
+        def rank(f):
+            main = max(f["exts"], key=f["exts"].get)
+            return (-f["n"], _FMT_RANK.get(main, 2),
+                    root_order.index(f["root"]) if f["root"] in root_order else 9,
+                    f["dir"])
+        fs.sort(key=rank)
+        want = force.get(f"{art} - {alb}", "")
+        keep = next((f for f in fs if f"{f['root']}/{f['dir']}" == want), fs[0])
+        hidden = [f for f in fs if f is not keep]
+        suppressed.update((f["root"], f["dir"]) for f in hidden)
+        report.append({"artist": fs[0]["artist"], "album": fs[0]["album"],
+                       "kept": f"{keep['root']}/{keep['dir']}",
+                       "hidden": [f"{f['root']}/{f['dir']}" for f in hidden]})
+    kept = [t for t in tracks
+            if (t["root"], t["path"].rsplit("/", 1)[0] if "/" in t["path"] else "")
+            not in suppressed]
+    hidden_bytes = sum(_folder_bytes.get(k, 0) for k in suppressed)
+    return kept, report, hidden_bytes
 
 
 def _do_walk() -> dict:
     tracks = []
-    _walk_bytes[0] = 0
+    _folder_bytes.clear()
     for rootid, root in ROOTS.items():
         if os.path.isdir(root):
             try:
                 tracks += _walk_root(rootid, root)
             except OSError:
                 pass                      # a root died mid-walk: serve what we have
+    tracks, dupes, hidden_bytes = _dedup(tracks)
     if CATEGORIES_ENV:
         categories = CATEGORIES_ENV
     else:
         categories = sorted({g for t in tracks for g in t["genres"]})
-    cat = {"categories": categories, "tracks": tracks, "bytes": _walk_bytes[0]}
+    cat = {"categories": categories, "tracks": tracks,
+           "bytes": sum(_folder_bytes.values()) - hidden_bytes,
+           "dupes": {"groups": len(dupes),
+                     "folders": sum(len(d["hidden"]) for d in dupes),
+                     "bytes": hidden_bytes}}
     with _cache_lock:
-        _cache.update(at=time.time(), catalog=cat)
+        _cache.update(at=time.time(), catalog=cat,
+                      dupes_report={"summary": cat["dupes"], "groups": dupes})
     return cat
 
 
@@ -308,6 +384,10 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/catalog.json":
                 refresh = "refresh" in urllib.parse.parse_qs(parsed.query)
                 return self._json(catalog(refresh=refresh))
+            if parsed.path == "/dupes.json":
+                catalog()                 # make sure a walk has happened
+                return self._json(_cache.get("dupes_report")
+                                  or {"summary": {}, "groups": []})
             if parsed.path.startswith("/file/"):
                 return self._file(parsed.path)
             return self._json({"error": "not found"}, 404)

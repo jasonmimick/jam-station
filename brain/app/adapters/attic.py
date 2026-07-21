@@ -184,7 +184,8 @@ def stats() -> dict:
             "albums": len(albums),
             "artists": len({t.get("artist", "") for t in tracks if t.get("artist")}),
             "bytes": int(cat.get("bytes") or 0),
-            "categories": len(cat.get("categories") or [])}
+            "categories": len(cat.get("categories") or []),
+            "dupe_folders": int((cat.get("dupes") or {}).get("folders") or 0)}
 
 
 def categories() -> list[str]:

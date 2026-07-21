@@ -207,7 +207,7 @@ def test_attic_albums_api_and_album_door(shelf):
 
 def test_stats_headline(shelf):
     assert attic.stats() == {"tracks": 15, "albums": 3, "artists": 3,
-                             "bytes": 123_456_789, "categories": 2}
+                             "bytes": 123_456_789, "categories": 2, "dupe_folders": 0}
     from fastapi.testclient import TestClient
     from app.main import app
     with TestClient(app) as client:

@@ -248,6 +248,11 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   thread (only cold boot waits), handler keep-alive times out at 75s, log lines carry
   timestamps. Brain side: a failed fetch serves the LAST-KNOWN catalog (never blank a working
   dial); an empty cache retries in 5s. Don't "simplify" any of that back to inline/fresh-only.
+  **Dedup is catalog-layer, disk keeps every copy**: `_dedup()` in attic-server hides
+  non-canonical duplicate album folders (most tracks → m4a>mp3>wma → first root; `_dedup.json`
+  sidecar `force`/`keep_all` overrides; report at `/dupes.json`). WMA transcodes are cached as
+  real files (`~/.attic-transcode`, LRU 2GB) and served sized+seekable — streaming ffmpeg
+  stdout silently broke old browsers (Fire/Silk).
   The vault is ~7,400 **WMA** rips: browsers can't play WMA, so attic-server transcodes
   wma→mp3 live via **`/opt/homebrew/bin/ffmpeg`** (the `/usr/local/bin` one is a BROKEN
   Intel-brew leftover — the server probes `-version` before trusting any candidate; a broken

@@ -2448,7 +2448,8 @@ function renderDeskGallery(flashSpot) {
   const q = ($("galFind").value || "").toLowerCase().trim();
   const atticLbl = (st => st && st.tracks
     ? `The Attic · ${st.albums.toLocaleString()} records · ${st.artists.toLocaleString()} artists · ` +
-      `${st.tracks.toLocaleString()} songs${st.bytes ? ` · ${(st.bytes / 1e9).toFixed(0)} GB` : ""}`
+      `${st.tracks.toLocaleString()} songs${st.bytes ? ` · ${(st.bytes / 1e9).toFixed(0)} GB` : ""}` +
+      (st.dupe_folders ? ` · ${st.dupe_folders} dupes hidden` : "")
     : `The Attic · ${S.attic.length} albums`)(S.atticStats);
   $("galLbl").textContent = dtab === "stations" ? "Stations" : dtab === "cds" ? `Your collection · ${S.albums.length}`
     : dtab === "attic" ? atticLbl : "Spotted";

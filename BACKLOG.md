@@ -4,15 +4,14 @@ Live: **https://jam-station.runslab.run** (mac-mini, slab, named Cloudflare tunn
 
 ## Next up
 
-- [ ] **Attic dedup (Jason, 2026-07-20 — "tomorrow").** The crate shows real duplicates:
-      the same album on drive03 AND drive08, plus iTunes-subtree copies of albums that also
-      exist at an artist's top level. Framing to settle first: the VAULT keeps every rescued
-      copy (attic principle — raw files, no dedup on disk); the fix belongs in the CATALOG
-      layer — the shelf server (or a sidecar suppression list) picks a canonical copy per
-      (artist, album) and hides the rest from /catalog.json, so stations/crate/mixes see one.
-      attic's `report.py` already estimates dupes by (basename, size); exact proof needs the
-      deferred fingerprint pass. Decide: auto-pick canonical (prefer m4a over wma? bigger
-      bytes?) vs owner-reviewed list.
+- [x] **Attic dedup — DONE 2026-07-21.** Measured: 1,337 folders → 646 unique albums (599
+      duplicated, 8,397 redundant tracks — the collection existed ~3×: drive03 wma, drive08
+      wma copy, iTunes m4a re-rips). Fixed in the CATALOG layer (vault disk untouched):
+      attic-server `_dedup()` picks canonical per normalized (artist, album) — most tracks,
+      then m4a>mp3>wma, then first root — and hides the rest from /catalog.json. Overrides
+      via `_dedup.json` in any root (`force` / `keep_all`); full report at `/dupes.json`;
+      stats + Attic tab show "N dupes hidden". Fingerprint-proof of identity remains attic's
+      deferred pass.
 
 - [ ] **"LISTEN AND RIP"** — the product concept for the CD flow: the station is something you
       listen to AND grow by feeding it discs. As a disc rips, the now-playing panel becomes
