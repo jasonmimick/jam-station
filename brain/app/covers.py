@@ -319,3 +319,42 @@ def kick() -> None:
             finally:
                 _lock.release()
         threading.Thread(target=run, daemon=True).start()
+
+
+# ── attic sleeves: same iTunes fallback, cached on the cache volume ──────────
+
+def attic_art_path(artist: str, album: str) -> str:
+    """Where a vault album's sleeve lives (or would live) in the cache. One slug rule,
+    shared by the lazy endpoint, the albums-list enrichment, and the warmer."""
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{artist} {album}".lower()).strip("-")[:80]
+    return os.path.join(config.CACHE_DIR, "attic-art", slug + ".jpg") if slug else ""
+
+
+_attic_lock = threading.Lock()
+WARM_ATTIC = True     # tests flip this off so lifespans can't spawn real iTunes traffic
+
+
+def kick_attic() -> None:
+    """Trickle-fill the vault's sleeves in the background, one iTunes lookup per second —
+    so the crate grid grows real art without any client ever firing a thousand cold
+    fetches. Skips everything already cached (or marked artless), so re-runs after a
+    redeploy cost seconds, not another pass."""
+    if not WARM_ATTIC or not _attic_lock.acquire(blocking=False):
+        return
+    def run():
+        try:
+            from .adapters import attic
+            for al in attic.list_albums():
+                dest = attic_art_path(al.get("artist", ""), al.get("album", ""))
+                if not dest or os.path.exists(dest) or os.path.exists(dest + ".none"):
+                    continue
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                try:
+                    if not _itunes_cover(al["artist"], al["album"], dest):
+                        open(dest + ".none", "w").close()
+                except Exception:
+                    pass
+                time.sleep(1.0)                     # stay polite; ~25 min for the full crate
+        finally:
+            _attic_lock.release()
+    threading.Thread(target=run, daemon=True).start()

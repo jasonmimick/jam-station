@@ -117,6 +117,8 @@ def app_env(tmp_path, monkeypatch):
     phishin.set_client(httpx.Client(transport=httpx.MockTransport(_phishin_handler),
                                     base_url="https://phish.in"))
     attic.set_client(None)   # cold cache; tests that want a shelf server inject their own
+    from app import covers
+    monkeypatch.setattr(covers, "WARM_ATTIC", False)   # no background iTunes traffic in tests
 
     from app import db, channels
     # the pool may still hold connections to the previous URL — rebuild it lazily,

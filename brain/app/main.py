@@ -28,6 +28,7 @@ async def lifespan(_app: FastAPI):
         pass
     auth.ensure_owner()      # the owner is config, not a signup — he never approves himself
     covers.kick()            # backfill album art + year in the background
+    covers.kick_attic()      # trickle-fill vault sleeves (1/sec; skips everything cached)
     yield
 
 
@@ -474,8 +475,17 @@ def api_attic_albums(request: Request, response: Response):
     response.headers["Cache-Control"] = "no-store"
     if not _is_member(request):
         return []
+    from urllib.parse import urlencode
     from .adapters import attic
-    return attic.list_albums()
+    albums = attic.list_albums()
+    # Only ALREADY-CACHED sleeves get a url here — the grid renders 1,300+ tiles at once
+    # and must never trigger cold iTunes fetches (kick_attic warms the rest at 1/sec).
+    for al in albums:
+        p = covers.attic_art_path(al.get("artist", ""), al.get("album", ""))
+        if p and os.path.exists(p):
+            al["cover_url"] = "/api/attic/cover?" + urlencode(
+                {"artist": al["artist"], "album": al["album"]})
+    return albums
 
 
 @app.get("/api/attic/artist")
@@ -510,12 +520,10 @@ def api_attic_cover(request: Request, artist: str, album: str, k: str = ""):
     too (.none marker) so an obscure album can't make every render re-hit iTunes."""
     if k != config.MUSIC_KEY and not _is_member(request):
         raise HTTPException(403, "members only")
-    slug = re.sub(r"[^a-z0-9]+", "-", f"{artist} {album}".lower()).strip("-")[:80]
-    if not slug:
+    dest = covers.attic_art_path(artist, album)
+    if not dest:
         raise HTTPException(404, "no art")
-    art_dir = os.path.join(config.CACHE_DIR, "attic-art")
-    os.makedirs(art_dir, exist_ok=True)
-    dest = os.path.join(art_dir, slug + ".jpg")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
     if os.path.exists(dest):
         return FileResponse(dest, media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=86400"})

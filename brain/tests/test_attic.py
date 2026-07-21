@@ -229,6 +229,55 @@ def test_artist_mix_and_api(shelf):
         assert client.get("/api/attic/artist", params={"name": "Nobody"}).status_code == 404
 
 
+def test_albums_carry_cover_url_only_when_cached(shelf, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import covers
+    from app.main import app
+
+    def fake_itunes(artist, album, dest):
+        with open(dest, "wb") as f:
+            f.write(b"\xff\xd8jpg")
+        return True
+
+    monkeypatch.setattr(covers, "_itunes_cover", fake_itunes)
+    with TestClient(app) as client:
+        _member_cookie(client)
+        albums = client.get("/api/attic/albums").json()
+        assert not any("cover_url" in a for a in albums)     # nothing cached yet
+        client.get("/api/attic/cover?artist=Miles+Davis&album=Kind+of+Blue")
+        albums = client.get("/api/attic/albums").json()
+        got = {a["album"]: "cover_url" in a for a in albums}
+        assert got["Kind of Blue"] is True                   # cached -> in the grid
+        assert got["Harvest"] is False                       # uncached -> placard, no cold fetch
+
+
+def test_cover_warmer_fills_the_crate(shelf, monkeypatch):
+    import time as _t
+    from app import covers
+    calls = []
+
+    def fake_itunes(artist, album, dest):
+        calls.append(album)
+        with open(dest, "wb") as f:
+            f.write(b"\xff\xd8jpg")
+        return True
+
+    monkeypatch.setattr(covers, "_itunes_cover", fake_itunes)
+    monkeypatch.setattr(covers.time, "sleep", lambda s: None)
+    monkeypatch.setattr(covers, "WARM_ATTIC", True)          # the one test that wants it live
+    covers.kick_attic()
+    deadline = _t.time() + 5
+    while covers._attic_lock.locked() and _t.time() < deadline:
+        _t.sleep(0.05)
+    assert sorted(calls) == ["Giant Steps", "Harvest", "Kind of Blue"]
+    calls.clear()
+    covers.kick_attic()                                      # second pass: all cached
+    deadline = _t.time() + 5
+    while covers._attic_lock.locked() and _t.time() < deadline:
+        _t.sleep(0.05)
+    assert calls == []
+
+
 def test_api_mix_dispatches_by_source(shelf):
     from fastapi.testclient import TestClient
     from app.main import app

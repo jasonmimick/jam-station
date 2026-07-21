@@ -2300,7 +2300,7 @@ function deskItems() {
                  cover: c.art_url || stationArt(c.name),
                  sortArtist: (c.name || "").toLowerCase(), sortAlbum: (c.name || "").toLowerCase(), mtime: 0, tracks: 0 }));
   if (dtab === "attic") return (S.attic || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
-    sub: al.artist || "—", cover: "",     // no cover in the grid — sleeves load lazily when an album opens
+    sub: al.artist || "—", cover: al.cover_url || "",   // only already-cached sleeves; the warmer fills the rest
     sortArtist: (al.artist || "").toLowerCase(), sortAlbum: (al.album || "").toLowerCase(),
     mtime: 0, tracks: al.tracks || 0, genres: [] }));
   return (S.albums || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
