@@ -401,6 +401,37 @@ def api_library_album(request: Request, dir: str):
             "tracks": tracks, "images": library.album_images(dir), "playing": -1}
 
 
+# ---------------------------------------------------------------- vinyl (the record wall)
+
+@app.get("/api/vinyl")
+def api_vinyl(request: Request):
+    """The LP wall — catalog only, no audio (DESIGN-vinyl.md). [] for anonymous,
+    same spirit as the shelf. Fetching it keeps the nightly sync honest."""
+    from . import discogs
+    if not _is_member(request):
+        return []
+    discogs.kick()
+    return discogs.records()
+
+
+@app.get("/api/vinyl/sections")
+def api_vinyl_sections(request: Request):
+    from . import discogs
+    if not _is_member(request):
+        return []
+    return discogs.sections()
+
+
+@app.post("/api/vinyl/sync")
+def api_vinyl_sync(request: Request):
+    """Owner kick — a background sync starts if one isn't already running."""
+    from . import discogs
+    if not _is_member(request):
+        raise HTTPException(403, "members only")
+    discogs.kick(max_age_hours=0)
+    return {"started": True}
+
+
 @app.get("/api/library/genres")
 def api_library_genres(request: Request):
     """The shelf's sections, biggest first. [] for anonymous, same spirit as the catalog."""

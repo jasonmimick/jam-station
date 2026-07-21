@@ -6,6 +6,7 @@ MUSIC_DIR = os.environ.get("MUSIC_DIR", "./music")
 DB_PATH = os.environ.get("DB_PATH", os.path.join(DATA_DIR, "channels.db"))
 
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
+DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "")   # the vinyl wall (DESIGN-vinyl.md)
 
 LIQUIDSOAP_HOST = os.environ.get("LIQUIDSOAP_HOST", "liquidsoap")
 LIQUIDSOAP_TELNET_PORT = int(os.environ.get("LIQUIDSOAP_TELNET_PORT", "1234"))
