@@ -241,6 +241,13 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   channels.liq (= a jam-radio restart) and stations read OFF AIR — that's degradation, not a
   bug. NEVER expose port 8517 through the tunnel; the `vault-` slug prefix belongs to
   `sync_attic_channels` (it retires strays — The Vault is `vault`, Spotlight is `spotlight`).
+  **Catalog serving is stale-first, and that's load-bearing** (outage 2026-07-20): the server
+  once re-walked the AFP share INLINE on TTL expiry (~40s); the brain's 15s timeout blanked
+  the vault on every dial and piled up concurrent walks until the server hung. Now: catalog
+  requests answer instantly from cache (stale ok), re-walks are single-flight in a background
+  thread (only cold boot waits), handler keep-alive times out at 75s, log lines carry
+  timestamps. Brain side: a failed fetch serves the LAST-KNOWN catalog (never blank a working
+  dial); an empty cache retries in 5s. Don't "simplify" any of that back to inline/fresh-only.
   The vault is ~7,400 **WMA** rips: browsers can't play WMA, so attic-server transcodes
   wma→mp3 live via **`/opt/homebrew/bin/ffmpeg`** (the `/usr/local/bin` one is a BROKEN
   Intel-brew leftover — the server probes `-version` before trusting any candidate; a broken
@@ -257,7 +264,10 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   (`/api/library/album?dir=attic:<root>/<folder>`). `GET /api/attic/artist?name=` is the
   everything-by-them shuffle. The now-playing byline grows "▸ record / ▸ artist" chips on any
   `/attic/` track. Gallery clicks DON'T jump to Now Playing — browsing stays put, the tab
-  bar's ▶ line is the way over.
+  bar's ▶ line is the way over. Whole RECORDS can be liked (♥ on album cards, CDs + Attic;
+  localStorage `jam-fav-albums`, "Liked first" sort) — separate list from track favourites;
+  both are localStorage until the favourites-sync backlog item lands. The gallery filter box
+  filters as you type (it once only worked by accident via the 30s poll).
 - liquidsoap is pinned to `savonet/liquidsoap:v2.2.5`. Its scripting language breaks
   between minor versions — if you bump the pin, re-run `--check` and expect churn.
 - `liquidsoap --check` also RUNS top-level code; with no brain reachable the script

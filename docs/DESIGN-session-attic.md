@@ -82,3 +82,10 @@ same session cookie as the rest of Session.
 - Art appears lazily; no bulk art prefetch.
 - Works signed-in on Mac + iPhone + iPad; verify installs per `session/Makefile` rules
   (trust only the `App installed` line + build number).
+
+## Optional parity
+
+The web also has **record-level likes**: a ♥ on album cards (localStorage
+`jam-fav-albums`, "Liked first" gallery sort). It's client-local for now — if Session adds
+it, keep its store client-local too; a server favourites sync is a separate backlog item
+that will cover tracks AND albums when it lands.
