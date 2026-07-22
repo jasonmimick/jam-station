@@ -157,6 +157,13 @@ The **welcome email** (`auth.send_key_email`) links all of it: sign-in, `/<handl
 
 ## Family / affiliate — the two layers (see docs/DESIGN-network.md, DESIGN-family-radio.md)
 
+**Sibling project heads-up (2026-07-21):** **shoebox** — a family PHOTO-sharing app over the
+attic vault — is designed, LGTM'd, and named (its own project: `~/projects/shoebox`, spec
+`DESIGN.md`, mocks `docs/mocks/`). It copies jam-station's patterns
+(host-daemon contract, magic-link/passcode auth, slab deploy) but is a SEPARATE app with its
+own DB and member list — don't add photo features to jam-station, and don't touch **port 8519**
+(reserved for its photo server; 8517 stays the music shelf server).
+
 The family-radio vision splits into two independent, composable layers — don't conflate them:
 1. **Sourcing** — how one person turns a big archive into channels on THEIR station. The
    **attic** project (`~/projects/attic`, a wiped Time Capsule vault of ripped/copied music)
@@ -179,12 +186,29 @@ The family-radio vision splits into two independent, composable layers — don't
    **COMING, not built.** This is the "become a real broadcaster" path teased at the bottom of
    `/guide`: a contributor sends folders (built, below); a broadcaster runs their own sovereign
    station that the network carries. The `/guide` page promises it — keep that promise.
-   **Contributor path (Tailscale):** dad is technical and wants to push his music folders TO the
-   station. Cloudflare free caps uploads at 100 MB/request, so the answer is **Tailscale** (mini
-   is `jasons-mac-mini` / `100.91.29.30` on the tailnet; euler is on it too). Plan: dad joins the
-   tailnet, rsyncs folders to a watched **inbox** on the mini, jam-station ingests each folder as
-   a named station (same "feed it, it appears" ritual as the CD drive). The folder→station ingest
-   is shared with attic's vault-music work.
+   **Contributor path (Tailscale): BUILT 2026-07-22.** Dad pushes his music folders TO the
+   station over Tailscale (Cloudflare free caps uploads at 100 MB/request; mini is
+   `jasons-mac-mini` / `100.91.29.30` on the tailnet, node-shared to his account —
+   full tailnet invites see each other's devices, node-sharing doesn't). He rsyncs folders into
+   a watched **inbox**; `tools/jam-inbox.sh` (launchd `run.jam.inbox`, polls every 20s) imports
+   each new, settled top-level folder as its own `source=library` station (same "feed it, it
+   appears" ritual as the CD drive) — `docker cp`s the audio into the brain's `/music/inbox/`
+   volume, creates the channel, ledgers it so it imports exactly once. Shares the
+   folder→station machinery with attic's vault-music work.
+   **Dad's own account, not yours:** a dedicated macOS user `mark` (non-admin, SSH pubkey-only —
+   `Match User mark` block in `sshd_config`, `PasswordAuthentication no`) owns
+   `/Users/mark/jam-inbox` outright, so no cross-account permission grants are needed either
+   direction; `INBOX=/Users/mark/jam-inbox` is set via `run.jam.inbox.plist`'s
+   `EnvironmentVariables`, not the job's own `$HOME`.
+   **Two client options, same account + same inbox, contributor's choice:**
+   `tools/jam-outbox.command` (double-click, drag a folder, press Enter — zero CLI for a
+   non-technical contributor) or Session Mac's **Send Music** sidebar panel
+   (`session/Sources/SessionMac/ContributeView.swift`) — a native drag-and-drop over the exact
+   same `rsync -e ssh` call. Both ship with their OWN dedicated, pre-authorized key baked in
+   (never the contributor's own key, never yours) so nobody ever runs `ssh-keygen` themselves —
+   learned the hard way after an hour of a non-technical contributor fumbling key generation.
+   The key lives at `session/Resources/dad_key`, **gitignored** — never let a private key ride
+   into git history; the Makefile copies it into the built `.app` alongside `Session.icns`.
 
 The shelf has **sections** (genres): auto-mapped by the enricher (release →
 release-group → artist fallback), owner-pinned via `POST /api/library/genre`.
@@ -198,6 +222,24 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
 
 ## Gotchas
 
+- **A contributor's SSH key can check out cryptographically and still get killed** —
+  `ssh -v` shows "Server accepts key" then the connection just closes, no error. Cause:
+  macOS's **Remote Login access list** (System Settings → Sharing → Remote Login) gates
+  actual sessions via the `com.apple.access_ssh` group, which by default nests only `admin` —
+  a deliberately non-admin contributor account (like `mark`) passes auth then gets dropped
+  post-auth. Fix, without making them an admin: `sudo dscl . -append
+  /Groups/com.apple.access_ssh GroupMembership <user>`.
+- **`sysadminctl -addUser ... -home /path` does NOT create the home directory** — it only
+  assigns the path ("Home directory is assigned (not created!)" in its own output). Follow
+  with `sudo createhomedir -c -u <user>` or every first write into that account's home fails
+  with a plain "Permission denied" that looks like an ownership bug but isn't one.
+- **`rsync`'s `-e` option does its own naive whitespace-splitting — no shell-style quoting.**
+  A staged helper path under `~/Library/Application Support/...` (has a space in "Application
+  Support") gets chopped mid-string and the second half gets fed to `ssh` as a bogus hostname
+  ("Could not resolve hostname support/session/dad_key" — hit this live building Session's
+  Send Music panel). Never stage anything referenced inside an `-e` value under a
+  space-containing path; the destination/source rsync arguments themselves are fine (real
+  argv, not shell-split), only the `-e` command string is the trap.
 - Queue top-ups are guarded by per-channel `threading.Lock`s (`channels._lock_for`).
   Don't remove the non-blocking acquire or two top-ups will double-queue a show.
 - Archive channels enqueue **whole shows** (sets play in order); library channels
@@ -237,6 +279,12 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   covers.py maps MB tags→buckets falling back release→release-group→artist;
   genre channels (`shelf-*`) are MIX-ONLY — on the dial but never mounted by
   liquidsoap; clients play them as instant on-demand mixes via /api/library/mix.
+  **Attic's `_genres.json` tags work the same way for a manual, non-MusicBrainz label**:
+  hand-write `{"Artist Name": ["Any Tag You Want"]}` at a root's top level and it becomes a
+  real category (`sync_attic_channels` turns it into a `vault-<tag>` station once ≥3 records
+  share it) — no code needed. Worked example: a disc of Dad's old MP3s landed at its own root
+  (`cdmusic1` in `ATTIC_ROOTS`) with every one of its 13 artists tagged `"Dad's old mp3 cd"`,
+  and it showed up as a real station on the next catalog walk.
 - **Attic/vault**: track urls are stored SAME-ORIGIN (`/attic/<root>/<path>`) like `/music/` —
   the browser plays them through the brain's members-gated proxy (the browser can NOT reach
   `host.docker.internal`), and `_for_liquidsoap` makes them absolute+keyed for the radio
