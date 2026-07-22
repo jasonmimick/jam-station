@@ -17,7 +17,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>ATTIC_ROOTS</key>
-    <string>drive03=/tmp/tc-afp/attic-vault/drive-03-inesse-reco/Music,drive08=/tmp/tc-afp/attic-vault/drive-08-hm500-win/Old Laptop/Music</string>
+    <string>drive03=/tmp/tc-afp/attic-vault/drive-03-inesse-reco/Music,drive08=/tmp/tc-afp/attic-vault/drive-08-hm500-win/Old Laptop/Music,cdmusic1=/tmp/tc-afp/attic-vault/cd-music/dads-mp3-cd</string>
     <key>ATTIC_PORT</key><string>8517</string>
   </dict>
   <key>RunAtLoad</key><true/>
