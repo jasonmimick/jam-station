@@ -3,14 +3,22 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>run.jam.inbox</string>
-  <!-- The contributor inbox: a folder dropped into ~/jam-inbox (by the owner, or a family
-       member over Tailscale) becomes a station. jam-inbox.sh runs its own 20s poll loop, so
-       KeepAlive (long-running), not StartInterval. Needs docker on PATH — the script exports it. -->
+  <!-- The contributor inbox: a folder dropped into mark's own home (a family member over
+       Tailscale, rsync'd via his own restricted account — see AGENTS.md §Family/affiliate)
+       becomes a station. jam-inbox.sh runs its own 20s poll loop, so KeepAlive (long-running),
+       not StartInterval. Needs docker on PATH — the script exports it. INBOX points at
+       /Users/mark/jam-inbox deliberately: mark's account owns it outright, so no cross-account
+       permission grant is needed for him to write there or for this job (running as jason) to
+       read it back out — only default home-dir read perms, nothing special. -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
     <string>/Users/jason/business/jam-station/tools/jam-inbox.sh</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>INBOX</key><string>/Users/mark/jam-inbox</string>
+  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>20</integer>
