@@ -7,7 +7,7 @@ import SessionCore
 /// visit, not permanent rails; the genre sections sit in the sidebar with
 /// MIX / TUNE IN one click away; the transport never leaves the bottom edge.
 enum MacDest: Hashable {
-    case stage, dial, shelf, records, attic, favs, history, you
+    case stage, dial, shelf, records, attic, favs, history, you, contribute
     case genre(String)
 }
 
@@ -127,6 +127,8 @@ struct MainWindowView: View {
                 .task { await player.refreshHistory() }
         case .you:
             ScrollView { SettingsPane(t: t) }
+        case .contribute:
+            ContributeView(t: t)
         }
     }
 }
@@ -157,6 +159,7 @@ struct Sidebar: View {
                              glyphColor: t.red) { dest = .favs }
                 }
                 SideItem(label: "History", glyph: "⏱", sel: dest == .history, t: t) { dest = .history }
+                SideItem(label: "Send Music", glyph: "⇪", sel: dest == .contribute, t: t) { dest = .contribute }
                 SideItem(label: "You", glyph: "◎", sel: dest == .you, t: t) { dest = .you }
 
                 if !player.genres.isEmpty {

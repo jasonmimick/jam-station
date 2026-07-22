@@ -14,3 +14,4 @@ session/.build/
 session/dist/
 session/ios/SessioniOS.xcodeproj/
 session/ios/build/
+session/Resources/dad_key
