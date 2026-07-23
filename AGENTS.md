@@ -3,6 +3,14 @@
 This is the canonical agent guide. `CLAUDE.md` and `.github/copilot-instructions.md`
 point here. Keep all three in sync by editing only this file.
 
+**Working in a specific seat?** This file is the architecture and conventions; the
+`docs/JAMINEER-*.md` docs are the workflow/process layer for each role — how to
+deploy that part of the system, when to check in before proceeding, and the
+hard-won gotchas specific to it: `JAMINEER-DEV.md` (backend/full-stack),
+`JAMINEER-SUPPORT.md` (ops/troubleshooting/family support), `JAMINEER-UX.md`
+(design work), `JAMINEER-SESSION.md` (the native Mac/iOS apps). Read the relevant
+one alongside this file, not instead of it.
+
 ## What this project is
 
 A personal, multi-channel internet radio station for one person, family, and a few
