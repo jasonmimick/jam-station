@@ -150,6 +150,19 @@ final class Uploader: ObservableObject {
             return
         }
 
+        // Make sure the files are actually readable by whoever picks them up on
+        // the mini — a real contributor's files showed up owner-only-readable
+        // (wherever he originally got them), which jam-inbox.sh (a DIFFERENT
+        // account) couldn't read at all. openrsync's --chmod/--no-perms don't
+        // reliably override this (tested live), so fix it at the source: the
+        // contributor always owns their own files, so relaxing permissions
+        // here always succeeds regardless of how restrictive they started.
+        let fixPerms = Process()
+        fixPerms.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        fixPerms.arguments = ["-R", "go+rX", folder.path]
+        try? fixPerms.run()
+        fixPerms.waitUntilExit()
+
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
         task.arguments = [
