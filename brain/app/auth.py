@@ -94,6 +94,17 @@ def member(email: str) -> dict | None:
     return rows[0] if rows else None
 
 
+def member_by_contributor_email(email: str) -> dict | None:
+    """Like member(), but ALSO matches a member's tailscale_email alias — a
+    contributor's Tailscale login and their jam-station email aren't always the
+    same address (see docs/DESIGN-contributor-identity.md). Deliberately separate
+    from member(): sign-in identity stays untouched by this alias, only the
+    contributor-upload gate consults it."""
+    e = norm(email)
+    rows = db.query("SELECT * FROM members WHERE email=? OR tailscale_email=?", (e, e))
+    return rows[0] if rows else None
+
+
 def is_owner(email: str) -> bool:
     m = member(email)
     return bool(m and m["role"] == "owner")

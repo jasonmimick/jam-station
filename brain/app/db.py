@@ -202,6 +202,13 @@ MIGRATIONS = (
     # — a real password hash, not the light token hash. Empty = no passphrase set.
     "ALTER TABLE members ADD COLUMN IF NOT EXISTS pass_hash TEXT DEFAULT ''",
     "ALTER TABLE members ADD COLUMN IF NOT EXISTS pass_salt TEXT DEFAULT ''",
+    # A member's jam-station email and their Tailscale login are usually the same
+    # address (Jason invites both under one email) — but not always: Dad's actual
+    # jam-station identity is a Gmail address Jason manages, while his real Tailscale
+    # login is his own iCloud account. This is the fallback identity jam-contribd's
+    # member lookup checks when the primary email doesn't match (see
+    # docs/DESIGN-contributor-identity.md). Empty = no alias, primary email only.
+    "ALTER TABLE members ADD COLUMN IF NOT EXISTS tailscale_email TEXT DEFAULT ''",
 )
 
 _pool: ConnectionPool | None = None

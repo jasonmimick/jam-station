@@ -36,6 +36,20 @@ def test_member_by_email_404s_for_a_stranger(app_env):
     assert r.status_code == 404
 
 
+def test_member_by_email_matches_a_tailscale_alias(app_env):
+    # a member's jam-station email and their real Tailscale login aren't always the
+    # same address (docs/DESIGN-contributor-identity.md) — the alias must resolve
+    # to the SAME member record, primary email included in the response.
+    auth.create_key_member("Dad", email="dad@example.com")
+    db.execute("UPDATE members SET tailscale_email=? WHERE email=?",
+               ("dad@icloud.com", "dad@example.com"))
+    c = TestClient(app)
+    r = c.get("/api/internal/member-by-email", params={"email": "dad@icloud.com"},
+              headers=INTERNAL)
+    assert r.status_code == 200
+    assert r.json()["email"] == "dad@example.com"
+
+
 def test_contribution_is_recorded(app_env):
     c = TestClient(app)
     r = c.post("/api/internal/contribution",

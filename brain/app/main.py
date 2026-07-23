@@ -224,7 +224,7 @@ def _is_internal(request: Request) -> bool:
 def api_internal_member_by_email(email: str, request: Request):
     if not _is_internal(request):
         raise HTTPException(404)
-    m = auth.member(email)
+    m = auth.member_by_contributor_email(email)
     if not m or m.get("status") != "approved":
         raise HTTPException(404)
     return {"email": m["email"], "name": m.get("name", ""), "handle": auth.handle_for(m["email"])}
