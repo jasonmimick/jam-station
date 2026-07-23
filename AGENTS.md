@@ -220,12 +220,19 @@ The family-radio vision splits into two independent, composable layers — don't
    end-to-end for real over the public HTTPS endpoint: signed in, minted a token,
    uploaded a real zip, station appeared, contribution recorded, old token correctly
    rejected after minting a new one.
-   **What's left**: rewire Session's Send Music panel and `tools/jam-outbox.command` to
-   POST to `/api/contribute` with a stored personal token instead of `rsync -e ssh`
-   with the shared key — once that ships, generation 1 (the `mark` account, its SSH
-   key, the sshd_config block, `Resources/dad_key`) gets retired for good. Until then
-   BOTH generations are live and harmless side by side; nothing contributors currently
-   use is broken by generation 2 existing.
+   **Both clients rewired and shipped 2026-07-22, same night.** Session's Send Music
+   zips the dropped folder and POSTs to `/api/contribute` with a personal token minted
+   from the member's own already-signed-in session (the cookie already lives in
+   `HTTPCookieStorage` — no new sign-in flow). `tools/jam-outbox.command` does the same
+   with `curl`, one contributor's personal token baked in at send time — still
+   hand-delivered directly to one person, never posted publicly (that was never the
+   problem; the SHARED secret was). **`Resources/dad_key` is deleted, the Makefile no
+   longer copies it into any build — there is nothing embedded left to leak.**
+   Generation 1 (the `mark` account, its SSH key, the `sshd_config` `Match User` block)
+   is now unused by both clients but not yet torn down server-side — safe to leave
+   idle, or retire whenever convenient: `sudo dscl . -delete /Users/mark`, remove the
+   `Match User mark` block from `/etc/ssh/sshd_config`, `launchctl unload` +
+   delete `run.jam.inbox.plist`. Needs sudo, so left for the owner, not automated.
    **An earlier same-night idea (Tailscale identity via `tailscale whois`, a host
    daemon `jam-contribd`) was built, hit an unresolved Python-3.9 socket-bind bug under
    launchd, and was abandoned in favor of the simpler API-key shape above** — its
