@@ -175,11 +175,9 @@ CREATE TABLE IF NOT EXISTS spots(
 CREATE INDEX IF NOT EXISTS idx_spots_id ON spots(id DESC);
 
 -- ── contributions: a member's uploaded folder, and what station it became.
--- Written by jam-contribd (host daemon) the moment it accepts an upload. The
--- member's identity comes from Tailscale (tailscale whois the connecting IP),
--- not from a password or key, so there is deliberately no separate auth token
--- here — this row is simply the record of "who sent this," for the personal-
--- radio "contributed slice" (see docs/DESIGN-contributor-identity.md).
+-- Written by /api/contribute (see contribution_tokens below) the moment it
+-- accepts an upload — the record of "who sent this," for the personal-radio
+-- "contributed slice."
 CREATE TABLE IF NOT EXISTS contributions(
   id SERIAL PRIMARY KEY,
   email TEXT NOT NULL,               -- the contributor (member) — matches members.email
@@ -188,6 +186,20 @@ CREATE TABLE IF NOT EXISTS contributions(
   created_at TEXT DEFAULT ({_NOW})
 );
 CREATE INDEX IF NOT EXISTS idx_contributions_email ON contributions(email);
+
+-- ── contribution_tokens: a member's personal upload key — the SaaS-API-key
+-- shape, not a shared secret baked into a downloadable app. Minted for
+-- whoever is signed in (POST /api/contribute/token, cookie-gated, same as
+-- any other member action) — the raw token is shown ONCE and stored hashed,
+-- same discipline as access_keys. Revoking one member's token never touches
+-- anyone else's — the whole reason this replaced a single embedded SSH key.
+CREATE TABLE IF NOT EXISTS contribution_tokens(
+  token_hash TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  created_at TEXT DEFAULT ({_NOW}),
+  revoked_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_contribution_tokens_email ON contribution_tokens(email);
 """
 
 # Additive, idempotent, safe to re-run. Postgres does ADD COLUMN IF NOT EXISTS natively, so

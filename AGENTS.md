@@ -251,6 +251,12 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   rsync ever runs — the contributor always owns their own files, so relaxing permissions
   there always succeeds no matter how restrictive they started. Both `tools/jam-outbox.command`
   and Session's Send Music do this now; don't reach for rsync flags to solve this again.
+- **`db.py`'s schema init does a naive `SCHEMA.split(";")`** — it has no idea what's a
+  comment and what's SQL. A semicolon anywhere in a `--` comment's PROSE (ordinary English
+  punctuation, not code) breaks the split and corrupts the NEXT statement with a syntax
+  error at whatever word follows — hit this twice writing the contributions/
+  contribution_tokens tables tonight. Never use a semicolon inside a schema comment; rephrase
+  instead (an em dash or period always works).
 - Queue top-ups are guarded by per-channel `threading.Lock`s (`channels._lock_for`).
   Don't remove the non-blocking acquire or two top-ups will double-queue a show.
 - Archive channels enqueue **whole shows** (sets play in order); library channels

@@ -105,6 +105,35 @@ def member_by_contributor_email(email: str) -> dict | None:
     return rows[0] if rows else None
 
 
+def create_contribution_token(email: str) -> str:
+    """A member's personal upload key — minted for whoever is signed in, shown
+    once, stored hashed (same discipline as access_keys). Revokes any prior
+    token for this email first: one active upload key per member, so "get a
+    new one" and "revoke the old one" are the same action, not two."""
+    e = norm(email)
+    revoke_contribution_tokens(e)
+    raw = secrets.token_urlsafe(24)
+    db.execute("INSERT INTO contribution_tokens(token_hash, email) VALUES(?,?)",
+               (_hash(raw), e))
+    return raw
+
+
+def revoke_contribution_tokens(email: str) -> None:
+    db.execute("UPDATE contribution_tokens SET revoked_at=? WHERE email=? AND revoked_at=''",
+               (_stamp(_now()), norm(email)))
+
+
+def member_by_contribution_token(raw_token: str) -> dict | None:
+    """The upload endpoint's whole auth check: hash what was presented, find an
+    un-revoked token, return the member it belongs to. No token -> no upload,
+    regardless of anything else in the request."""
+    rows = db.query("SELECT email FROM contribution_tokens WHERE token_hash=? AND revoked_at=''",
+                    (_hash(raw_token),))
+    if not rows:
+        return None
+    return member(rows[0]["email"])
+
+
 def is_owner(email: str) -> bool:
     m = member(email)
     return bool(m and m["role"] == "owner")

@@ -2,7 +2,9 @@ import json
 import os
 import re
 import time
+import zipfile
 from contextlib import asynccontextmanager
+from io import BytesIO
 
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
@@ -243,6 +245,64 @@ def api_internal_contribution(body: ContributionIn, request: Request):
     db.execute("INSERT INTO contributions (email, slug, folder_name) VALUES (?, ?, ?)",
                (body.email.strip().lower(), body.slug, body.folder_name))
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- contribute
+# A member's personal upload key — the SaaS-API-key shape (see contribution_tokens
+# in db.py), not a secret shared by every download of an app. Session and
+# tools/jam-outbox.command both just POST here with whatever token the member
+# was given after signing in once; revoking one member's token never touches
+# anyone else's.
+
+@app.post("/api/contribute/token")
+def api_contribute_token(request: Request):
+    """Mint a fresh personal upload key for whoever is signed in. Revokes any
+    prior token for this member first (one active key at a time)."""
+    m = auth.whoami(request.cookies.get(config.SESSION_COOKIE))
+    if not m:
+        raise HTTPException(403, "sign in first")
+    token = auth.create_contribution_token(m["email"])
+    return {"token": token}  # shown once — the caller must save it now
+
+
+def _contribute_slugify(name: str) -> str:
+    """MUST match jam-inbox.sh's own slugify() exactly (tools/jam-inbox.sh) —
+    both paths create channels named 'inbox-<slug>' and must agree."""
+    s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return s[:48]
+
+
+@app.post("/api/contribute")
+async def api_contribute(request: Request, folder: str = Form(...), file: UploadFile = File(...)):
+    auth_header = request.headers.get("authorization", "")
+    token = auth_header[7:] if auth_header.lower().startswith("bearer ") else ""
+    m = auth.member_by_contribution_token(token) if token else None
+    if not m or m.get("status") != "approved":
+        raise HTTPException(403, "invalid or revoked upload key")
+
+    name = re.sub(r"[^\w .()\[\]#+-]", "", folder.strip())[:80]
+    if not name:
+        raise HTTPException(400, "no folder name")
+
+    dest = os.path.join(config.MUSIC_DIR, "inbox", name)
+    zip_bytes = await file.read()
+    try:
+        with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
+            for info in zf.infolist():          # zip-slip guard
+                target = os.path.normpath(os.path.join(dest, info.filename))
+                if not target.startswith(os.path.normpath(dest) + os.sep) and target != dest:
+                    raise HTTPException(400, "unsafe path in upload")
+            os.makedirs(dest, exist_ok=True)
+            zf.extractall(dest)
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "not a valid zip")
+
+    slug = "inbox-" + _contribute_slugify(name)
+    channels.create_channel(slug, name, f"Contributed by {m.get('name') or m['email']}: {name}",
+                            "library", {"folders": [f"inbox/{name}"]})
+    db.execute("INSERT INTO contributions (email, slug, folder_name) VALUES (?, ?, ?)",
+               (m["email"], slug, name))
+    return {"ok": True, "slug": slug}
 
 
 @app.get("/music/{path:path}")
