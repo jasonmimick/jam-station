@@ -199,14 +199,18 @@ final class Uploader: ObservableObject {
         }
     }
 
-    /// Copies the bundled key to a private, SPACE-FREE path once (or refreshes it
-    /// if the bundled copy ever changes) and locks it down to 600 — SSH silently
-    /// refuses a key with group/world read permission. Deliberately NOT under
-    /// ~/Library/Application Support: rsync's -e option does its own naive
-    /// whitespace splitting (no shell-style quoting), so a path containing
-    /// "Application Support" gets chopped at the space and the second half
-    /// gets fed to ssh as a bogus hostname (hit this live — "Could not resolve
-    /// hostname support/session/dad_key").
+    /// Copies the bundled key to a private, SPACE-FREE path and locks it down
+    /// to 600 — SSH silently refuses a key with group/world read permission.
+    /// ALWAYS re-copies (never "only if missing"): the key should be rotatable
+    /// via a normal app update (build a new Session with a new dad_key,
+    /// contributor auto-updates, done) — a copy-once policy would silently
+    /// keep serving a stale, possibly-revoked key forever after a rotation.
+    /// Staged path is deliberately NOT under ~/Library/Application Support:
+    /// rsync's -e option does its own naive whitespace splitting (no
+    /// shell-style quoting), so a path containing "Application Support" gets
+    /// chopped at the space and the second half gets fed to ssh as a bogus
+    /// hostname (hit this live — "Could not resolve hostname
+    /// support/session/dad_key").
     private static func stagedKeyPath() -> String? {
         guard let bundled = Bundle.main.url(forResource: "dad_key", withExtension: nil) else { return nil }
         let dir = FileManager.default.homeDirectoryForCurrentUser
@@ -214,9 +218,10 @@ final class Uploader: ObservableObject {
         let staged = dir.appendingPathComponent("dad_key")
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            if !FileManager.default.fileExists(atPath: staged.path) {
-                try FileManager.default.copyItem(at: bundled, to: staged)
+            if FileManager.default.fileExists(atPath: staged.path) {
+                try FileManager.default.removeItem(at: staged)
             }
+            try FileManager.default.copyItem(at: bundled, to: staged)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staged.path)
             return staged.path
         } catch {

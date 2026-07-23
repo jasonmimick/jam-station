@@ -13,19 +13,28 @@ MINI_SSH = ssh -o IdentitiesOnly=yes -i ~/.ssh/id_euler
 # Build the UNIVERSAL Mac app, zip it, and ship it to the station's
 # /session/download (the zip lives in the brain's music volume on the mini —
 # docker cp, same road the CD ripper uses). Verify by re-downloading.
+# BUILD is a fresh timestamp every release, stamped into CFBundleVersion AND
+# a sidecar Session-version.txt served at /session/version — a redeploy IS a
+# new version by construction, no manual bump ever needed. The running app
+# compares its own baked-in CFBundleVersion against that endpoint to
+# self-update (SessionApp.swift's Updater).
+BUILD := $(shell date +%Y%m%d%H%M%S)
+
 mac-release:
 	swift build -c release --arch arm64 --arch x86_64
 	rm -rf dist/release && mkdir -p dist/release/Session.app/Contents/MacOS dist/release/Session.app/Contents/Resources
 	cp .build/apple/Products/Release/SessionMac dist/release/Session.app/Contents/MacOS/Session
-	cp Resources/Info.plist dist/release/Session.app/Contents/Info.plist
+	sed 's/<string>0\.1\.0<\/string>/<string>$(BUILD)<\/string>/' Resources/Info.plist > dist/release/Session.app/Contents/Info.plist
 	cp Resources/Session.icns dist/release/Session.app/Contents/Resources/Session.icns
 	cp Resources/dad_key dist/release/Session.app/Contents/Resources/dad_key
 	codesign --force --sign - dist/release/Session.app
 	cd dist/release && zip -qry ../Session-mac.zip Session.app
-	scp -o IdentitiesOnly=yes -i ~/.ssh/id_euler dist/Session-mac.zip $(MINI):/tmp/Session-mac.zip
-	$(MINI_SSH) $(MINI) 'PATH=$$PATH:/usr/local/bin:/opt/homebrew/bin; docker exec slab-jam-brain mkdir -p /music/_downloads && docker cp /tmp/Session-mac.zip slab-jam-brain:/music/_downloads/Session-mac.zip && rm /tmp/Session-mac.zip'
-	@echo "verifying the live download…"
+	echo "$(BUILD)" > dist/Session-version.txt
+	scp -o IdentitiesOnly=yes -i ~/.ssh/id_euler dist/Session-mac.zip dist/Session-version.txt $(MINI):/tmp/
+	$(MINI_SSH) $(MINI) 'PATH=$$PATH:/usr/local/bin:/opt/homebrew/bin; docker exec slab-jam-brain mkdir -p /music/_downloads && docker cp /tmp/Session-mac.zip slab-jam-brain:/music/_downloads/Session-mac.zip && docker cp /tmp/Session-version.txt slab-jam-brain:/music/_downloads/Session-version.txt && rm /tmp/Session-mac.zip /tmp/Session-version.txt'
+	@echo "verifying the live download… (build $(BUILD))"
 	@curl -s -o /dev/null -w "  /session/download -> %{http_code} · %{size_download} bytes\n" https://jam-station.runslab.run/session/download
+	@curl -s https://jam-station.runslab.run/session/version
 
 # build + run the iOS app in the Simulator on this Mac (the fast loop)
 ios-sim:

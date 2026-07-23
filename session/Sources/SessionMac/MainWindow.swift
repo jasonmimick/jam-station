@@ -24,6 +24,7 @@ struct MainWindowView: View {
     @State var showSettings = false
     @State var saverOn = false
     @State var lastActive = Date()
+    @StateObject var updater = Updater()
 
     var t: Theme {
         Theme.current(scheme, accentHex: accentHex,
@@ -34,6 +35,7 @@ struct MainWindowView: View {
         GeometryReader { geo in
             ZStack {
                 VStack(spacing: 0) {
+                    UpdateBanner(updater: updater, stationBase: player.stationBase, t: t)
                     Masthead(t: t, confirmSkip: $confirmSkip,
                              onGear: { showSettings = true },
                              onSaver: { saverOn = true })
@@ -83,6 +85,7 @@ struct MainWindowView: View {
         .onAppear {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
+            updater.checkForUpdate(stationBase: player.stationBase)
         }
         .onDisappear {
             NSApp.setActivationPolicy(.accessory)
