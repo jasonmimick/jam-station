@@ -117,16 +117,16 @@ question stops being a security question at all.
 4. Dad needs to update Session once (auto-update, now that it exists, handles this) —
    no new install step, no new key, nothing for him to do beyond clicking "Update."
 
-## Open questions (for Jason)
+## Decisions (settled 2026-07-22, no longer open)
 
-1. **Multiple contributors, same email-identity assumption**: fine for a family where
-   you personally invite each person to both systems — worth a sentence confirming
-   that's the intended shape going forward (vs., say, a contributor having a different
-   Tailscale login than their jam-station email for some reason).
-2. **Port for `jam-contribd`**: 8518 suggested (8517 is the music shelf server, 8519 is
-   reserved for shoebox's photo server per AGENTS.md — 8518 is the next free one in that
-   sequence).
-3. **Does a rejected (non-member) request deserve ANY response**, or should it look
-   identical to "nothing's listening here" (silent connection refusal) to a stranger who
-   somehow reaches the tailnet interface at all? Leaning toward silent — no information
-   leak about what's running there.
+1. **Multiple contributors, same email-identity assumption**: confirmed as the intended
+   shape. Jason personally invites each contributor to both jam-station and the tailnet,
+   so the two emails matching is true by construction, not an assumption that needs
+   policing.
+2. **Port for `jam-contribd`**: **8518** — next free slot after 8517 (music shelf server)
+   and 8519 (reserved for shoebox), per AGENTS.md's existing port ledger.
+3. **A rejected (non-member) request gets silence, not an error.** The daemon accepts
+   the connection, reads the whois result, and if it's not an approved member, drops
+   the connection with no response body and no distinguishing status — indistinguishable
+   from nothing listening at all. No information leak about what's running on that port
+   or why a request failed.
