@@ -240,6 +240,17 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   Send Music panel). Never stage anything referenced inside an `-e` value under a
   space-containing path; the destination/source rsync arguments themselves are fine (real
   argv, not shell-split), only the `-e` command string is the trap.
+- **macOS's bundled `rsync` is openrsync (BSD), not GNU rsync 3.x** — `--chmod=D755,F644`
+  (the common numeric form) is rejected outright ("invalid argument"); it only accepts the
+  symbolic relative form (`--chmod=Fa+r,Da+rx`). Worse: even the symbolic form, and
+  `--no-perms`, did NOT reliably override a source file's existing permissions in testing
+  (a contributor's real files landed owner-only-readable regardless of either flag) — a
+  real contributor's files can carry arbitrary restrictive permissions from wherever they
+  originally got them, and jam-inbox.sh (running as a different account) can't read them.
+  **The fix that actually works**: `chmod -R go+rX <folder>` on the SOURCE side, before
+  rsync ever runs — the contributor always owns their own files, so relaxing permissions
+  there always succeeds no matter how restrictive they started. Both `tools/jam-outbox.command`
+  and Session's Send Music do this now; don't reach for rsync flags to solve this again.
 - Queue top-ups are guarded by per-channel `threading.Lock`s (`channels._lock_for`).
   Don't remove the non-blocking acquire or two top-ups will double-queue a show.
 - Archive channels enqueue **whole shows** (sets play in order); library channels
