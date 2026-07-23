@@ -110,6 +110,18 @@ def slugify(name: str) -> str:
     return s[:48]
 
 
+class TailscaleOnlyServer(ThreadingHTTPServer):
+    """HTTPServer.server_bind() calls socket.getfqdn(host) to set server_name —
+    on this box's Python 3.9, that raises 'TypeError: encoding of hostname
+    failed' for a plain tailscale IP (hit this live). We never use server_name
+    for anything, so skip the fqdn lookup entirely instead of fighting it."""
+    def server_bind(self):
+        import socketserver
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = self.server_address[0]
+        self.server_port = self.server_address[1]
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"jam-contribd: {self.address_string()} {fmt % args}", flush=True)
@@ -214,7 +226,7 @@ def main() -> None:
                          "refusing to bind 0.0.0.0. Is tailscaled running?")
     print(f"jam-contribd: binding {bind_ip}:{PORT} (tailscale-only) — inbox: {INBOX}",
           flush=True)
-    srv = ThreadingHTTPServer((bind_ip, PORT), Handler)
+    srv = TailscaleOnlyServer((bind_ip, PORT), Handler)
     srv.serve_forever()
 
 
