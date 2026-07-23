@@ -1,14 +1,18 @@
 import SwiftUI
 import AppKit
+import SessionCore
 import UniformTypeIdentifiers
 
 /// Send Music — the native sibling of tools/jam-outbox.command. Drop a folder,
-/// it rsyncs into the family radio's contributor inbox over the SAME restricted
-/// account (mark@jasons-mac-mini) and dedicated key as the standalone script;
-/// jam-inbox.sh on the mini turns it into a station within ~20s, same as always.
-/// Deliberately self-contained (no Player/SessionCore dependency) — this is a
-/// one-way upload utility, not a playback surface.
+/// it becomes a station. Generation 2 (2026-07-22): a personal API key minted
+/// from the member's own signed-in session, NOT a shared secret baked into the
+/// app — see AGENTS.md's contributor-path section and
+/// docs/DESIGN-contributor-identity.md for the road that got here (an
+/// embedded SSH key anyone who downloaded Session could use, then an
+/// abandoned Tailscale-daemon idea, then this). POST straight to
+/// /api/contribute; jam-inbox.sh isn't involved for this path at all.
 struct ContributeView: View {
+    @EnvironmentObject var player: Player
     let t: Theme
     @StateObject private var uploader = Uploader()
     @State private var isTargeted = false
@@ -25,15 +29,21 @@ struct ContributeView: View {
             }
             .padding(.horizontal, 18).padding(.vertical, 12)
 
-            VStack(spacing: 14) {
-                dropZone
-                if !uploader.log.isEmpty {
-                    logView
+            if player.memberEmail == nil {
+                EmptyNote(t: t, title: "Sign in to send music",
+                          sub: "Your upload is tied to your own account — sign in (You, in the sidebar) first.")
+            } else {
+                VStack(spacing: 14) {
+                    dropZone
+                    if !uploader.log.isEmpty {
+                        logView
+                    }
                 }
+                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .onAppear { uploader.stationBase = player.stationBase }
     }
 
     @ViewBuilder var dropZone: some View {
@@ -117,10 +127,12 @@ struct ContributeView: View {
     }
 }
 
-/// Owns the rsync subprocess. The key ships INSIDE the app bundle
-/// (Resources/dad_key, copied in by the Makefile like Session.icns) and gets
-/// staged out to a private, correctly-permissioned location on first use —
-/// ssh refuses a key file the group/world can read.
+/// Zips the dropped folder and POSTs it to /api/contribute with a personal
+/// upload token — minted lazily from the member's own signed-in session
+/// (the cookie already lives in HTTPCookieStorage; no separate login here)
+/// and cached in UserDefaults so it's only minted once. A 403 means the
+/// stored token got revoked (e.g. a fresh one was minted elsewhere) — mint
+/// a new one and retry exactly once rather than fail confusingly.
 @MainActor
 final class Uploader: ObservableObject {
     enum Status: Equatable {
@@ -132,8 +144,9 @@ final class Uploader: ObservableObject {
 
     @Published var status: Status = .idle
     @Published var log: [String] = []
+    var stationBase = StationAPI.defaultBase
 
-    private static let destination = "mark@jasons-mac-mini:jam-inbox/"
+    private static let tokenDefaultsKey = "contributionToken"
 
     func reset() {
         status = .idle
@@ -143,89 +156,96 @@ final class Uploader: ObservableObject {
     func send(folder: URL) {
         let name = folder.lastPathComponent
         status = .sending(name)
-        log = []
+        log = ["zipping \"\(name)\"\u{2026}"]
 
-        guard let keyPath = Self.stagedKeyPath() else {
-            status = .failed(name, "couldn't prepare the upload key — try relaunching Session")
-            return
-        }
-
-        // Make sure the files are actually readable by whoever picks them up on
-        // the mini — a real contributor's files showed up owner-only-readable
-        // (wherever he originally got them), which jam-inbox.sh (a DIFFERENT
-        // account) couldn't read at all. openrsync's --chmod/--no-perms don't
-        // reliably override this (tested live), so fix it at the source: the
-        // contributor always owns their own files, so relaxing permissions
-        // here always succeeds regardless of how restrictive they started.
-        let fixPerms = Process()
-        fixPerms.executableURL = URL(fileURLWithPath: "/bin/chmod")
-        fixPerms.arguments = ["-R", "go+rX", folder.path]
-        try? fixPerms.run()
-        fixPerms.waitUntilExit()
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
-        task.arguments = [
-            "-av", "-e", "ssh -i \(keyPath) -o StrictHostKeyChecking=accept-new",
-            folder.path, Self.destination,
-        ]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = pipe
-
-        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            let lines = text.split(separator: "\n").map(String.init)
-            DispatchQueue.main.async { self?.log.append(contentsOf: lines) }
-        }
-
-        task.terminationHandler = { [weak self] proc in
-            pipe.fileHandleForReading.readabilityHandler = nil
-            DispatchQueue.main.async {
-                guard let self else { return }
-                if proc.terminationStatus == 0 {
-                    self.status = .done(name)
-                } else {
-                    self.status = .failed(name, "rsync exited with status \(proc.terminationStatus) — check the log above")
-                }
+        Task {
+            do {
+                let zipData = try zip(folder: folder)
+                try await upload(name: name, zipData: zipData, retrying: false)
+            } catch {
+                status = .failed(name, error.localizedDescription)
             }
-        }
-
-        do {
-            try task.run()
-        } catch {
-            status = .failed(name, error.localizedDescription)
         }
     }
 
-    /// Copies the bundled key to a private, SPACE-FREE path and locks it down
-    /// to 600 — SSH silently refuses a key with group/world read permission.
-    /// ALWAYS re-copies (never "only if missing"): the key should be rotatable
-    /// via a normal app update (build a new Session with a new dad_key,
-    /// contributor auto-updates, done) — a copy-once policy would silently
-    /// keep serving a stale, possibly-revoked key forever after a rotation.
-    /// Staged path is deliberately NOT under ~/Library/Application Support:
-    /// rsync's -e option does its own naive whitespace splitting (no
-    /// shell-style quoting), so a path containing "Application Support" gets
-    /// chopped at the space and the second half gets fed to ssh as a bogus
-    /// hostname (hit this live — "Could not resolve hostname
-    /// support/session/dad_key").
-    private static func stagedKeyPath() -> String? {
-        guard let bundled = Bundle.main.url(forResource: "dad_key", withExtension: nil) else { return nil }
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".session-outbox", isDirectory: true)
-        let staged = dir.appendingPathComponent("dad_key")
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            if FileManager.default.fileExists(atPath: staged.path) {
-                try FileManager.default.removeItem(at: staged)
-            }
-            try FileManager.default.copyItem(at: bundled, to: staged)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: staged.path)
-            return staged.path
-        } catch {
-            return nil
+    private func zip(folder: URL) throws -> Data {
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("contribute-\(UUID().uuidString).zip")
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        task.currentDirectoryURL = folder      // zip the CONTENTS, not the folder itself —
+        task.arguments = ["-r", "-q", out.path, "."]   // the server extracts straight into
+        try task.run()                                 // /music/inbox/<folder-name>/
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else {
+            throw NSError(domain: "Uploader", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "couldn't zip the folder"])
         }
+        defer { try? FileManager.default.removeItem(at: out) }
+        return try Data(contentsOf: out)
+    }
+
+    private func tokenFromDefaults() -> String? {
+        UserDefaults.standard.string(forKey: Self.tokenDefaultsKey)
+    }
+
+    /// Mints a fresh token from the member's OWN signed-in session (the cookie
+    /// is already in HTTPCookieStorage — Session's existing sign-in, nothing
+    /// new). A 403 here means genuinely not signed in.
+    private func mintToken() async throws -> String {
+        var req = URLRequest(url: stationBase.appendingPathComponent("api/contribute/token"))
+        req.httpMethod = "POST"
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+            throw NSError(domain: "Uploader", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "sign in first"])
+        }
+        struct TokenResp: Decodable { let token: String }
+        let token = try JSONDecoder().decode(TokenResp.self, from: data).token
+        UserDefaults.standard.set(token, forKey: Self.tokenDefaultsKey)
+        return token
+    }
+
+    private func upload(name: String, zipData: Data, retrying: Bool) async throws {
+        log.append("sending\u{2026}")
+        let token: String
+        if let stored = tokenFromDefaults() {
+            token = stored
+        } else {
+            token = try await mintToken()
+        }
+
+        let boundary = "session-contribute-\(UUID().uuidString)"
+        var req = URLRequest(url: stationBase.appendingPathComponent("api/contribute"))
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        func field(_ fieldName: String, _ value: String) {
+            body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(fieldName)\"\r\n\r\n\(value)\r\n".utf8))
+        }
+        field("folder", name)
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"upload.zip\"\r\nContent-Type: application/zip\r\n\r\n".utf8))
+        body.append(zipData)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        req.httpBody = body
+        req.timeoutInterval = 300   // a big folder over a slow connection is fine, just not infinite
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if code == 403 && !retrying {
+            // stored token got revoked (a fresh one minted elsewhere) — mint once
+            // more and retry, rather than fail with a confusing "invalid key."
+            UserDefaults.standard.removeObject(forKey: Self.tokenDefaultsKey)
+            log.append("upload key needed refreshing, retrying\u{2026}")
+            try await upload(name: name, zipData: zipData, retrying: true)
+            return
+        }
+        guard code == 200 else {
+            let text = String(data: data, encoding: .utf8) ?? "server said \(code)"
+            throw NSError(domain: "Uploader", code: 3, userInfo: [NSLocalizedDescriptionKey: text])
+        }
+        log.append("done.")
+        status = .done(name)
     }
 }

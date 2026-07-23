@@ -1,11 +1,18 @@
 #!/bin/bash
-# jam-outbox — the contributor's half of jam-inbox.sh. Drag a folder in, it
-# becomes a station. Ships alongside its own dedicated, restricted key
-# (dad_key, gitignored — generate ONE per contributor, never commit it, never
-# reuse the owner's own key) so the contributor never runs ssh-keygen
-# themselves. Zip this file + its dad_key together and send the whole thing.
+# jam-outbox — drag a folder in, it becomes a station.
+#
+# Generation 2 (2026-07-22): uses a PERSONAL upload token (see AGENTS.md's
+# contributor-path section, docs/DESIGN-contributor-identity.md), not a
+# shared SSH key. This file is still hand-delivered directly to ONE
+# contributor (never posted anywhere public), so baking in THEIR OWN
+# personal, individually-revocable token is exactly the intended shape --
+# revoking it later never touches anyone else's access. Mint one with:
+#   POST /api/contribute/token while signed in as that contributor
+# and paste the raw token below before zipping this file up and sending it.
+TOKEN="PASTE_THEIR_PERSONAL_TOKEN_HERE"
+STATION="https://jam-station.runslab.run"
+
 cd "$(dirname "$0")"
-chmod 600 dad_key 2>/dev/null
 
 echo ""
 echo "  SEND MUSIC TO THE FAMILY RADIO"
@@ -29,21 +36,28 @@ fi
 
 name=$(basename "$folder")
 echo ""
-echo "  Sending \"$name\"..."
+echo "  Zipping \"$name\"..."
+zip_path=$(mktemp -t jam-outbox).zip
+# Zip the CONTENTS, not the folder itself -- the server extracts straight
+# into its own inbox/<folder-name>/, matching Session's Send Music exactly.
+( cd "$folder" && zip -r -q "$zip_path" . )
+
+echo "  Sending..."
+response=$(curl -s -w "\n%{http_code}" -X POST "$STATION/api/contribute" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "folder=$name" \
+  -F "file=@$zip_path;type=application/zip")
+rm -f "$zip_path"
+
+http_code=$(echo "$response" | tail -1)
+body=$(echo "$response" | sed '$d')
+
 echo ""
-
-# Make sure the files are actually readable by whoever picks them up on the
-# other end -- a real contributor's files showed up owner-only-readable
-# (wherever he originally got them), which the mini's import job (a DIFFERENT
-# account) couldn't read at all. openrsync's --chmod/--no-perms don't reliably
-# override this (tested), so fix it at the source instead: the contributor
-# always owns their own files, so relaxing permissions here always succeeds
-# regardless of how restrictive they started.
-chmod -R go+rX "$folder" 2>/dev/null
-
-rsync -av -e "ssh -i ./dad_key -o StrictHostKeyChecking=accept-new" "$folder" mark@jasons-mac-mini:jam-inbox/
-
-echo ""
-echo "  Done! Within a minute, \"$name\" will show up as its own station on the radio."
+if [ "$http_code" = "200" ]; then
+  echo "  Done! Within a minute, \"$name\" will show up as its own station on the radio."
+else
+  echo "  Something went wrong (server said: $body)"
+  echo "  Try again, or let Jason know if it keeps happening."
+fi
 echo ""
 read -p "  Press Enter to close this window..."

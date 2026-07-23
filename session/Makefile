@@ -26,7 +26,6 @@ mac-release:
 	cp .build/apple/Products/Release/SessionMac dist/release/Session.app/Contents/MacOS/Session
 	sed 's/<string>0\.1\.0<\/string>/<string>$(BUILD)<\/string>/' Resources/Info.plist > dist/release/Session.app/Contents/Info.plist
 	cp Resources/Session.icns dist/release/Session.app/Contents/Resources/Session.icns
-	cp Resources/dad_key dist/release/Session.app/Contents/Resources/dad_key
 	codesign --force --sign - dist/release/Session.app
 	cd dist/release && zip -qry ../Session-mac.zip Session.app
 	echo "$(BUILD)" > dist/Session-version.txt
@@ -75,7 +74,6 @@ mac:
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
 	mkdir -p $(APP)/Contents/Resources
 	cp Resources/Session.icns $(APP)/Contents/Resources/Session.icns
-	cp Resources/dad_key $(APP)/Contents/Resources/dad_key
 	codesign --force --sign - $(APP)
 
 run: mac
