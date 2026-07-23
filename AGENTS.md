@@ -186,29 +186,52 @@ The family-radio vision splits into two independent, composable layers — don't
    **COMING, not built.** This is the "become a real broadcaster" path teased at the bottom of
    `/guide`: a contributor sends folders (built, below); a broadcaster runs their own sovereign
    station that the network carries. The `/guide` page promises it — keep that promise.
-   **Contributor path (Tailscale): BUILT 2026-07-22.** Dad pushes his music folders TO the
-   station over Tailscale (Cloudflare free caps uploads at 100 MB/request; mini is
-   `jasons-mac-mini` / `100.91.29.30` on the tailnet, node-shared to his account —
-   full tailnet invites see each other's devices, node-sharing doesn't). He rsyncs folders into
-   a watched **inbox**; `tools/jam-inbox.sh` (launchd `run.jam.inbox`, polls every 20s) imports
-   each new, settled top-level folder as its own `source=library` station (same "feed it, it
-   appears" ritual as the CD drive) — `docker cp`s the audio into the brain's `/music/inbox/`
-   volume, creates the channel, ledgers it so it imports exactly once. Shares the
-   folder→station machinery with attic's vault-music work.
-   **Dad's own account, not yours:** a dedicated macOS user `mark` (non-admin, SSH pubkey-only —
-   `Match User mark` block in `sshd_config`, `PasswordAuthentication no`) owns
-   `/Users/mark/jam-inbox` outright, so no cross-account permission grants are needed either
-   direction; `INBOX=/Users/mark/jam-inbox` is set via `run.jam.inbox.plist`'s
-   `EnvironmentVariables`, not the job's own `$HOME`.
-   **Two client options, same account + same inbox, contributor's choice:**
-   `tools/jam-outbox.command` (double-click, drag a folder, press Enter — zero CLI for a
-   non-technical contributor) or Session Mac's **Send Music** sidebar panel
-   (`session/Sources/SessionMac/ContributeView.swift`) — a native drag-and-drop over the exact
-   same `rsync -e ssh` call. Both ship with their OWN dedicated, pre-authorized key baked in
-   (never the contributor's own key, never yours) so nobody ever runs `ssh-keygen` themselves —
-   learned the hard way after an hour of a non-technical contributor fumbling key generation.
-   The key lives at `session/Resources/dad_key`, **gitignored** — never let a private key ride
-   into git history; the Makefile copies it into the built `.app` alongside `Session.icns`.
+   **Contributor path: two generations, one currently live, one built-and-tested-but-
+   not-wired-up-yet.**
+
+   **Generation 1 (SSH + rsync — LIVE today, Dad's currently-installed Session and his
+   `jam-outbox.command` both still use this, nothing has changed for him):** a dedicated
+   macOS user `mark` on the mini (non-admin, SSH pubkey-only — `Match User mark` block
+   in `sshd_config`, `PasswordAuthentication no`) owns `/Users/mark/jam-inbox` outright.
+   `tools/jam-inbox.sh` (launchd `run.jam.inbox`, polls every 20s) imports each new,
+   settled top-level folder as its own `source=library` station — `docker cp`s the audio
+   into the brain's `/music/inbox/` volume, creates the channel, ledgers it so it imports
+   exactly once. Both clients ship with their own dedicated, pre-authorized SSH key baked
+   in (`session/Resources/dad_key`, gitignored) so the contributor never runs
+   `ssh-keygen` themselves.
+   **The problem with generation 1, found live 2026-07-22:** that key is baked into
+   every download of Session, and `/session/download` is a PUBLIC URL — anyone who finds
+   it gets the same key, with write access to the inbox. Bounded blast radius (that
+   account can only write one folder, no shell), but a real hole, and every upload was
+   attributed to the same generic account regardless of who actually sent it.
+
+   **Generation 2 (personal API keys — BACKEND BUILT + TESTED 2026-07-22, clients NOT
+   yet rewired to use it):** the SaaS-API-key shape, not a shared secret in a
+   downloadable app. A member signs in with jam-station's existing magic-link/passcode
+   auth (nothing new there) and `POST /api/contribute/token` mints them a personal
+   upload key (`contribution_tokens` table, `auth.create_contribution_token` — one
+   active token per member, minting a new one revokes the old). `POST /api/contribute`
+   (`Authorization: Bearer <token>`, multipart `folder` + zip `file`) validates the
+   token, unzips straight into `/music/inbox/<folder>/`, and calls
+   `channels.create_channel` **in-process** — no host daemon, no polling, no
+   `jam-inbox.sh` involved for this path at all. Every upload is recorded in
+   `contributions` (email, slug, folder_name) for the personal-radio "contributed
+   slice" (`auth.handle_for`/`member_by_handle`'s TODO, finally addressed). Verified
+   end-to-end for real over the public HTTPS endpoint: signed in, minted a token,
+   uploaded a real zip, station appeared, contribution recorded, old token correctly
+   rejected after minting a new one.
+   **What's left**: rewire Session's Send Music panel and `tools/jam-outbox.command` to
+   POST to `/api/contribute` with a stored personal token instead of `rsync -e ssh`
+   with the shared key — once that ships, generation 1 (the `mark` account, its SSH
+   key, the sshd_config block, `Resources/dad_key`) gets retired for good. Until then
+   BOTH generations are live and harmless side by side; nothing contributors currently
+   use is broken by generation 2 existing.
+   **An earlier same-night idea (Tailscale identity via `tailscale whois`, a host
+   daemon `jam-contribd`) was built, hit an unresolved Python-3.9 socket-bind bug under
+   launchd, and was abandoned in favor of the simpler API-key shape above** — its
+   design doc (`docs/DESIGN-contributor-identity.md`) and code
+   (`tools/mini/jam-contribd.py`, `run.jam.contrib*.plist`) are left in the repo as a
+   record, not a live path; the daemon is stopped (`launchctl unload`), don't restart it.
 
 The shelf has **sections** (genres): auto-mapped by the enricher (release →
 release-group → artist fallback), owner-pinned via `POST /api/library/genre`.
