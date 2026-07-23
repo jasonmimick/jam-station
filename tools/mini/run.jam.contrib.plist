@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>run.jam.contrib</string>
+  <!-- jam-contribd: the contributor upload daemon (docs/DESIGN-contributor-identity.md).
+       Binds ONLY the host's tailscale interface — verified at startup, refuses to fall
+       back to 0.0.0.0 if tailscaled isn't up yet. No FDA wrapper needed (unlike
+       jam-atticd): this only needs normal filesystem write to jason's own home and
+       network access, nothing AFP-mount-shaped. KeepAlive because if tailscaled was
+       down at launch, the process exits loudly and should just be retried. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/jason/business/jam-station/tools/mini/jam-contribd.py</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>20</integer>
+  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/jam-contrib.log</string>
+  <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/jam-contrib.log</string>
+</dict>
+</plist>

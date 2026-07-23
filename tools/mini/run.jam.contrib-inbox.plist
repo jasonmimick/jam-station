@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>run.jam.contrib-inbox</string>
+  <!-- A SECOND, independent instance of the exact same jam-inbox.sh — no changes
+       to that script at all (docs/DESIGN-contributor-identity.md's explicit
+       promise). Watches jam-contribd's own inbox (~/jam-contrib-inbox, owned by
+       jason — jam-contribd writes there directly, no cross-account permission
+       drama at all) with its OWN ledger, entirely independent of the original
+       run.jam.inbox job watching mark's old SSH-based inbox. Both can run in
+       parallel with zero collision — different folders, different ledgers. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/jason/business/jam-station/tools/jam-inbox.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>INBOX</key><string>/Users/jason/jam-contrib-inbox</string>
+    <key>LEDGER</key><string>/Users/jason/.jam-contrib-inbox-imported</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>20</integer>
+  <key>StandardOutPath</key><string>/Users/jason/Library/Logs/jam-contrib-inbox.log</string>
+  <key>StandardErrorPath</key><string>/Users/jason/Library/Logs/jam-contrib-inbox.log</string>
+</dict>
+</plist>
