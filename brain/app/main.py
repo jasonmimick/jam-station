@@ -152,6 +152,20 @@ def session_download():
     return FileResponse(p, media_type="application/zip", filename="Session-mac.zip")
 
 
+@app.get("/session/version")
+def session_version():
+    """What build is currently hosted — `make mac-release` stamps a fresh timestamp into
+    both the app (CFBundleVersion) and this sidecar file on every release. The running app
+    compares its own baked-in version against this to know an update exists; no manual
+    version bump ever needed, a redeploy IS a new version by construction."""
+    p = os.path.join(config.MUSIC_DIR, "_downloads", "Session-version.txt")
+    if not os.path.exists(p):
+        raise HTTPException(404, "no build hosted yet")
+    with open(p) as f:
+        build = f.read().strip()
+    return {"build": build, "url": "/session/download"}
+
+
 # Installable on a phone: a home-screen icon and a full-screen player instead of
 # browser chrome. He listens walking around; this makes it feel like an app.
 @app.get("/manifest.json")
