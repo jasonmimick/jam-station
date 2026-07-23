@@ -173,6 +173,21 @@ CREATE TABLE IF NOT EXISTS spots(
   created_at TEXT DEFAULT ({_NOW})
 );
 CREATE INDEX IF NOT EXISTS idx_spots_id ON spots(id DESC);
+
+-- ── contributions: a member's uploaded folder, and what station it became.
+-- Written by jam-contribd (host daemon) the moment it accepts an upload. The
+-- member's identity comes from Tailscale (tailscale whois the connecting IP),
+-- not from a password or key, so there is deliberately no separate auth token
+-- here — this row is simply the record of "who sent this," for the personal-
+-- radio "contributed slice" (see docs/DESIGN-contributor-identity.md).
+CREATE TABLE IF NOT EXISTS contributions(
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL,               -- the contributor (member) — matches members.email
+  slug TEXT NOT NULL,                -- the channel it became (may not exist yet at insert time)
+  folder_name TEXT DEFAULT '',       -- what they named it (also the station's display name)
+  created_at TEXT DEFAULT ({_NOW})
+);
+CREATE INDEX IF NOT EXISTS idx_contributions_email ON contributions(email);
 """
 
 # Additive, idempotent, safe to re-run. Postgres does ADD COLUMN IF NOT EXISTS natively, so

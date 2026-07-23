@@ -210,6 +210,41 @@ def _is_member(request: Request) -> bool:
     return auth.whoami(request.cookies.get(config.SESSION_COOKIE)) is not None
 
 
+def _is_internal(request: Request) -> bool:
+    """Host-only. jam-contribd (docs/DESIGN-contributor-identity.md) is the one caller —
+    it reaches the brain as http://jam-brain.localhost:8080, never through the public
+    tunnel. Gate on the Host header slab's own router already keys on (verified live:
+    plain localhost:8080 404s, jam-brain.localhost:8080 200s) — simpler and more honest
+    than trusting a source IP that a proxy could rewrite. A public request for this path
+    would arrive with Host: jam-station.runslab.run and get refused."""
+    return (request.headers.get("host") or "").split(":")[0] == "jam-brain.localhost"
+
+
+@app.get("/api/internal/member-by-email")
+def api_internal_member_by_email(email: str, request: Request):
+    if not _is_internal(request):
+        raise HTTPException(404)
+    m = auth.member(email)
+    if not m or m.get("status") != "approved":
+        raise HTTPException(404)
+    return {"email": m["email"], "name": m.get("name", ""), "handle": auth.handle_for(m["email"])}
+
+
+class ContributionIn(BaseModel):
+    email: str
+    slug: str
+    folder_name: str = ""
+
+
+@app.post("/api/internal/contribution")
+def api_internal_contribution(body: ContributionIn, request: Request):
+    if not _is_internal(request):
+        raise HTTPException(404)
+    db.execute("INSERT INTO contributions (email, slug, folder_name) VALUES (?, ?, ?)",
+               (body.email.strip().lower(), body.slug, body.folder_name))
+    return {"ok": True}
+
+
 @app.get("/music/{path:path}")
 def music(path: str, request: Request, k: str = ""):
     """Serve the record library over HTTP.
