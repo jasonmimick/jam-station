@@ -382,11 +382,13 @@ def get_channel(slug: str) -> dict | None:
 
 def list_all_channels() -> list[dict]:
     """Every channel regardless of enabled state — for owner curation (the engineer's
-    booth's channels card), where a disabled channel needs to stay visible to bring back."""
+    booth's channels card), where a disabled channel needs to stay visible to bring back.
+    Order matches list_channels() (created_at, slug) and does NOT depend on enabled, so
+    toggling a channel doesn't reshuffle the list out from under the owner's cursor."""
     rows = db.query(
         "SELECT slug, name, source, enabled, created_at FROM channels "
         "WHERE slug NOT LIKE ? AND slug NOT LIKE ? "
-        "ORDER BY enabled DESC, created_at DESC",
+        "ORDER BY created_at, slug",
         ("shelf-%", "vault-%"),
     )
     return rows
