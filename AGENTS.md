@@ -188,6 +188,20 @@ new tracking, not a read of something that already exists.
 **New collectors must follow the same contract**: catch your own exceptions, return
 `{"ok": False, "error": str(e)[:120]}` on failure, never let one dead dependency blank the
 whole page (see `test_status_survives_dead_services` in `tests/test_admin.py`).
+**Channels card** (added 2026-07-24, after the stale-test-channel incident below): lets the
+owner take any broadcast channel off air or bring it back — a button per row, plus a
+`set_channel_enabled` tool on the Station Engineer chat for the same action in plain
+language. `channels.list_all_channels()` feeds it (every channel, mix-only `shelf-*`/`vault-*`
+excluded, order **matches `list_channels()`'s `created_at, slug`** — deliberately NOT sorted
+by `enabled`, so toggling a channel doesn't reshuffle the list the owner is looking at).
+`channels.set_enabled(slug, enabled)` flips the column; `POST /api/admin/channel/toggle` is
+owner-only (404 for anyone else). **Row layout lesson**: `.card.wide` spans the full page, so
+a naive `justify-content:space-between` row put the toggle button far from the channel name
+it controlled (confirmed by screenshot — visually disconnected, easy to mis-click). Every
+other list on this page reads fine with space-between because it's boxed in a narrow
+`.card`; a full-width row needs fixed-width columns with real gaps instead (`.chanrow`'s
+`flex:0 0 <width>` pattern), not space-between stretched across the whole card. Keep this in
+mind for any future wide-card list.
 
 ## Observability — Grafana/Loki/Prometheus (NOT in this repo)
 
