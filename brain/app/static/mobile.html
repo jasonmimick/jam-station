@@ -50,6 +50,7 @@
   .dep .sub { display:block; font-size:12px; color:var(--muted); margin-top:1px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .dep.on .nm { color:var(--yellow); }
+  .dep.dead { opacity:.5; }
   .chip { display:inline-block; font-size:9px; font-weight:800; letter-spacing:.08em;
     text-transform:uppercase; padding:2px 6px; border-radius:4px; margin-left:7px;
     background:var(--sunk); color:var(--muted); border:1px solid var(--line); vertical-align:2px; }
@@ -171,17 +172,18 @@ function stationArt(name) {
 if (/iPhone|iPad|iPod/.test(navigator.userAgent)) $("appTeaser").style.display = "block";
 
 function render() {
-  const radio = S.channels.filter(c => c.playable !== false && !(c.query && c.query.genre));
+  const radio = S.channels.filter(c => !(c.query && c.query.genre));
   $("list").innerHTML = radio.map(c => {
+    const dead = c.playable === false;
     const np = S.dial[c.slug];
-    const sub = np ? "▶ " + esc(np.title) + (np.artist ? " — " + esc(np.artist) : "")
+    const sub = dead ? "Off air" : np ? "▶ " + esc(np.title) + (np.artist ? " — " + esc(np.artist) : "")
                    : esc(c.description || "Live radio");
-    return `<button class="dep${S.slug === c.slug ? " on" : ""}" data-slug="${esc(c.slug)}">` +
+    return `<button class="dep${S.slug === c.slug ? " on" : ""}${dead ? " dead" : ""}" data-slug="${esc(c.slug)}" data-dead="${dead}">` +
       `<span class="art" style="background-image:url('${c.art_url || stationArt(c.name)}')"></span>` +
-      `<span><span class="nm">${esc(c.name)}${c.private ? '<span class="chip">Members</span>' : ""}</span>` +
+      `<span><span class="nm">${esc(c.name)}${c.private ? '<span class="chip">Members</span>' : ""}${dead ? '<span class="chip">Off air</span>' : ""}</span>` +
       `<span class="sub">${sub}</span></span></button>`;
   }).join("");
-  document.querySelectorAll(".dep").forEach(b => b.onclick = () => tune(b.dataset.slug));
+  document.querySelectorAll(".dep").forEach(b => b.onclick = () => { if (b.dataset.dead !== "true") tune(b.dataset.slug); });
 }
 
 function tune(slug) {

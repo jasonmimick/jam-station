@@ -304,6 +304,8 @@
   .dep.on .nm, .dep.on .mk { color:var(--blue); }
   .dep.dead { cursor:not-allowed; }
   .dep.dead .nm, .dep.dead .sub { color:var(--faint); }
+  .albcard.dead, .alrow.dead { cursor:not-allowed; opacity:.5; }
+  .chip.off { color:var(--faint); }
   /* the catalog: a section divider, then album rows. The ♫ mark and the track-count chip
      mark these as records on the shelf, distinct from stations on the dial. */
   .cathead { font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase;
@@ -1069,9 +1071,10 @@ function renderStations() {
       // Only members ever receive a private station in /api/channels, so the badge isn't a
       // gate — it's a reassurance. It says: this one is off the public dial.
       (ch.private ? `<span class="chip priv">Members</span>` : "") +
-      (dead ? `<span class="chip">No music</span>` : "") +
+      (dead ? `<span class="chip off">${ch.enabled === 0 ? "Off air" : "No music"}</span>` : "") +
       `<div class="sub">${dead
-        ? "Needs your own files — nothing in music/" + esc((ch.query.folders || [])[0] || "")
+        ? (ch.enabled === 0 ? "Off air for now"
+           : "Needs your own files — nothing in music/" + esc((ch.query.folders || [])[0] || ""))
         : (S.dial && S.dial[ch.slug]
             ? "▶ " + esc(S.dial[ch.slug].title) + (S.dial[ch.slug].artist ? " — " + esc(S.dial[ch.slug].artist) : "")
             : esc(ch.description || ""))}</div></span>`;
@@ -2354,8 +2357,9 @@ function setDtab(t, flashSpot) {
   }
 }
 function deskItems() {
-  if (dtab === "stations") return (S.channels || []).filter(c => c.playable !== false)
-    .map(c => ({ kind: "station", id: c.slug, name: c.name, sub: c.description || "Live radio",
+  if (dtab === "stations") return (S.channels || [])
+    .map(c => ({ kind: "station", id: c.slug, name: c.name, dead: c.playable === false,
+                 sub: c.playable === false ? "Off air" : (c.description || "Live radio"),
                  cover: c.art_url || stationArt(c.name),
                  sortArtist: (c.name || "").toLowerCase(), sortAlbum: (c.name || "").toLowerCase(), mtime: 0, tracks: 0 }));
   if (dtab === "attic") return (S.attic || []).map(al => ({ kind: "album", id: al.dir, name: al.album || "Untitled",
@@ -2528,14 +2532,16 @@ function renderDeskGallery(flashSpot) {
       ? `<span class="alfav${favd[it.id] ? " on" : ""}" data-fav-dir="${esc(it.id)}" title="${favd[it.id] ? "Unlike" : "Like"} this record">♥</span>` : "";
     const added = fmtAdded(it.mtime);
     const af = it.kind === "station" ? " artf" : "";
+    const dead = it.dead ? " dead" : "";
+    const offchip = it.dead ? `<span class="chip off">Off air</span>` : "";
     if (galView === "list")
-      return `<button class="alrow" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
+      return `<button class="alrow${dead}" data-kind="${it.kind}" data-id="${esc(it.id)}" data-dead="${!!it.dead}">` +
         `<div class="althumb${af}" style="background-image:${a.bg}">${a.mono}</div>` +
-        `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}</span><span class="alrowsub">${esc(it.sub)}</span></div>` +
+        `<div class="alrowmeta"><span class="alrowname">${esc(it.name)}${offchip}</span><span class="alrowsub">${esc(it.sub)}</span></div>` +
         (added ? `<span class="alrowdate">${added}</span>` : "") + `${fav}${cov}</button>`;
-    return `<button class="albcard" data-kind="${it.kind}" data-id="${esc(it.id)}">` +
+    return `<button class="albcard${dead}" data-kind="${it.kind}" data-id="${esc(it.id)}" data-dead="${!!it.dead}">` +
       `<div class="albcover${af}" style="background-image:${a.bg}">${a.mono}${fav}${cov}</div>` +
-      `<div class="albcap"><span class="albname">${esc(it.name)}</span><span class="albsub">${esc(it.sub)}</span>` +
+      `<div class="albcap"><span class="albname">${esc(it.name)}${offchip}</span><span class="albsub">${esc(it.sub)}</span>` +
       (added ? `<span class="albdate">${added}</span>` : "") + `</div></button>`;
   }).join("") || `<p class="msub" style="padding:20px">${dtab === "stations" ? "No stations match."
     : dtab === "attic" ? "The attic is empty — is the shelf server up?" : "No albums yet — rip a CD."}</p>`;
@@ -2554,6 +2560,7 @@ function renderDeskGallery(flashSpot) {
   // Play WITHOUT leaving the crate — browsing is the point of a gallery, and the tab
   // bar's ▶ line shows what started. Click "▶ Playing" (or the line) to go watch it.
   g.querySelectorAll(".albcard, .alrow").forEach(b => b.onclick = () => {
+    if (b.dataset.dead === "true") return;
     if (b.dataset.kind === "station") tune(b.dataset.id); else tuneAlbum(b.dataset.id);
   });
 }

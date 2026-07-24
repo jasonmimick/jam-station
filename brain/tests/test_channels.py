@@ -9,16 +9,22 @@ def test_seed_channels(app_env):
 
 
 def test_set_enabled_takes_channel_off_air_and_back(app_env):
-    assert "dead77" in {c["slug"] for c in channels.list_channels()}
+    by_slug = lambda cs: {c["slug"]: c for c in cs}
+    assert by_slug(channels.list_channels())["dead77"]["playable"] is True
     ch = channels.set_enabled("dead77", False)
     assert ch["enabled"] == 0
-    assert "dead77" not in {c["slug"] for c in channels.list_channels()}
+    # still listed (so the UI can say OFF AIR instead of vanishing without a trace),
+    # just not playable — and excluded from liquidsoap's feed either way.
+    dead77 = by_slug(channels.list_channels())["dead77"]
+    assert dead77["playable"] is False
+    assert "dead77" not in {c["slug"] for c in channels.list_channels(streamable_only=True)}
     all_slugs = {c["slug"] for c in channels.list_all_channels()}
     assert "dead77" in all_slugs                    # still visible for curation, just off
 
     ch = channels.set_enabled("dead77", True)
     assert ch["enabled"] == 1
-    assert "dead77" in {c["slug"] for c in channels.list_channels()}
+    assert by_slug(channels.list_channels())["dead77"]["playable"] is True
+    assert "dead77" in {c["slug"] for c in channels.list_channels(streamable_only=True)}
 
 
 def test_set_enabled_unknown_channel_returns_none(app_env):

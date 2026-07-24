@@ -341,7 +341,12 @@ def sync_attic_channels() -> None:
 
 
 def list_channels(streamable_only: bool = False) -> list[dict]:
-    rows = db.query("SELECT * FROM channels WHERE enabled=1 ORDER BY created_at, slug")
+    """Returns every channel, disabled ones included — a channel an owner has taken
+    off air reads exactly like an empty-library channel (playable=False, "OFF AIR" in
+    the UI) instead of vanishing from the list without a trace. streamable_only still
+    excludes anything not playable, which already covers disabled (enabled folds into
+    playable below), so liquidsoap's mount list is unaffected by this."""
+    rows = db.query("SELECT * FROM channels ORDER BY created_at, slug")
     out = []
     for r in rows:
         r["query"] = json.loads(r.get("query") or "{}")
@@ -350,7 +355,9 @@ def list_channels(streamable_only: bool = False) -> list[dict]:
         # so the UI can say so, and keep it out of liquidsoap's mount list.
         # (attic probes its cached catalog — cheap after the first fetch, and an
         # unreachable shelf server honestly reads OFF AIR, not broken.)
-        if r["source"] == "library":
+        if not r["enabled"]:
+            r["playable"] = False
+        elif r["source"] == "library":
             r["playable"] = bool(library.pick_tracks(r["query"], count=1))
         elif r["source"] == "attic":
             r["playable"] = bool(attic.pick_tracks(r["query"], count=1))

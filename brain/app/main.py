@@ -56,7 +56,10 @@ def health():
     maintains, so this endpoint stays cheap enough to poll."""
     out = {"ok": True, "db": True, "icecast": False, "shelf": None, "channels": 0}
     try:
-        out["channels"] = len(channels.list_channels())
+        # list_channels() now includes disabled channels (so the UI can say "OFF AIR"
+        # instead of hiding them) — this count means the same "active channels" it
+        # always has, so filter enabled here rather than change what monitors see.
+        out["channels"] = sum(1 for c in channels.list_channels() if c["enabled"])
     except Exception:
         out["ok"] = out["db"] = False
     try:
@@ -465,10 +468,12 @@ def api_nowplaying(channel: str):
 def api_dial():
     """Now-playing across the whole dial in one call — so a client can show
     what every channel is on without a request per channel. Mix-only genre
-    stations are skipped (each listener has their own 'now')."""
+    stations are skipped (each listener has their own 'now'), and so is
+    anything not playable — a disabled channel can have stale now-playing
+    data left over from before it went off air, and this must not repeat it."""
     out = {}
     for ch in channels.list_channels():
-        if ch["query"].get("genre"):
+        if ch["query"].get("genre") or not ch["playable"]:
             continue
         np = channels.get_nowplaying(ch["slug"])
         if np.get("title"):

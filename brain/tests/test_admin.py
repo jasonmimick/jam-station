@@ -57,7 +57,10 @@ def test_channel_toggle_owner_only_and_works(app_env):
     r = c.post("/api/admin/channel/toggle", json={"slug": "dead77", "enabled": False})
     assert r.status_code == 200 and r.json()["enabled"] == 0
     from app import channels
-    assert "dead77" not in {ch["slug"] for ch in channels.list_channels()}
+    # still listed (OFF AIR in the UI), just not playable and off liquidsoap's feed
+    assert "dead77" not in {ch["slug"] for ch in channels.list_channels(streamable_only=True)}
+    dead77 = next(ch for ch in channels.list_channels() if ch["slug"] == "dead77")
+    assert dead77["playable"] is False
 
     r = c.post("/api/admin/channel/toggle", json={"slug": "no-such-channel", "enabled": False})
     assert r.status_code == 404
