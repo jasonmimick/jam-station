@@ -8,6 +8,29 @@ def test_seed_channels(app_env):
     assert {"dead77", "jam", "fusion", "latenight-jazz"} <= slugs
 
 
+def test_set_enabled_takes_channel_off_air_and_back(app_env):
+    assert "dead77" in {c["slug"] for c in channels.list_channels()}
+    ch = channels.set_enabled("dead77", False)
+    assert ch["enabled"] == 0
+    assert "dead77" not in {c["slug"] for c in channels.list_channels()}
+    all_slugs = {c["slug"] for c in channels.list_all_channels()}
+    assert "dead77" in all_slugs                    # still visible for curation, just off
+
+    ch = channels.set_enabled("dead77", True)
+    assert ch["enabled"] == 1
+    assert "dead77" in {c["slug"] for c in channels.list_channels()}
+
+
+def test_set_enabled_unknown_channel_returns_none(app_env):
+    assert channels.set_enabled("no-such-channel", False) is None
+
+
+def test_list_all_channels_excludes_mix_only(app_env):
+    channels.sync_genre_channels()
+    slugs = {c["slug"] for c in channels.list_all_channels()}
+    assert not any(s.startswith("shelf-") or s.startswith("vault-") for s in slugs)
+
+
 def test_next_track_tops_up_and_annotates(app_env):
     uri = channels.next_track("dead77")
     assert uri.startswith("annotate:")

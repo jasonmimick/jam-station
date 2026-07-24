@@ -40,11 +40,25 @@
   #elog { display:flex; flex-direction:column; gap:8px; max-height:340px; overflow-y:auto; }
   #elog .msg.me { border-left-color:var(--line); color:var(--muted); }
   #elog .msg.thinking { color:var(--muted); font-style:italic; }
+  #chanlist { max-height:420px; overflow-y:auto; }
+  #chanlist .row { align-items:center; }
+  #chanlist .row .name { flex:1; }
+  #chanlist .row .name .sub { display:block; }
+  .tglbtn { border:1px solid var(--line); background:var(--sunk); color:var(--muted); font-size:10.5px;
+    font-weight:800; letter-spacing:.06em; padding:4px 9px; border-radius:5px; cursor:pointer;
+    white-space:nowrap; }
+  .tglbtn.on { color:var(--live); border-color:var(--live); }
+  .tglbtn.off { color:var(--red); border-color:var(--red); }
+  .tglbtn:disabled { opacity:.5; cursor:default; }
 </style>
 </head>
 <body>
   <header><span>jam-station · <b>engineer's booth</b></span><span class="lbl" id="stamp">—</span></header>
   <main id="cards"><p class="sub" style="padding:8px">Reading the meters…</p></main>
+  <section class="card wide" style="margin:0 22px 14px" id="channels-card">
+    <h2><span class="dot ok"></span>Channels — take one off air, or bring it back</h2>
+    <div id="chanlist"><p class="sub">Reading the channel list…</p></div>
+  </section>
   <section class="card wide" style="margin:0 22px 22px" id="engineer">
     <h2><span class="dot ok"></span>Station Engineer</h2>
     <div id="elog">
@@ -65,8 +79,20 @@ async function refresh() {
   let s;
   try { s = await (await fetch("/api/admin/status")).json(); }
   catch { $("cards").innerHTML = `<p class="sub" style="padding:8px">Can't reach the brain.</p>`; return; }
-  const ic = s.icecast, lq = s.liquidsoap, dbx = s.database, dk = s.disk, rip = s.rip;
+  const ic = s.icecast, lq = s.liquidsoap, dbx = s.database, dk = s.disk, rip = s.rip, up = s.uploads;
   const qrows = (s.queues || []).map(q => `<div class="row"><span>${q.channel}</span><span>${q.unserved}</span></div>`).join("");
+  const uprows = (up.recent || []).map(c => `<div class="row"><span>${esc2(c.folder_name || c.slug)}</span><span title="${esc2(c.email)}">${esc2(c.email)}</span></div>`).join("");
+  const ch = s.channels;
+  $("chanlist").innerHTML = ch && ch.ok
+    ? (ch.channels || []).map(c => {
+        const on = !!c.enabled;
+        const live = !on ? "" : (c.listeners == null ? `<span class="sub">not mounted</span>`
+          : `<span class="sub">${c.listeners} listening</span>`);
+        return `<div class="row"><span class="name">${esc2(c.name)}<span class="sub">${esc2(c.slug)}</span></span>
+          <span style="display:flex;align-items:center;gap:10px">${live}
+          <button class="tglbtn ${on ? "on" : "off"}" data-slug="${esc2(c.slug)}" data-enabled="${on}">${on ? "ON AIR" : "OFFLINE"}</button></span></div>`;
+      }).join("")
+    : `<p class="sub">${esc2((ch && ch.error) || "unavailable")}</p>`;
   $("cards").innerHTML =
     card("icecast", ic.ok, ic.ok ? `<div class="big">${ic.mounts} mounts</div><div class="sub">${ic.detail.reduce((n, m) => n + (m.listeners || 0), 0)} direct listeners</div>` : `<div class="sub">${ic.error || "down"}</div>`) +
     card("liquidsoap", lq.ok, lq.ok ? `<div class="big">on air</div><div class="sub">telnet answers</div>` : `<div class="sub">${lq.error || "down"}</div>`) +
@@ -78,6 +104,7 @@ async function refresh() {
       (s.online || []).map(o => `<div class="row"><span>${o.name}</span><span>${o.client}</span></div>`).join("") ||
       `<div class="sub">empty</div>`) +
     card("queues (unserved)", true, qrows || `<div class="sub">nothing queued</div>`) +
+    card("uploads", up.ok, up.ok ? `<div class="big">${up.total} total</div>${uprows || `<div class="sub">none yet</div>`}` : `<div class="sub">${up.error || "down"}</div>`) +
     card("not visible from here", true,
       (s.not_visible_from_here || []).map(x => `<div class="row"><span>${x}</span><span>host-side</span></div>`).join(""));
   $("stamp").textContent = new Date().toLocaleTimeString();
@@ -87,6 +114,21 @@ setInterval(refresh, 15000);
 
 /* the engineer — same wire shape as the DJ chat, different door */
 const esc2 = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+/* channel curation — take one off air, or bring it back */
+$("chanlist").addEventListener("click", async (e) => {
+  const b = e.target.closest(".tglbtn");
+  if (!b) return;
+  b.disabled = true;
+  const slug = b.dataset.slug, enabled = b.dataset.enabled === "true";
+  try {
+    await fetch("/api/admin/channel/toggle", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, enabled: !enabled }) });
+  } catch {}
+  refresh();                          // re-render with the new state either way
+});
+
 const emsgs = [];
 function elogAdd(cls, text) {
   const d = document.createElement("div");

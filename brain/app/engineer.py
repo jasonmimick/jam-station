@@ -75,6 +75,14 @@ TOOLS = [
      "description": "Recent play log, optionally for one channel.",
      "input_schema": {"type": "object", "properties": {"channel": {"type": "string"},
                                                        "limit": {"type": "integer"}}}},
+    {"name": "set_channel_enabled",
+     "description": "Take a broadcast channel off air, or bring it back, without deleting it. "
+                     "liquidsoap notices on its next ~30s poll and self-restarts — every listener "
+                     "on every channel gets a brief blip, not just this one. Say that plainly "
+                     "before doing it.",
+     "input_schema": {"type": "object",
+                      "properties": {"channel": {"type": "string"}, "enabled": {"type": "boolean"}},
+                      "required": ["channel", "enabled"]}},
 ]
 
 
@@ -109,6 +117,11 @@ def _run_tool(name: str, args: dict) -> dict | list:
                             (args["channel"], limit))
         return db.query("SELECT channel, title, artist, played_at FROM history "
                         "ORDER BY id DESC LIMIT ?", (limit,))
+    if name == "set_channel_enabled":
+        ch = channels.set_enabled(args["channel"], bool(args["enabled"]))
+        if not ch:
+            return {"error": f"no such channel {args['channel']!r}"}
+        return {"slug": ch["slug"], "enabled": bool(ch["enabled"])}
     return {"error": f"no such tool {name!r}"}
 
 

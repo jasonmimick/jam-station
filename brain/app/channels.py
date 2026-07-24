@@ -380,6 +380,28 @@ def get_channel(slug: str) -> dict | None:
     return ch
 
 
+def list_all_channels() -> list[dict]:
+    """Every channel regardless of enabled state — for owner curation (the engineer's
+    booth's channels card), where a disabled channel needs to stay visible to bring back."""
+    rows = db.query(
+        "SELECT slug, name, source, enabled, created_at FROM channels "
+        "WHERE slug NOT LIKE ? AND slug NOT LIKE ? "
+        "ORDER BY enabled DESC, created_at DESC",
+        ("shelf-%", "vault-%"),
+    )
+    return rows
+
+
+def set_enabled(slug: str, enabled: bool) -> dict | None:
+    """Owner curation: take a channel off air (or bring it back) without deleting it.
+    Mirrors sync_genre_channels/sync_attic_channels' own retirement mechanism — liquidsoap
+    picks up the change on its next channels.liq poll (~30s) and self-restarts."""
+    n = db.execute("UPDATE channels SET enabled=? WHERE slug=?", (1 if enabled else 0, slug))
+    if not n:
+        return None
+    return get_channel(slug)
+
+
 def create_channel(slug: str, name: str, description: str, source: str, query: dict) -> dict:
     if source not in STREAMABLE_SOURCES:
         raise ValueError(f"source must be one of {', '.join(STREAMABLE_SOURCES)}")

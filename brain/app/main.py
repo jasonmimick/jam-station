@@ -900,6 +900,25 @@ def api_admin_status(request: Request):
     return admin.status()
 
 
+class ChannelToggleBody(BaseModel):
+    slug: str
+    enabled: bool
+
+
+@app.post("/api/admin/channel/toggle")
+def api_admin_channel_toggle(body: ChannelToggleBody, request: Request):
+    """Owner curation: take a channel off air or bring it back, without deleting it.
+    liquidsoap notices on its next ~30s channels.liq poll and self-restarts — same
+    mechanism as any other channel-list change, so this is a brief station-wide blip,
+    not silent."""
+    if not _is_owner(request):
+        raise HTTPException(404, "not found")
+    ch = channels.set_enabled(body.slug, body.enabled)
+    if not ch:
+        raise HTTPException(404, "no such channel")
+    return ch
+
+
 @app.post("/api/admin/chat")
 def api_admin_chat(body: ChatBody, request: Request):
     if not _is_owner(request):

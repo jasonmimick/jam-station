@@ -38,4 +38,26 @@ def test_status_survives_dead_services(app_env):
     assert s["liquidsoap"]["ok"] is False
     assert s["database"]["ok"] is True                 # the test db IS reachable
     assert isinstance(s["queues"], list)
+    assert s["uploads"]["ok"] is True
+    assert "total" in s["uploads"]
+    assert s["channels"]["ok"] is True                 # icecast being down still yields the list
+    assert any(c["slug"] == "dead77" for c in s["channels"]["channels"])
     assert "not_visible_from_here" in s
+
+
+def test_channel_toggle_owner_only_and_works(app_env):
+    from app import auth, config, db
+    c = TestClient(app)
+    auth.create_key_member("Kid", email="kid@example.com")
+    c.cookies.set(config.SESSION_COOKIE, auth.new_session("kid@example.com"))
+    r = c.post("/api/admin/channel/toggle", json={"slug": "dead77", "enabled": False})
+    assert r.status_code == 404                        # not owner — the booth doesn't exist for you
+
+    db.execute("UPDATE members SET role='owner' WHERE email=?", ("kid@example.com",))
+    r = c.post("/api/admin/channel/toggle", json={"slug": "dead77", "enabled": False})
+    assert r.status_code == 200 and r.json()["enabled"] == 0
+    from app import channels
+    assert "dead77" not in {ch["slug"] for ch in channels.list_channels()}
+
+    r = c.post("/api/admin/channel/toggle", json={"slug": "no-such-channel", "enabled": False})
+    assert r.status_code == 404

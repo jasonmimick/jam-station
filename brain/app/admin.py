@@ -16,7 +16,7 @@ import socket
 
 import httpx
 
-from . import config, db, presence
+from . import channels, config, db, presence
 
 
 def _icecast() -> dict:
@@ -72,6 +72,35 @@ def _disk() -> dict:
         return {"ok": False, "error": str(e)[:120]}
 
 
+def _channels(icecast: dict) -> dict:
+    """Owner curation list: every broadcast channel (mix-only shelf-*/vault-* excluded —
+    they cost liquidsoap nothing, there's nothing to take offline), enabled state, and
+    CURRENT listener count where a mount exists. Takes the already-fetched icecast result
+    so this doesn't make its own redundant HTTP call."""
+    try:
+        live = {m["mount"].lstrip("/"): m.get("listeners", 0)
+                for m in (icecast.get("detail") or [])} if icecast.get("ok") else {}
+        rows = channels.list_all_channels()
+        for r in rows:
+            r["listeners"] = live.get(r["slug"])   # None = not currently mounted
+        return {"ok": True, "channels": rows}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+
+def _uploads() -> dict:
+    """Contributor uploads via /api/contribute — the 'contributions' ledger, not the
+    abandoned jam-contribd host daemon (see AGENTS.md's contributor-path section)."""
+    try:
+        total = db.query("SELECT COUNT(*) AS n FROM contributions")[0]["n"]
+        recent = db.query(
+            "SELECT email, slug, folder_name, created_at FROM contributions "
+            "ORDER BY id DESC LIMIT 10")
+        return {"ok": True, "total": total, "recent": recent}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+
 def _rip() -> dict:
     p = os.path.join(config.MUSIC_DIR, ".rip-status")
     try:
@@ -85,13 +114,16 @@ def _rip() -> dict:
 
 def status() -> dict:
     ls = presence.listeners()
+    ic = _icecast()
     return {
-        "icecast": _icecast(),
+        "icecast": ic,
         "liquidsoap": _liquidsoap(),
         "database": _database(),
         "disk": _disk(),
         "rip": _rip(),
         "queues": _queues(),
+        "uploads": _uploads(),
+        "channels": _channels(ic),
         "listening": ls,
         "online": presence.online(),
         # host-side facts the brain honestly can't see from inside its container:

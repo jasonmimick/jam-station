@@ -46,6 +46,9 @@ brain/app/dj.py              AI DJ: system prompt, TOOLS schema, tool loop
 brain/app/auth.py, mail.py   invite/approve, magic link + 8-char code, sessions; SMTP or console
 brain/app/covers.py          album enrichment: MusicBrainz year/tracklist, Cover Art Archive/iTunes art
 brain/app/spot.py            photograph music in the wild, vision API identifies it
+brain/app/admin.py           /admin status collectors (icecast/liquidsoap/db/disk/rip/queues/uploads) — cheap, tolerant, never 500s
+brain/app/engineer.py        Station Engineer: dj.py-pattern tool loop for /admin's chat, ops tools not music
+brain/app/static/admin.html  the owner-only "engineer's booth" — status cards + engineer chat, no build step
 brain/app/adapters/          one module per audio source (archive.py, library.py, phishin.py, cc.py, attic.py)
 brain/app/db.py              Postgres via a ?->%s facade — no ORM, keep it that way
 brain/app/static/index.html  the whole desktop UI (single file, vanilla JS, no build step)
@@ -162,6 +165,68 @@ promise), `/session` + `/session/download` (the Session Mac app — zip lives in
 volume** `/music/_downloads/Session-mac.zip`, NOT git; re-copy on a new build via `docker cp`).
 The **welcome email** (`auth.send_key_email`) links all of it: sign-in, `/<handle>`, `/session`,
 `/guide`. The desktop account panel (☺) links "Your radio" + the guide for signed-in members.
+
+## Admin — the engineer's booth (`/admin`)
+
+Owner-only status page + chat, hidden entirely from anonymous requests (404, not 403 — the
+booth doesn't exist for you). `admin.py`'s collectors (`_icecast`, `_liquidsoap`, `_database`,
+`_disk`, `_rip`, `_queues`, `_uploads`) each return a tolerant `{"ok": ...}` dict — a dead
+service renders as a red card, never a 500; `admin.status()` bundles them for
+`GET /api/admin/status`, and `admin.html` polls that every 15s and renders one card per key.
+`engineer.py` is `dj.py`'s tool-loop skeleton reused for ops instead of music — same pattern,
+different toolbelt (`station_status`, `skip_track`, `flush_queue`, `resync_shelf_stations`,
+`play_history`, etc.) — bolted onto the page as the "Station Engineer" chat.
+**Uploads card**: `_uploads()` reads the `contributions` table (written by `POST /api/contribute`
+the moment it accepts an upload — see the contributor-path section below) — total count + the
+10 most recent (email, folder_name, slug, created_at). This is the Generation-2 API-key path
+only; it will read 0 if nobody has ever completed a real `/api/contribute` upload, which says
+nothing about the older, now-unused Generation-1 `jam-inbox.sh` path (no ledger of who sent
+what there — attribution was the whole reason Generation 2 got built). There is no "who's
+currently connected" stat yet — `presence.py` only tracks radio listeners/open-app heartbeats
+(surfaced in the "in the room" card), not upload activity; a live-connections card would need
+new tracking, not a read of something that already exists.
+**New collectors must follow the same contract**: catch your own exceptions, return
+`{"ok": False, "error": str(e)[:120]}` on failure, never let one dead dependency blank the
+whole page (see `test_status_survives_dead_services` in `tests/test_admin.py`).
+
+## Observability — Grafana/Loki/Prometheus (NOT in this repo)
+
+The mini already runs an "observatory" slab system (prometheus + loki + grafana) —
+**it predates jam-station's own observability and lives in a completely separate repo**:
+`~/business/slab/examples/observatory` (on **euler**, the dev machine, not the mini).
+Nothing here is jam-station-specific infrastructure; treat it as a shared utility the
+station happens to use.
+
+**The key fact that makes this cheap**: once `loki` is deployed, the **slab daemon itself
+auto-ships every app's container logs to it** — no promtail, no `docker.sock` mount, no
+per-app config. `jam-brain`, `jam-radio`, and `jam-icecast` logs were *already* flowing
+into Loki (labeled `{app="jam-brain"}` etc.) before anyone built a dashboard for them —
+confirm with `curl http://loki.localhost:8080/loki/api/v1/label/app/values` on the mini.
+
+**`jam-station · health` dashboard** (added 2026-07-24, after a real incident — see
+Gotchas below) lives at `~/business/slab/examples/observatory/grafana/provisioning/
+dashboards/jam-station.json` on euler. Panels: max liquidsoap clock catchup (5m),
+decoder/mime-error count, jam-brain error-log rate, jam-brain HTTP status codes over
+time, a filtered logs panel. Two Grafana-native alert rules (`provisioning/alerting/
+rules.yaml`) watch the same two symptoms and email `owner-email` (a contact point
+pointed at the owner's address) when either trips — **email delivery needs
+`GF_SMTP_*` secrets set on the `grafana` app** (same provider as jam-brain's own SMTP,
+see `mail.py`; check names with `slab secret ls jam-brain`, set matching values with
+`slab -N jasons-mac-mini secret set grafana GF_SMTP_HOST=... GF_SMTP_USER=...
+GF_SMTP_PASSWORD=... GF_SMTP_FROM_ADDRESS=...`, then redeploy) — until that's set,
+the rules still evaluate and show state in Grafana's UI, they just can't notify.
+
+**The redeploy gotcha that will burn you if you skip this paragraph**: grafana's
+running container was built ON EULER and *shipped* to the mini as a pre-built image
+(`slab -N jasons-mac-mini deploy .`, run from euler) — it was never built from a
+checkout sitting on the mini. The mini has a decoy at `~/.slab/src/examples/
+observatory` that LOOKS like the live source (same file layout) but isn't wired to
+anything — editing it and running `slab deploy .` there silently rebuilds from stale
+content and nothing changes. Always edit `~/business/slab/examples/observatory/
+grafana/` on euler, then `cd` there and run `slab -N jasons-mac-mini deploy .` FROM
+EULER. Verify a provisioning change actually landed with
+`docker exec slab-grafana ls -la /etc/grafana/provisioning/dashboards/` on the mini,
+not just a green deploy message.
 
 ## Family / affiliate — the two layers (see docs/DESIGN-network.md, DESIGN-family-radio.md)
 
@@ -401,6 +466,20 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   way: `auth.create_key_member(name, email=…)` then `auth.send_key_email(name, email, link, code,
   cc=…)` (`cc` is optional, copies the owner). The mini's docker `/music` is a **volume**, not the
   host FS — `docker cp` (or a `/music/_incoming` staging dir) to get host files in.
+- **An uncleaned test `library` channel took down live playback station-wide, 2026-07-24.**
+  A leftover test channel (`inbox-perm-test-5`, from earlier permission testing) pointed at a
+  folder whose file no longer resolved cleanly; `/music/...` and `/attic/...` return a JSON
+  error body on a miss, and liquidsoap fed that straight to its ffmpeg decoder instead of
+  audio. The decoder stall made liquidsoap's playout clock fall ~44s behind real-time
+  (`[clock.main] We must catchup 44.96 seconds!` — repeating, not self-healing), which is
+  audible as cutting in and out on **whatever channel a listener happens to be on**, not just
+  the broken one — a scoped test-data problem became a station-wide symptom. Fix: `UPDATE
+  channels SET enabled=0 WHERE slug=...` (list_channels only selects `enabled=1`) — liquidsoap
+  self-reloads on the channel-list change and the clock recovers within seconds; no container
+  restart needed. **The lesson**: leftover test channels aren't just log noise (see the earlier
+  `inbox-claude-test-upload` incident) — an `enabled=1` library channel with a bad file is a live
+  production risk, not cosmetic. See the Observability section above for the Grafana alert rules
+  that now watch for this class of failure (clock catchup, decoder/mime errors) automatically.
 
 ## Roadmap (safe next tasks — see BACKLOG.md for the full list)
 
