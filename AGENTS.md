@@ -11,6 +11,13 @@ hard-won gotchas specific to it: `JAMINEER-DEV.md` (backend/full-stack),
 (design work), `JAMINEER-SESSION.md` (the native Mac/iOS apps). Read the relevant
 one alongside this file, not instead of it.
 
+**Do this automatically, every session, before doing any work here**: if the role
+isn't already obvious from what's being asked, ask "What role would you like today —
+Dev, Support, UX, or Session?" and read that `JAMINEER-*.md` file before proceeding.
+If the request already makes the seat obvious (e.g. "the station's down" → Support,
+"add a new panel to index.html" → UX), just read that doc without asking. Don't wait
+to be told to read it.
+
 ## What this project is
 
 A personal, multi-channel internet radio station for one person, family, and a few
@@ -49,7 +56,9 @@ brain/app/spot.py            photograph music in the wild, vision API identifies
 brain/app/admin.py           /admin status collectors (icecast/liquidsoap/db/disk/rip/queues/uploads) — cheap, tolerant, never 500s
 brain/app/engineer.py        Station Engineer: dj.py-pattern tool loop for /admin's chat, ops tools not music
 brain/app/static/admin.html  the owner-only "engineer's booth" — status cards + engineer chat, no build step
-brain/app/adapters/          one module per audio source (archive.py, library.py, phishin.py, cc.py, attic.py)
+brain/app/adapters/          one module per audio source (archive.py, library.py, phishin.py, cc.py, attic.py);
+                              blend.py is not a source of its own — it genre-balances ACROSS library + attic
+                              (RADIO100), reusable via query.sources for future multi-source channels
 brain/app/db.py              Postgres via a ?->%s facade — no ORM, keep it that way
 brain/app/static/index.html  the whole desktop UI (single file, vanilla JS, no build step)
 brain/app/static/mobile.html the mobile-web FUNNEL (see Clients), served by user-agent
@@ -61,6 +70,7 @@ tools/                       host-side CD pipeline: rip-cd.sh, cd-watch.sh, cd-t
 tools/attic-server.py        the SHELF SERVER: serves vault music (AFP TC) to the brain over HTTP
 tools/attic-genres.py        one-shot MusicBrainz artist→genre pass -> _genres.json per vault root
 tools/mini/, tools/euler/    launchd plists + helpers (watcher, backups, jam-cdd FDA helper)
+tools/jammer/                embeds the live now-playing card inline in kitty (see Gotchas)
 system.toml, slab/           the slab system (jam-brain, jam-icecast, jam-radio)
 docs/                        architecture.html + DESIGN-*.md (auth built; family/network on hold)
 ```
@@ -113,6 +123,14 @@ use `ssh -i ~/.ssh/id_euler`. Verify after: `curl -s https://jam-station.runslab
 - **Adapters are the extension point.** A new audio source = a new module in
   `brain/app/adapters/` exposing track dicts (`url`, `title`, `artist`, `album`),
   plus a `source` value handled in `channels.ensure_queue()`.
+- **RADIO100** (`source: "blend"`, `adapters/blend.py`) is full random across the
+  whole shelf AND the vault — genre-balanced, not a flat `random.sample()` over
+  the merged pool. It buckets every library section (`_album.json` genres) and
+  every attic category (`_genres.json` tags) together, then round-robins one
+  track per bucket per round before reshuffling the final order — so a 900-track
+  section can't drown out a 3-track one. `blend.py` is reusable, not RADIO100-only:
+  `query.sources` (default `["library","attic"]`) picks which adapters feed the
+  blend, so a future channel can genre-balance a single source too.
 - **New DJ abilities** = a tool schema in `TOOLS` (`dj.py`), a branch in `_run_tool()`,
   results JSON-serializable and truncated (see existing 20k cap).
 - **Tests mock the network** (`httpx.MockTransport` in `tests/conftest.py`) and run in
@@ -494,6 +512,22 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   `inbox-claude-test-upload` incident) — an `enabled=1` library channel with a bad file is a live
   production risk, not cosmetic. See the Observability section above for the Grafana alert rules
   that now watch for this class of failure (clock catchup, decoder/mime errors) automatically.
+
+- **`tools/jammer/`** embeds a live piece of jam-station's web UI inline in kitty, as a
+  real screenshot pushed through the kitty graphics protocol — same technique as the
+  `markmore` project's `-t` mode (hidden `WKWebView`, `WKSnapshotConfiguration`, crop,
+  PNG), just pointed at a URL + CSS selector instead of rendered markdown. Build/install:
+  `tools/jammer/build.sh` (→ `~/Applications/jammer.app` + `~/.local/bin/jammer`). Usage:
+  `jammer` (one-shot against `http://jam-brain.localhost:8080`, selector `.board`) or
+  `jammer --follow --interval 2`. Two gotchas if you touch it: (1) **ATS blocks plain
+  `http://` to `*.localhost` subdomains** — Apple's automatic-localhost exemption only
+  matches the literal hostname `localhost` and loopback IPs, not subdomains like
+  `jam-brain.localhost`, even though they resolve to loopback; `Info.plist` carries
+  `NSAllowsArbitraryLoads=true` to work around it. (2) **The real mini player (⧉,
+  Document Picture-in-Picture) can never be screenshotted this way** — it's a
+  Chrome/Edge-only browser API with no WebKit equivalent, and its DOM only exists inside
+  a separate PiP window after a user gesture. `.board` (the on-page now-playing +
+  transport card) is the honest substitute: same live state, always in the regular DOM.
 
 ## Roadmap (safe next tasks — see BACKLOG.md for the full list)
 

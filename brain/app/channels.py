@@ -13,14 +13,14 @@ import httpx
 log = logging.getLogger("jam.channels")
 
 from . import config, db
-from .adapters import archive, attic, cc, library, phishin
+from .adapters import archive, attic, blend, cc, library, phishin
 
 # Sources whose channels enqueue whole shows via adapter.pick_show()/get_show().
 SHOW_ADAPTERS = {"archive": archive, "phishin": phishin, "cc": cc}
-STREAMABLE_SOURCES = ("archive", "phishin", "library", "cc", "attic")
+STREAMABLE_SOURCES = ("archive", "phishin", "library", "cc", "attic", "blend")
 # The owner's own records — never listed or served to anyone but members, never
 # tunneled. Derived from the source (see list_channels), NEVER a toggle.
-PRIVATE_SOURCES = {"library", "attic"}
+PRIVATE_SOURCES = {"library", "attic", "blend"}
 
 # The stations jam-station ships with. THESE LIVE IN CODE ON PURPOSE.
 #
@@ -74,6 +74,17 @@ SEED_CHANNELS = [
         "description": "Everything ripped from the CD drive on the mac-mini. Members only.",
         "source": "library",
         "query": {"folders": ["cds"]},
+    },
+    {
+        # Full random across the whole shelf AND the vault — genre-balanced by
+        # brain.adapters.blend, not a flat shuffle, so a big section can't drown
+        # out a small one. Members only (blend is a PRIVATE source: it draws on
+        # library + attic, both private on their own).
+        "slug": "radio100",
+        "name": "RADIO100",
+        "description": "Full random across the entire collection — shelf and vault, every genre gets a fair spin. Members only.",
+        "source": "blend",
+        "query": {},
     },
     {
         "slug": "latenight-jazz",
@@ -361,6 +372,8 @@ def list_channels(streamable_only: bool = False) -> list[dict]:
             r["playable"] = bool(library.pick_tracks(r["query"], count=1))
         elif r["source"] == "attic":
             r["playable"] = bool(attic.pick_tracks(r["query"], count=1))
+        elif r["source"] == "blend":
+            r["playable"] = bool(blend.pick_tracks(r["query"], count=1))
         else:
             r["playable"] = True
         # PRIVATE IS DERIVED, NOT DECLARED. Your own CDs (and the vault) are your own;
@@ -480,6 +493,21 @@ def _enqueue_attic(ch: dict) -> int:
     return len(tracks)
 
 
+def _enqueue_blend(ch: dict) -> int:
+    tracks = blend.pick_tracks(ch["query"])
+    if not tracks:
+        return 0
+    # like library/attic: each top-up is its own "show" so On Demand can reconstruct it
+    show_id = f"blend-{ch['slug']}-{int(time.time())}"
+    db.executemany(
+        "INSERT INTO queue(channel, url, title, artist, album, show_id) VALUES(?,?,?,?,?,?)",
+        [(ch["slug"], t["url"], t["title"], t["artist"], t["album"], show_id) for t in tracks],
+    )
+    log.info("enqueue_blend: channel=%s queued=%d albums=%d show_id=%s",
+             ch["slug"], len(tracks), len({t["album"] for t in tracks}), show_id)
+    return len(tracks)
+
+
 def ensure_queue(slug: str) -> int:
     """Top up a channel if it's running low. Returns number of tracks added."""
     ch = get_channel(slug)
@@ -499,6 +527,8 @@ def ensure_queue(slug: str) -> int:
             return _enqueue_library(ch)
         if ch["source"] == "attic":
             return _enqueue_attic(ch)
+        if ch["source"] == "blend":
+            return _enqueue_blend(ch)
         return 0
     finally:
         lock.release()
