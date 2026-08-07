@@ -100,6 +100,26 @@ slab -N jasons-mac-mini deploy jam-brain
 local directory** — pull on the mini first or you ship the previous commit. From euler
 use `ssh -i ~/.ssh/id_euler`. Verify after: `curl -s https://jam-station.runslab.run/health`.
 
+**Giving a new slab app a public `<name>.runslab.run` URL is a TWO-part manual step, and
+one of those parts you (Jason) do by hand in the Cloudflare dashboard — an agent can't do
+it:**
+1. `~/.cloudflared/config.yml` on the mini needs one more ingress rule, same shape as the
+   existing entries: `hostname: <name>.runslab.run`, `service: http://127.0.0.1:8080`,
+   `originRequest.httpHostHeader: <name>.localhost` (append before the trailing
+   `service: http_status:404` catch-all, which must stay last). Reload with
+   `launchctl kickstart -k gui/$(id -u)/run.slab.tunnel`.
+2. **The actual DNS record.** `cloudflared tunnel route dns` looks like the obvious tool
+   but is a trap here: the mini's `cert.pem` is hard-scoped to a *different* zone
+   (`cairnlabs.io`), so that command silently creates `<name>.runslab.run.cairnlabs.io`
+   instead of `<name>.runslab.run` — wrong record, not even an error. The real
+   `<name>.runslab.run` CNAME (pointing at the tunnel) gets added by hand in the
+   Cloudflare dashboard, in the `runslab.run` zone specifically. An agent without
+   dashboard access is stuck after step 1 — say so rather than guessing at DNS tooling.
+
+(Learned the hard way 2026-08-07 wiring up jam-listen — left one harmless orphaned
+`jam-listen.runslab.run.cairnlabs.io` CNAME from the wrong-zone attempt, safe to delete
+whenever you're in the cairnlabs.io zone anyway.)
+
 ## Conventions
 
 - **Keep dependencies minimal.** Runtime deps are fastapi, uvicorn, httpx, anthropic,
