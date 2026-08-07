@@ -12,6 +12,33 @@ def test_health_and_channels(app_env):
         assert any(c["slug"] == "dead77" for c in chans)
 
 
+def test_internal_mint_session(app_env):
+    from app import auth, config
+    with TestClient(app) as client:
+        # public callers (no internal Host header) never reach it
+        r = client.post("/api/internal/mint-session", json={"email": "nobody@example.com"})
+        assert r.status_code == 404
+
+        internal = {"Host": "jam-brain.localhost"}
+        # unknown/unapproved email: still 404, doesn't leak which
+        r = client.post("/api/internal/mint-session", json={"email": "nobody@example.com"},
+                         headers=internal)
+        assert r.status_code == 404
+
+        auth.create_key_member("Kid", email="kid@example.com")
+        r = client.post("/api/internal/mint-session", json={"email": "kid@example.com"},
+                         headers=internal)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["cookie_name"] == config.SESSION_COOKIE
+        assert body["email"] == "kid@example.com"
+
+        # the minted token is a real, usable session
+        client.cookies.set(config.SESSION_COOKIE, body["cookie_value"])
+        me = client.get("/api/me").json()["user"]
+        assert me and me["email"] == "kid@example.com"
+
+
 def test_banner_roundtrip(app_env):
     from app import auth, config, db
     with TestClient(app) as client:

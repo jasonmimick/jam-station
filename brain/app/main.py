@@ -235,6 +235,27 @@ def api_internal_member_by_email(email: str, request: Request):
     return {"email": m["email"], "name": m.get("name", ""), "handle": auth.handle_for(m["email"])}
 
 
+class MintSessionIn(BaseModel):
+    email: str
+
+
+@app.post("/api/internal/mint-session")
+def api_internal_mint_session(body: MintSessionIn, request: Request):
+    """Bridge a verified-elsewhere identity (keyring) into a real jam-station session, for
+    a trusted internal caller only — same host-gated door as member-by-email. jam-station
+    keeps deciding who's an approved member; the caller (jam-listen's BFF) just proves it
+    already confirmed the email via keyring. Uses member(), not member_by_contributor_email:
+    this mints real sign-in identity, not the contributor-alias lookup."""
+    if not _is_internal(request):
+        raise HTTPException(404)
+    m = auth.member(body.email)
+    if not m or m.get("status") != "approved":
+        raise HTTPException(404)
+    token = auth.new_session(m["email"], "jam-listen (internal)")
+    return {"cookie_name": config.SESSION_COOKIE, "cookie_value": token,
+            "email": m["email"], "name": m.get("name", "")}
+
+
 class ContributionIn(BaseModel):
     email: str
     slug: str

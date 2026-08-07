@@ -22,7 +22,22 @@ source = "./slab/icecast"
 [apps.jam-radio]
 source = "./liquidsoap"
 
+# jam-listen: the new minimal, audio-first client (docs/DESIGN-jam-listen.md over there;
+# own repo, own history — NOT a jam-station page). It's a member of THIS system, not a
+# standalone slab app, purely so it lands on jam-brain's docker network and can reach it
+# by service name — cross-system apps can't resolve each other by name (only same-system
+# members can, per slab's model). It talks to jam-brain's /api/internal/* (mint-session,
+# member-by-email), which is host-gated on Host: jam-brain.localhost — see
+# jam-listen/server/app/brain_client.py, which sets that header explicitly regardless of
+# the address it actually connects to.
+# ASSUMES jam-listen is checked out as a sibling of this repo on the deploy host (e.g.
+# ~/business/jam-listen next to ~/business/jam-station) — adjust the relative path below
+# if the real layout differs.
+[apps.jam-listen]
+source = "../jam-listen"
+
 [wires]
 "jam-radio.BRAIN_URL" = "http://jam-brain:8080"
 "jam-radio.ICECAST_HOST" = "jam-icecast"
 "jam-brain.LIQUIDSOAP_HOST" = "jam-radio"
+"jam-listen.BRAIN_URL" = "http://jam-brain:8080"
