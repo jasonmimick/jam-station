@@ -533,6 +533,70 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
   production risk, not cosmetic. See the Observability section above for the Grafana alert rules
   that now watch for this class of failure (clock catchup, decoder/mime errors) automatically.
 
+- **A full power-cycle downs the whole station for reasons that have nothing to do with
+  jam-station itself, and nothing about it self-heals** (real P0, 2026-07-29). The chain,
+  each link invisible from the outside until you check it directly:
+  1. Power loss + restore → the mini boots to the **FileVault pre-boot disk-unlock
+     screen**, not macOS. No Tailscale, no real sshd — just a special limited SSH
+     listener (same host key as the real machine, so `known_hosts` still matches it
+     under `jasons-mac-mini`/its old IP) that takes the disk password and prints
+     "System successfully unlocked." then closes the connection. `ping`/Tailscale/normal
+     SSH all read as total silence during this phase — indistinguishable from "still
+     booting" without literally trying that SSH prompt.
+  2. Unlocking the disk boots macOS for real (confirms via `uptime`, real sshd), but
+     lands at an **empty Login Window** — `who` shows no sessions, `/dev/console` is
+     owned by `root`, `launchctl print gui/<uid>` fails ("Domain does not support
+     specified action"). Nobody logged in yet, so **none of the per-user LaunchAgents
+     start**: not Docker, not `run.cloudflared.plist`, not `run.slab.daemon.plist`, not
+     Tailscale. The base OS is fully healthy; every service the station needs is a
+     LaunchAgent gated on a real GUI login. Screen Sharing (`open vnc://<its-LAN-IP>`,
+     NOT the `remote-mini` alias — see below) logging in with the account password is
+     what actually starts everything, all at once.
+  3. One thing does NOT self-heal even after login: **`run.attic.server.plist` can start
+     before `run.attic.vault`'s AFP mount has attached**, do its first catalog walk
+     against directories that genuinely don't exist yet, and cache that empty result
+     (its own log literally says `root drive03 = .../Music (MISSING)`). `GET /health`'s
+     `shelf` reads false forever until that process is kicked: `launchctl unload` +
+     `load` on `run.attic.server.plist` forces a fresh walk (a real cold walk of ~7,800
+     tracks over AFP took ~85s — that's normal, not a hang; only the FIRST post-restart
+     catalog request blocks for it, per the stale-first design above).
+  4. **The `remote-mini` alias (`~/.zshrc`, `open vnc://jasons-mac-mini.local`) fails
+     right after a reboot** even once the machine is technically reachable — `.local`
+     mDNS resolution is one of the last things to come back. Use the LAN IP directly
+     (check your router, or `arp`/a LAN ping sweep) until DNS catches up.
+  5. **`~/.ssh/config`'s `mac-mini` host alias can point at a stale IP** (DHCP handing
+     out a new lease after a reboot) — the symptom looks identical to "the machine
+     changed," down to a host-key warning, until you check the key fingerprint against
+     `known_hosts`'s other recorded names for it (same key = same box, just a new IP).
+  Diagnosis order that actually works, cheapest first: `tailscale status | grep mini`
+  (a peer that's never flipped from "offline, last seen" isn't back yet) → LAN ping by
+  IP → the SSH prompt itself (tells you which phase you're in by what it says) → once
+  real SSH answers, `who` + `ps aux | grep -E "tailscaled|cloudflared|docker"` tells you
+  whether it's "still needs a GUI login" vs "actually broken."
+
+  **Decided fix (2026-08-08, recurred a second time — not hypothetical anymore): drop
+  FileVault + enable auto-login.** Jason's call, knowingly trading disk-at-rest
+  encryption (and, stacked on top, that auto-login means anyone who physically powers
+  the mini on gets a full session with no password prompt at all) for actually
+  surviving a power outage unattended. Considered and rejected: converting the
+  LaunchAgents to system-level LaunchDaemons — correct, keeps FileVault, but Docker
+  Desktop can't run headless at all, so that path means migrating to Colima first, a
+  meaningfully bigger project chasing a threat (physical theft of a home Mac mini)
+  that isn't the one actually being defended against. A UPS is still worth adding on
+  top regardless — cuts how often this triggers at all, no tradeoff.
+
+  **Runbook, at the console** (must be local — this can't be done blind over SSH mid-
+  decrypt):
+  1. `sudo fdesetup disable` (or System Settings → Privacy & Security → FileVault →
+     Turn Off). Backgrounds a real decryption of the whole disk — can take a while;
+     the machine stays usable, don't interrupt it or reboot mid-decrypt.
+  2. Once decryption finishes: System Settings → Users & Groups → Login Options →
+     Automatic login → the owner account. (macOS refuses this while FileVault is on —
+     step 1 has to fully finish first, not just be "turned off.")
+  3. Reboot to prove it: should land on the desktop with zero prompts, and
+     `curl -s https://jam-station.runslab.run/health` (plus jam-listen, spot, keyring,
+     shoebox, attic) should all come back green within a minute or two of the boot
+     chime, no Screen Sharing required.
 - **`tools/jammer/`** embeds a live piece of jam-station's web UI inline in kitty, as a
   real screenshot pushed through the kitty graphics protocol — same technique as the
   `markmore` project's `-t` mode (hidden `WKWebView`, `WKSnapshotConfiguration`, crop,
@@ -552,7 +616,9 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
 ## Roadmap (safe next tasks — see BACKLOG.md for the full list)
 
 1. The rename (candidate: Shortwave) — repo, slab apps, tunnel, docs, UI, PWA icons
-2. launchd for the cloudflared tunnel + slab daemon (a reboot still downs the station)
+2. Drop FileVault + enable auto-login so a reboot survives unattended — decided
+   2026-08-08, runbook is in the gotcha above. Waiting on console access (can't be done
+   over SSH). A UPS is worth adding too, independent of this.
 3. Load-your-own-music volume mount — lights up 70s Fusion / BeBop
 4. TTS DJ intros via a liquidsoap `request.queue` jingle source
 5. "On this day" channel: archive search with `date:*-MM-DD` free_text
