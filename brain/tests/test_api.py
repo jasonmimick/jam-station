@@ -88,3 +88,18 @@ def test_index_served(app_env):
         r = client.get("/")
         assert r.status_code == 200
         assert "jam-station" in r.text
+
+
+def test_old_iphone_redirects_to_slim_player(app_env):
+    from app import config
+    ios7 = "Mozilla/5.0 (iPhone; CPU iPhone OS 7_1_2 like Mac OS X) AppleWebKit/537.51.2 Mobile/11D257 Safari/9537.53"
+    ios17 = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"
+    with TestClient(app) as client:
+        r = client.get("/", headers={"User-Agent": ios7}, follow_redirects=False)
+        assert r.status_code == 302 and r.headers["location"] == config.SLIM_URL
+        # a current iPhone (17_ must not match 1-digit 7_) still gets mobile.html
+        r = client.get("/", headers={"User-Agent": ios17}, follow_redirects=False)
+        assert r.status_code == 200
+        # the escape hatch still wins on an old phone
+        r = client.get("/?desktop=1", headers={"User-Agent": ios7}, follow_redirects=False)
+        assert r.status_code == 200

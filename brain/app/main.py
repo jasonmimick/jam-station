@@ -112,11 +112,16 @@ def api_owner_banner(body: BannerSet, request: Request):
 # and pick by user-agent. Overrides: ?m=1 forces mobile (to test from a laptop), ?desktop=1
 # forces the console (the escape hatch if the sniff is ever wrong on a tablet).
 _MOBILE_UA = re.compile(r"iPhone|Android.+Mobile|Windows Phone|iPod", re.I)
+# iOS 4–9 Safari can't run either page (ES2015+, modern CSS) — it renders blank. Those phones
+# go to jam-listen's slim ES5 player instead (jam-listen/docs/DESIGN-iphone4.md).
+_OLD_IOS_UA = re.compile(r"(iPhone|iPod).* OS [4-9]_")
 
 
 @app.get("/")
 def index(request: Request, m: str = "", desktop: str = ""):
     ua = request.headers.get("user-agent", "")
+    if m != "1" and desktop != "1" and _OLD_IOS_UA.search(ua):
+        return RedirectResponse(config.SLIM_URL, status_code=302)
     mobile = m == "1" or (desktop != "1" and bool(_MOBILE_UA.search(ua)))
     # no-cache = the browser MAY keep a copy but must revalidate before using it (cheap 304 if
     # unchanged). Without this the page ships only a Last-Modified, and mobile Safari happily

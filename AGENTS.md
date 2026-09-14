@@ -186,6 +186,9 @@ Five front-ends, one brain: the desktop web (`index.html`), the native **Session
 (`session/` — macOS, iPhone, iPad; SwiftUI; no App Store presence yet, no developer
 account), the mobile web (`mobile.html`), **dad mode** (`dad.html` at `/dad`), and radio
 apps hitting icecast directly.
+**Old iPhones (iOS 4–9) never get either page**: `/` 302s them to `config.SLIM_URL`
+(jam-listen's ES5 slim player, `jam-listen/docs/DESIGN-iphone4.md`) because both pages
+render blank there. `?m=1`/`?desktop=1` still override.
 **Mobile web is a FUNNEL, not an app**: station list + radio playback + sign-in (invite
 links land there) + a "Session for iPhone — coming soon" teaser on Apple devices. Don't
 grow it; grow the apps and the desktop.

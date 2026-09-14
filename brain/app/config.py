@@ -24,6 +24,9 @@ ICECAST_ORIGIN = os.environ.get("ICECAST_ORIGIN", "http://jam-icecast:8000")
 # per-app database). Members and sessions are coming, and they need a real DB.
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://slab:slab@localhost:20432/slab_jam_brain")
 
+# Where `/` sends iOS 4–9 phones: jam-listen's slim ES5 player (jam-listen/docs/DESIGN-iphone4.md).
+SLIM_URL = os.environ.get("SLIM_URL", "https://jam-listen.runslab.run/iphone4")
+
 # ── auth ──────────────────────────────────────────────────────────────────────
 OWNER_EMAIL   = os.environ.get("OWNER_EMAIL", "")
 PUBLIC_URL    = os.environ.get("PUBLIC_URL", "https://jam-station.runslab.run")
