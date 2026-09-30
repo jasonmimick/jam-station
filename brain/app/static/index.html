@@ -775,6 +775,14 @@
          border-top:1px solid var(--line);padding-top:12px">
         First time? Tap the personal <b>link</b> you were sent — or type its <b>code</b> above.
         No email needed.</p>
+      <!-- forgot it: email a fresh magic link + code (POST /api/auth/login). -->
+      <a id="authForgot" href="#" style="font-size:12px;color:var(--muted)">Forgot it? Email me a fresh link</a>
+      <div id="authResend" style="display:none;margin-top:10px">
+        <input id="authEmail" type="email" placeholder="your email" autocapitalize="off" autocomplete="email"
+               style="width:100%;padding:10px;margin-bottom:8px;font-size:14px">
+        <button id="authSend" style="width:100%;padding:9px;background:transparent;border:1px solid var(--line);
+                color:var(--ink);border-radius:2px;font:inherit;cursor:pointer">Send</button>
+      </div>
       <p id="authMsg" style="font-size:12.5px;margin:12px 0 0"></p>
       <button id="authClose" style="width:100%;margin-top:10px;padding:9px;background:transparent;
               border:1px solid var(--line);color:var(--muted);border-radius:2px;font:inherit;cursor:pointer">Close</button>
@@ -2149,23 +2157,45 @@ async function pullFavs() {
 
 // The ☺/● icon: signed out -> sign-in; signed in -> your account (passphrase + people if owner).
 $("who").onclick = () => {
-  if (!S.user) { $("auth").style.display = "flex"; $("authMsg").textContent = ""; $("authCode").value = ""; $("authCode").focus(); return; }
+  if (!S.user) { $("auth").style.display = "flex"; $("authMsg").textContent = ""; $("authResend").style.display = "none"; $("authCode").value = ""; $("authCode").focus(); return; }
   openOwner();
 };
 $("authClose").onclick = () => { $("auth").style.display = "none"; };
 async function signOut() { await fetch("/api/auth/signout", { method: "POST" }); S.user = null; await loadMe(); }
 
 // one field — whatever you type is tried as a passphrase, then a code. No email.
+// After "email me a fresh link", the emailed code only redeems via /api/auth/code (it needs the
+// email too), so fall back to that with the address we just sent to.
+let resentTo = "";
 $("authGo").onclick = async () => {
   const code = $("authCode").value.trim();
   if (!code) return;
-  const r = await fetch("/api/auth/key", { method: "POST",
+  let r = await fetch("/api/auth/key", { method: "POST",
     headers: {"Content-Type":"application/json"}, body: JSON.stringify({ code }) });
+  if (!r.ok && resentTo) r = await fetch("/api/auth/code", { method: "POST",
+    headers: {"Content-Type":"application/json"}, body: JSON.stringify({ email: resentTo, code }) });
   if (!r.ok) { $("authMsg").style.color = "var(--red)"; $("authMsg").textContent = "That passphrase or code isn't right."; return; }
   $("auth").style.display = "none";
   await loadMe();
 };
 $("authCode").onkeydown = (e) => { if (e.key === "Enter") $("authGo").click(); };
+
+$("authForgot").onclick = (e) => {
+  e.preventDefault();
+  $("authResend").style.display = "block"; $("authEmail").focus();
+};
+// /api/auth/login answers the same for members and strangers, so the message does too.
+$("authSend").onclick = async () => {
+  const email = $("authEmail").value.trim();
+  if (!email) return;
+  const r = await fetch("/api/auth/login", { method: "POST",
+    headers: {"Content-Type":"application/json"}, body: JSON.stringify({ email }) });
+  if (!r.ok) { $("authMsg").style.color = "var(--red)"; $("authMsg").textContent = "Couldn't send — try again."; return; }
+  resentTo = email;
+  $("authMsg").style.color = "var(--live)";
+  $("authMsg").textContent = "If that's a member address, a fresh link and code are on the way. Tap the link, or type the code above.";
+};
+$("authEmail").onkeydown = (e) => { if (e.key === "Enter") $("authSend").click(); };
 
 // ── account: set a passphrase (everyone); manage people (owner) ──────────────────
 function openOwner() {
