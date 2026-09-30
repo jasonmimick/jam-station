@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jam-station · History</title>
+<link rel="icon" href='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 64"%3E%3Cpath d="M0 6 h56 l20 26 -20 26 H0 z" fill="%23FFD200"/%3E%3Cpath d="M36 14 L22 38 h9 l-3 16 L50 32 H38 z" fill="%2312120C"/%3E%3C/svg%3E'>
+<meta name="theme-color" content="#FFD200">
+<style>
+  /* tokens copied verbatim from index.html — this page is a smaller sign of the same station */
+  :root[data-theme="dark"] {
+    --board:#0F0F11; --panel:#17171A; --sunk:#0A0A0C; --line:#2B2B31;
+    --ink:#FFFFFF; --muted:#8C8C94; --faint:#5A5A62;
+    --yellow:#FFD200; --on-yellow:#12120C;
+    --blue:#3B82F6; --red:#F0402F; --live:#2FD16A;
+  }
+  :root[data-theme="light"] {
+    --board:#FFFFFF; --panel:#F4F4F4; --sunk:#ECECEE; --line:#12120C33;
+    --ink:#12120C; --muted:#5B5B62; --faint:#8E8E96;
+    --yellow:#FFD200; --on-yellow:#12120C;
+    --blue:#0B4FD0; --red:#D62818; --live:#0E7A44;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--board); color:var(--ink);
+    font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+  }
+  .lbl { font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+  .num { font-variant-numeric:tabular-nums; }
+  header { display:flex; align-items:center; gap:18px; padding:0 18px; height:58px;
+    background:var(--yellow); color:var(--on-yellow); }
+  header h1 { margin:0; font-size:20px; font-weight:800; letter-spacing:-.01em; white-space:nowrap;
+    display:flex; align-items:center; gap:10px; }
+  header h1 a { color:inherit; text-decoration:none; display:flex; align-items:center; gap:10px; }
+  header .pg { font-size:11px; font-weight:800; letter-spacing:.14em; text-transform:uppercase;
+    border:2px solid var(--on-yellow); border-radius:2px; padding:5px 10px; }
+  header .back { margin-left:auto; color:var(--on-yellow); font-size:12.5px; font-weight:700; text-decoration:none; }
+  main { padding:18px; display:grid; gap:14px;
+    grid-template-columns:repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items:start; }
+  .ch { background:var(--panel); border:1px solid var(--line); border-radius:2px; min-width:0; }
+  .ch h2 { margin:0; padding:12px 14px; font-size:15px; font-weight:800; display:flex; align-items:center;
+    gap:8px; border-bottom:1px solid var(--line); }
+  .ch h2 .dot { width:8px; height:8px; border-radius:50%; background:var(--live); flex:none; }
+  .show { padding:10px 14px 4px; border-bottom:1px solid var(--line); }
+  .show:last-child { border-bottom:0; }
+  .showhd { display:flex; gap:10px; align-items:baseline; justify-content:space-between; }
+  .showname { font-size:13px; font-weight:700; overflow-wrap:anywhere; }
+  .src { color:var(--blue); font-size:12px; font-weight:700; text-decoration:none; white-space:nowrap; }
+  .src:hover { text-decoration:underline; }
+  .r { display:grid; grid-template-columns:1fr auto; gap:10px; padding:5px 0; font-size:13px; }
+  .r .ti { min-width:0; overflow-wrap:anywhere; }
+  .r .ar { color:var(--muted); }
+  .r .when { color:var(--faint); font-size:11.5px; white-space:nowrap; }
+  .r.now .ti { color:var(--ink); font-weight:700; }
+  .r.now .when { color:var(--red); font-weight:800; letter-spacing:.1em; }
+  .none { padding:14px; color:var(--muted); font-size:13px; }
+  @media (max-width:520px) { main { padding:12px 16px; } header .pg { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="/"><svg viewBox="0 0 76 64" width="30" height="26" aria-label="jam-station"><path d="M0 6 h56 l20 26 -20 26 H0 z" fill="currentColor"/><path d="M36 14 L22 38 h9 l-3 16 L50 32 H38 z" fill="var(--yellow)"/></svg>JAM·STATION</a></h1>
+  <span class="pg">History</span>
+  <a class="back" href="/">← Back to the radio</a>
+</header>
+<main id="grid"><div class="none">Loading…</div></main>
+<script>
+document.documentElement.dataset.theme = localStorage.getItem("jam-theme") || "dark";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ago = (ts) => {
+  const s = Math.max(0, (Date.now() - new Date(String(ts).replace(" ", "T") + "Z").getTime()) / 1000);
+  return s < 60 ? "just now" : s < 3600 ? Math.floor(s / 60) + "m ago"
+       : s < 86400 ? Math.floor(s / 3600) + "h ago" : Math.floor(s / 86400) + "d ago";
+};
+
+// consecutive rows from the same show collapse under one heading + one source link
+function groups(rows) {
+  const out = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (last && last.album === r.album && last.source === r.source) last.rows.push(r);
+    else out.push({ album: r.album, source: r.source, rows: [r] });
+  }
+  return out;
+}
+
+async function load() {
+  let chans;
+  try { chans = await (await fetch("/api/channels")).json(); } catch { return; }
+  // mix-only genre stations have no shared broadcast, so no shared history
+  chans = chans.filter(c => !(c.query && c.query.genre) && c.playable !== false);
+  const logs = await Promise.all(chans.map(c =>
+    fetch(`/api/history?channel=${encodeURIComponent(c.slug)}&limit=60`).then(r => r.json()).catch(() => [])));
+  $("grid").innerHTML = chans.map((c, i) => {
+    const rows = logs[i];
+    const body = rows.length ? groups(rows).map(g =>
+      `<div class="show"><div class="showhd"><span class="showname">${esc(g.album || c.name)}</span>` +
+      (g.source ? `<a class="src" href="${esc(g.source)}" target="_blank" rel="noopener">source ↗</a>` : "") +
+      `</div>` + g.rows.map(r => {
+        const now = r === rows[0];
+        return `<div class="r${now ? " now" : ""}"><span class="ti">${esc(r.title)}` +
+          (r.artist ? ` <span class="ar">${esc(r.artist)}</span>` : "") + `</span>` +
+          `<span class="when num">${now ? "ON AIR" : esc(ago(r.played_at))}</span></div>`;
+      }).join("") + `</div>`
+    ).join("") : `<div class="none">Nothing played yet.</div>`;
+    return `<section class="ch"><h2><span class="dot"></span>${esc(c.name)}</h2>${body}</section>`;
+  }).join("") || `<div class="none">No live stations.</div>`;
+}
+load();
+setInterval(() => { if (!document.hidden) load(); }, 30000);
+</script>
+</body>
+</html>

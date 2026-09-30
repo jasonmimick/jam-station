@@ -103,3 +103,32 @@ def test_old_iphone_redirects_to_slim_player(app_env):
         # the escape hatch still wins on an old phone
         r = client.get("/?desktop=1", headers={"User-Agent": ios7}, follow_redirects=False)
         assert r.status_code == 200
+
+
+def test_source_links_on_nowplaying_dial_and_history(app_env):
+    from app import channels, db
+    db.execute("INSERT INTO queue(channel, url, title, artist, album, show_id, served) "
+               "VALUES(?,?,?,?,?,?,1)",
+               ("dead77", "https://archive.org/download/gd77-05-08.sbd/d1t01.mp3",
+                "Minglewood Blues", "Grateful Dead", "Barton Hall", "gd77-05-08.sbd"))
+    db.execute("INSERT INTO history(channel, title, artist, album, show_id) VALUES(?,?,?,?,?)",
+               ("dead77", "Minglewood Blues", "Grateful Dead", "Barton Hall", "gd77-05-08.sbd"))
+    db.execute("INSERT INTO history(channel, title, artist, album, show_id) VALUES(?,?,?,?,?)",
+               ("fusion", "Birdland", "Weather Report", "Heavy Weather", "library-fusion-1"))
+    with TestClient(app) as client:
+        # liquidsoap's POST carries no url — the source must still resolve via the queue row
+        client.post("/api/nowplaying", json={"channel": "dead77", "title": "Minglewood Blues",
+                                             "artist": "Grateful Dead", "album": "Barton Hall"})
+        np = client.get("/api/nowplaying", params={"channel": "dead77"}).json()
+        assert np["source"] == "https://archive.org/details/gd77-05-08.sbd"
+
+        hist = {r["channel"]: r for r in client.get("/api/history").json()}
+        assert hist["dead77"]["source"] == "https://archive.org/details/gd77-05-08.sbd"
+        assert hist["fusion"]["source"] == ""          # our own files have no public page
+        assert "show_id" not in hist["dead77"]
+
+        assert client.get("/history").status_code == 200
+
+    assert channels.source_link("phishin", "1997-11-22") == "https://phish.in/1997-11-22"
+    assert channels.source_link("library", "library-x-1") == ""
+    assert channels.source_link("archive", "") == ""

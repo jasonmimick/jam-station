@@ -422,6 +422,8 @@
 
   /* the schedule */
   .showname { padding:12px 24px 0; font-size:14px; font-weight:700; overflow-wrap:anywhere; }
+  .showname .srclink { color:var(--blue); font-size:12px; font-weight:700; text-decoration:none; white-space:nowrap; margin-left:6px; }
+  .showname .srclink:hover { text-decoration:underline; }
   /* the album's photos — front cover plus any tracklist/back/disc shots the owner added */
   .showart { padding:12px 24px 2px; }
   .artstrip { position:relative; display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
@@ -577,6 +579,7 @@
       <button id="mOnDemand">On demand</button>
     </div>
     <nav class="hdr-links" aria-label="more">
+      <a href="/history">History</a>
       <a href="/guide">＋ Add your music</a>
       <a href="/session">Get the Mac app</a>
     </nav>
@@ -1995,7 +1998,8 @@ async function refresh() {
       const ahead  = shuffle ? (q.upcoming||[]) : (q.upcoming||[]).filter(t=>t.album===show);
       const set = [...played, ...ahead], pos = played.length;
       $("showWrap").style.display = "";
-      $("showName").textContent = show;
+      $("showName").innerHTML = esc(show) + (np.source
+        ? ` <a class="srclink" href="${esc(np.source)}" target="_blank" rel="noopener">source ↗</a>` : "");
       $("showArt").style.display = "none"; $("showArt").innerHTML = "";   // photos are an on-demand-album thing
       $("progTxt").textContent = set.length ? `Track ${pos} of ${set.length}` : "";
       const pct = set.length ? (pos/set.length)*100 : 0;

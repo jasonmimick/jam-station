@@ -7,6 +7,7 @@ import os
 import socket
 import threading
 import time
+import urllib.parse
 
 import httpx
 
@@ -686,6 +687,29 @@ def _icecast_on_air() -> dict[str, str]:
     return mounts
 
 
+def source_link(source: str, show_id: str) -> str:
+    """The public page for the show a track came from — the archive.org item, or the
+    phish.in show. Archive and cc show ids ARE archive identifiers, phish.in ids are
+    dates. Our own files (library, attic, blend) have no public page, so they get ''."""
+    if not show_id:
+        return ""
+    if source in ("archive", "cc"):
+        return "https://archive.org/details/" + urllib.parse.quote(show_id)
+    if source == "phishin":
+        return "https://phish.in/" + urllib.parse.quote(show_id)
+    return ""
+
+
+def _with_source(slug: str, np: dict, show_id: str | None = None) -> dict:
+    if show_id is None and np.get("url"):
+        rows = db.query("SELECT show_id FROM queue WHERE channel=? AND url=? "
+                        "ORDER BY id DESC LIMIT 1", (slug, np["url"]))
+        show_id = rows[0]["show_id"] if rows else ""
+    ch = get_channel(slug)
+    np["source"] = source_link(ch["source"], show_id or "") if ch else ""
+    return np
+
+
 def get_nowplaying(slug: str) -> dict:
     rows = db.query("SELECT * FROM nowplaying WHERE channel=?", (slug,))
     fallback = rows[0] if rows else {
@@ -693,7 +717,7 @@ def get_nowplaying(slug: str) -> dict:
 
     on_air = _icecast_on_air().get(slug, "")
     if not on_air:
-        return fallback
+        return _with_source(slug, fallback)
 
     # icecast gives one flat string ("Artist - Title"), and titles can contain
     # dashes — so don't split it. Match it against the tracks we recently served
@@ -701,14 +725,15 @@ def get_nowplaying(slug: str) -> dict:
     # gives back the structured record (artist, album, url) the UI needs, and the
     # url is what makes the on-air track Likeable.
     recent = db.query(
-        "SELECT title, artist, album, url FROM queue WHERE channel=? AND served=1 "
+        "SELECT title, artist, album, url, show_id FROM queue WHERE channel=? AND served=1 "
         "ORDER BY id DESC LIMIT 12", (slug,))
     for row in recent:
         t = (row["title"] or "").strip()
         if t and t.lower() in on_air.lower():
-            return {"channel": slug, "title": t, "artist": row["artist"],
-                    "album": row["album"], "url": row["url"] or ""}
-    return fallback
+            return _with_source(slug, {"channel": slug, "title": t, "artist": row["artist"],
+                                       "album": row["album"], "url": row["url"] or ""},
+                                row["show_id"] or "")
+    return _with_source(slug, fallback)
 
 
 def queue_status(slug: str) -> dict:

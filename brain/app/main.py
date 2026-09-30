@@ -146,6 +146,13 @@ def guide(request: Request):
     return FileResponse(os.path.join(STATIC, "guide.html"), headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/history")
+def history_page():
+    """Running play log, one column per live station, each show linked to its source.
+    Public like the radio itself — it reads /api/channels and /api/history."""
+    return FileResponse(os.path.join(STATIC, "history.html"), headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/session")
 def session_page(request: Request):
     """Download page for the Session Mac app — with the once-only Gatekeeper install steps."""
@@ -505,7 +512,8 @@ def api_dial():
         if np.get("title"):
             out[ch["slug"]] = {"title": np.get("title", ""),
                                "artist": np.get("artist", ""),
-                               "album": np.get("album", "")}
+                               "album": np.get("album", ""),
+                               "source": np.get("source", "")}
     return out
 
 
@@ -970,14 +978,21 @@ def api_listeners(request: Request):
 @app.get("/api/history")
 def api_history(channel: str | None = None, limit: int = 30):
     """Play log. Omit `channel` for the whole station network (rows carry the
-    channel so the UI can label them); pass one to scope it."""
+    channel so the UI can label them); pass one to scope it. Each row carries
+    `source`, the public page of the show it came from ('' for our own files)."""
+    limit = max(1, min(limit, 500))
     if channel:
-        return db.query(
-            "SELECT channel, title, artist, album, played_at FROM history WHERE channel=? "
-            "ORDER BY id DESC LIMIT ?", (channel, limit))
-    return db.query(
-        "SELECT channel, title, artist, album, played_at FROM history "
-        "ORDER BY id DESC LIMIT ?", (limit,))
+        rows = db.query(
+            "SELECT channel, title, artist, album, show_id, played_at FROM history "
+            "WHERE channel=? ORDER BY id DESC LIMIT ?", (channel, limit))
+    else:
+        rows = db.query(
+            "SELECT channel, title, artist, album, show_id, played_at FROM history "
+            "ORDER BY id DESC LIMIT ?", (limit,))
+    kinds = {c["slug"]: c["source"] for c in channels.list_all_channels()}
+    for r in rows:
+        r["source"] = channels.source_link(kinds.get(r["channel"], ""), r.pop("show_id") or "")
+    return rows
 
 
 # ---------------------------------------------------------------- auth

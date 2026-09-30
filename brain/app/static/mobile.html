@@ -59,6 +59,8 @@
     display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--panel);
     border:1px solid var(--line); border-radius:14px; box-shadow:0 16px 40px -16px #000e; }
   #mini[hidden] { display:none; }
+  #mini .msrc { flex:none; font-size:12px; font-weight:700; color:var(--blue, #3B82F6); text-decoration:none; }
+  #mini .msrc[hidden] { display:none; }
   #mini .mc { width:44px; height:44px; border-radius:8px; background-size:cover; background-position:center;
     background-color:var(--sunk); flex:0 0 auto; }
   #mini .mm { flex:1; min-width:0; }
@@ -103,6 +105,7 @@
   <main id="list"></main>
 
   <footer class="mfoot">
+    <a href="/history">History</a>
     <a href="/guide">＋ Add your own music</a>
     <a href="/session">Get the app for Mac</a>
   </footer>
@@ -110,6 +113,7 @@
   <div id="mini" hidden>
     <div class="mc" id="mCover"></div>
     <div class="mm"><b id="mTitle">—</b><span id="mSub"></span></div>
+    <a class="msrc" id="mSrc" target="_blank" rel="noopener" hidden>source ↗</a>
     <button class="mp" id="mPlay">▶</button>
   </div>
 
@@ -202,6 +206,8 @@ function paintMini() {
   $("mTitle").textContent = np && np.title ? np.title : (ch.name || "—");
   $("mSub").textContent = np && np.artist ? np.artist + " · " + (ch.name || "") : (ch.name || "");
   $("mPlay").textContent = S.audio.paused ? "▶" : "❚❚";
+  $("mSrc").hidden = !(np && np.source);
+  if (np && np.source) $("mSrc").href = np.source;
   if ("mediaSession" in navigator && np && np.title) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: np.title, artist: np.artist || "", album: ch.name || "jam-station",
