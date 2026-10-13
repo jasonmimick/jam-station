@@ -625,3 +625,7 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
 3. Load-your-own-music volume mount — lights up 70s Fusion / BeBop
 4. TTS DJ intros via a liquidsoap `request.queue` jingle source
 5. "On this day" channel: archive search with `date:*-MM-DD` free_text
+
+## Radio watchdog (mini)
+
+`tools/mini/radio-watch.sh`, run every 2 min by launchd (`run.jam.radiowatch`, installed by copying the plist to ~/Library/LaunchAgents). Slab only restarts a container that exits, and liquidsoap has hung without exiting (2026-10-04 silent 3 days; 2026-10-13 clock lagging). The script restarts `slab-jam-radio` when icecast has fewer mounts than playable non-library channels, or the clock lag in its log is >= 60s, on two consecutive checks, at most once per 10 min. Log: ~/Library/Logs/jam-radiowatch.log. `--dry-run` prints what it sees. Library `shelf-*` channels are playable but never get mounts (music not mounted on slab), so they are excluded from the count. Heavy load on the mini (praxis-fhir at 250% CPU) was starving the radio and is a likely cause of the lag.
