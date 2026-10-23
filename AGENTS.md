@@ -143,6 +143,12 @@ whenever you're in the cairnlabs.io zone anyway.)
 - **Adapters are the extension point.** A new audio source = a new module in
   `brain/app/adapters/` exposing track dicts (`url`, `title`, `artist`, `album`),
   plus a `source` value handled in `channels.ensure_queue()`.
+- **Mix channels** (`source: "mix"`, `adapters/mix.py`) draw from several named parts at once: `query.parts` is a list of
+  `{"source": "library", "folders": [...]}`, `{"source": "attic", "artist": "..."}` or `{"source": "archive", "identifiers": [...]}`, each with an
+  optional `weight` (default 1). Every top-up picks ONE part by weight: a batch of shelf/vault tracks, or one whole archive.org show (which keeps its
+  own `show_id`, so it links to archive.org and is not repeated until every show has been heard). A part with nothing playable is skipped. Private by
+  derivation, like library/attic/blend. First use: **Pat & John** (`pat-and-john`, seeded in `channels.py`; the list comes from `~/projects/ipod/crates/scofield-metheny.txt`).
+  The stereotop picks it up through its own sign-in (see stereo-ideas `AGENTS.md`).
 - **RADIO100** (`source: "blend"`, `adapters/blend.py`) is full random across the
   whole shelf AND the vault — genre-balanced, not a flat `random.sample()` over
   the merged pool. It buckets every library section (`_album.json` genres) and
