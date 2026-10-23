@@ -14,14 +14,14 @@ import httpx
 log = logging.getLogger("jam.channels")
 
 from . import config, db
-from .adapters import archive, attic, blend, cc, library, phishin
+from .adapters import archive, attic, blend, cc, library, mix, phishin
 
 # Sources whose channels enqueue whole shows via adapter.pick_show()/get_show().
 SHOW_ADAPTERS = {"archive": archive, "phishin": phishin, "cc": cc}
-STREAMABLE_SOURCES = ("archive", "phishin", "library", "cc", "attic", "blend")
+STREAMABLE_SOURCES = ("archive", "phishin", "library", "cc", "attic", "blend", "mix")
 # The owner's own records — never listed or served to anyone but members, never
 # tunneled. Derived from the source (see list_channels), NEVER a toggle.
-PRIVATE_SOURCES = {"library", "attic", "blend"}
+PRIVATE_SOURCES = {"library", "attic", "blend", "mix"}
 
 # The stations jam-station ships with. THESE LIVE IN CODE ON PURPOSE.
 #
@@ -38,6 +38,21 @@ PRIVATE_SOURCES = {"library", "attic", "blend"}
 #
 # ensure_seeded() is INSERT OR IGNORE, so these never clobber a channel the DJ created.
 SEED_CHANNELS = [
+    {
+        "slug": "pat-and-john",
+        "name": "Pat & John",
+        "description": "Pat Metheny and John Scofield: the CDs on the shelf, the vault, and live shows from the Internet Archive. Private (your own records).",
+        "source": "mix",
+        "query": {"parts": [
+            {"source": "library", "weight": 3, "folders": [
+                "cds/John Scofield - Grace Under Pressure", "cds/John Scofield - Still Warm", "cds/John Scofield Band - Pick Hits Live",
+                "cds/Pat Metheny - Bright Size Life", "cds/Pat Metheny Group - First Circle", "cds/Pat Metheny Group - Letter From Home",
+                "cds/Pat Metheny Group - Still Life (Talking)", "cds/Pat Metheny Group - The Road to You [Live]"]},
+            {"source": "attic", "artist": "John Scofield"},
+            {"source": "attic", "artist": "Pat Metheny Group"},
+            {"source": "archive", "weight": 3, "identifiers": ["scofield1992-10-22.schmit.flac16", "scofield.1998.06.06", "scofield99-06-19.nakcm300.mv100.sbm1.flac16", "John_Scofield_2000.03.27", "johnschofield2013-07-25.ck61.nbob.v3", "MSMW2004-12-14", "pmg1985-07-12.pasternak.flac16", "pmg1987-11-29.pasternak.flac16", "pmg1989-02-03.pasternak.flac16", "pat-metheny-group-kani-hoken-hall-tokyo-1990", "pat-metheny-group-1998-zabrze-warsaw-poland", "pm2018-08-05.ck61.mp6"]},
+        ]},
+    },
     {
         "slug": "dead77",
         "name": "Dead '77",
@@ -375,6 +390,8 @@ def list_channels(streamable_only: bool = False) -> list[dict]:
             r["playable"] = bool(attic.pick_tracks(r["query"], count=1))
         elif r["source"] == "blend":
             r["playable"] = bool(blend.pick_tracks(r["query"], count=1))
+        elif r["source"] == "mix":
+            r["playable"] = mix.playable(r["query"])
         else:
             r["playable"] = True
         # PRIVATE IS DERIVED, NOT DECLARED. Your own CDs (and the vault) are your own;
@@ -509,6 +526,20 @@ def _enqueue_blend(ch: dict) -> int:
     return len(tracks)
 
 
+def _enqueue_mix(ch: dict) -> int:
+    tracks = mix.pick_tracks(ch["query"], exclude=_recent_show_ids(ch["slug"]))
+    if not tracks:
+        return 0
+    # an archive show keeps its own id (so it is not repeated soon and links to archive.org); shelf/vault batches share one id
+    batch = f"mix-{ch['slug']}-{int(time.time())}"
+    db.executemany(
+        "INSERT INTO queue(channel, url, title, artist, album, show_id) VALUES(?,?,?,?,?,?)",
+        [(ch["slug"], t["url"], t["title"], t["artist"], t["album"], t.get("show_id") or batch) for t in tracks],
+    )
+    log.info("enqueue_mix: channel=%s queued=%d albums=%d", ch["slug"], len(tracks), len({t["album"] for t in tracks}))
+    return len(tracks)
+
+
 def ensure_queue(slug: str) -> int:
     """Top up a channel if it's running low. Returns number of tracks added."""
     ch = get_channel(slug)
@@ -530,6 +561,8 @@ def ensure_queue(slug: str) -> int:
             return _enqueue_attic(ch)
         if ch["source"] == "blend":
             return _enqueue_blend(ch)
+        if ch["source"] == "mix":
+            return _enqueue_mix(ch)
         return 0
     finally:
         lock.release()
@@ -693,7 +726,7 @@ def source_link(source: str, show_id: str) -> str:
     dates. Our own files (library, attic, blend) have no public page, so they get ''."""
     if not show_id:
         return ""
-    if source in ("archive", "cc"):
+    if source in ("archive", "cc") or (source == "mix" and not show_id.startswith("mix-")):
         return "https://archive.org/details/" + urllib.parse.quote(show_id)
     if source == "phishin":
         return "https://phish.in/" + urllib.parse.quote(show_id)

@@ -853,7 +853,7 @@ def api_show(channel: str):
     # a library batch is a MIX across albums — labelling it with the first
     # track's album made a whole shelf station read as one record
     ch = channels.get_channel(channel)
-    if ch and ch["source"] in ("library", "blend"):
+    if ch and (ch["source"] in ("library", "blend") or (ch["source"] == "mix" and show_id.startswith("mix-"))):
         album = ch["name"]
     else:
         album = rows[0]["album"] if rows else ""
