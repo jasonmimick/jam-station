@@ -2,6 +2,8 @@ import os
 
 DATA_DIR = os.environ.get("DATA_DIR", "./data")
 CACHE_DIR = os.environ.get("CACHE_DIR", "./cache")
+# vault album sleeves (covers.attic_art_path): on the data volume so they survive redeploys
+ATTIC_ART_DIR = os.environ.get("ATTIC_ART_DIR", os.path.join(DATA_DIR, "attic-art"))
 MUSIC_DIR = os.environ.get("MUSIC_DIR", "./music")
 DB_PATH = os.environ.get("DB_PATH", os.path.join(DATA_DIR, "channels.db"))
 

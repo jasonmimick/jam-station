@@ -138,8 +138,17 @@ whenever you're in the cairnlabs.io zone anyway.)
   (`tracklist`/`back`/`disc`/…). `library.album_images(dir)` returns `[{type,url}]` (front first);
   `api_library_album` includes `images`; upload is `POST /api/library/cover` with a `type` form
   field (`front`→`_cover.jpg`, else `_art-<slug>.jpg`). Enricher only ever manages `_cover.jpg`.
-  Mark a homemade comp's `_album.json` `{"tried":true,"itunes":true,"genres":[]}` so covers.py
+  Mark a homemade comp's `_album.json` `{"tried":true,"itunes":true,"art_v2":true,"genres":[]}` so covers.py
   leaves it alone.
+- **Where covers come from (2026-11-07).** `covers.find_cover(artist, album, dest)`: MusicBrainz release-group search →
+  Cover Art Archive front, then the iTunes Search API. It accepts a candidate only when artist AND album agree after
+  ignoring case, punctuation, accents, spaces, a leading "The", "feat. …" and edition tails (`[Bonus Tracks]`, `(1991)`,
+  `Disc 2`; a `[Box Set]` is kept). It skips Unknown artists/albums and "Loose Tracks", never overwrites a file, and returns
+  None (not a miss) when a source pushes back. MB 1 req/s, iTunes 1 search / 3 s, User-Agent `jam-station/1.0`.
+  **Shelf**: `_cover.jpg` in the album folder (`art_v2` in `_album.json` = the careful pass ran). **Attic**: cached in
+  `config.ATTIC_ART_DIR` = `/data/attic-art` on the `slab-jam-brain-data` volume (NOT `/cache`, which a redeploy wipes;
+  never the vault), `<slug>.jpg`, misses as `<slug>.jpg.none` retried after 30 days. `covers.kick_attic()` fills it in
+  the background (boot, every 10 min, and each `/api/attic/albums`); progress in `/api/attic/stats` → `covers`.
 - **Adapters are the extension point.** A new audio source = a new module in
   `brain/app/adapters/` exposing track dicts (`url`, `title`, `artist`, `album`),
   plus a `source` value handled in `channels.ensure_queue()`.

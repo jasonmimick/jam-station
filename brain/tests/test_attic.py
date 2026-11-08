@@ -173,7 +173,7 @@ def test_attic_cover_fetches_once_then_caches(shelf, monkeypatch):
             f.write(b"\xff\xd8fakejpg")
         return True
 
-    monkeypatch.setattr(covers, "_itunes_cover", fake_itunes)
+    monkeypatch.setattr(covers, "find_cover", fake_itunes)
     with TestClient(app) as client:
         url = "/api/attic/cover?artist=Miles+Davis&album=Kind+of+Blue"
         assert client.get(url).status_code == 403          # members only
@@ -182,7 +182,7 @@ def test_attic_cover_fetches_once_then_caches(shelf, monkeypatch):
         assert client.get(url).status_code == 200          # cached
         assert calls == ["Kind of Blue"]                   # iTunes hit exactly once
         # a miss is cached too — one lookup, then 404s forever
-        monkeypatch.setattr(covers, "_itunes_cover", lambda *a: calls.append("miss") or False)
+        monkeypatch.setattr(covers, "find_cover", lambda *a: calls.append("miss") or False)
         miss = "/api/attic/cover?artist=Obscure&album=Nothing"
         assert client.get(miss).status_code == 404
         assert client.get(miss).status_code == 404
@@ -247,7 +247,7 @@ def test_albums_carry_cover_url_only_when_cached(shelf, monkeypatch):
             f.write(b"\xff\xd8jpg")
         return True
 
-    monkeypatch.setattr(covers, "_itunes_cover", fake_itunes)
+    monkeypatch.setattr(covers, "find_cover", fake_itunes)
     with TestClient(app) as client:
         _member_cookie(client)
         albums = client.get("/api/attic/albums").json()
@@ -270,7 +270,7 @@ def test_cover_warmer_fills_the_crate(shelf, monkeypatch):
             f.write(b"\xff\xd8jpg")
         return True
 
-    monkeypatch.setattr(covers, "_itunes_cover", fake_itunes)
+    monkeypatch.setattr(covers, "find_cover", fake_itunes)
     monkeypatch.setattr(covers.time, "sleep", lambda s: None)
     monkeypatch.setattr(covers, "WARM_ATTIC", True)          # the one test that wants it live
     covers.kick_attic()
@@ -296,3 +296,36 @@ def test_api_mix_dispatches_by_source(shelf):
         assert mix["tracks"] and all(t["url"].startswith("/attic/") for t in mix["tracks"])
         assert all(t["artist"] in ("Miles Davis", "John Coltrane") for t in mix["tracks"])
         assert client.get("/api/mix", params={"slug": "dead77"}).status_code == 404
+
+
+def test_cover_match_is_careful():
+    from app import covers
+    assert covers.same_artist("The Cure", "Cure")
+    assert covers.same_artist("P.O.D", "P.O.D.")
+    assert covers.same_artist("(hed) pe", "(hed) p.e.")
+    assert covers.same_artist("Tom Petty & the Heartbreakers", "Tom Petty and The Heartbreakers")
+    assert covers.same_artist("Pitbull Feat. Red Foo, Vein & David Rush", "Pitbull")
+    assert covers.same_artist("Soundtrack", "Various Artists")
+    assert not covers.same_artist("Soundtrack", "Larry Clark")
+    assert not covers.same_artist("Pearl Jam", "Pearl Jam Tribute Band")
+    assert covers.same_album("Primitive [Bonus Tracks]", "Primitive")
+    assert covers.same_album("Chocolate Starfish and the Hotdog Flavored Water Disc 2",
+                             "Chocolate Starfish and the Hot Dog Flavored Water")
+    assert covers.same_album("Quartets- Live at the Village Vanguard",
+                             "Quartets: Live at the Village Vanguard")
+    assert covers.same_album("Rotting Piñata", "Rotting Pinata")
+    assert covers.same_album("Ten", "Ten (Remastered)")
+    assert not covers.same_album("Led Zeppelin [Box Set] Disc 4", "Led Zeppelin")
+    assert not covers.same_album("Greatest Hits", "Greatest Hits II")
+    assert not covers.lookable("Unknown Artist", "Unknown Album (8-25-2008)")
+    assert not covers.lookable("Saliva", "Unknown Album (8-26-2008 8-54-50 AM)")
+    assert not covers.lookable("Metallica", "Loose Tracks")
+    assert covers.lookable("Metallica", "Load")
+
+
+def test_find_cover_never_overwrites(tmp_path):
+    from app import covers
+    dest = tmp_path / "x.jpg"
+    dest.write_bytes(b"mine")
+    assert covers.find_cover("Miles Davis", "Kind of Blue", str(dest)) is True
+    assert dest.read_bytes() == b"mine"

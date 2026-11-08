@@ -36,11 +36,12 @@ async def lifespan(_app: FastAPI):
                 channels.sync_attic_channels()
             except Exception:
                 pass
+            covers.kick_attic()          # new vault albums, or a boot with no catalog yet
     import threading
     threading.Thread(target=_attic_resync, daemon=True).start()
     auth.ensure_owner()      # the owner is config, not a signup — he never approves himself
     covers.kick()            # backfill album art + year in the background
-    covers.kick_attic()      # trickle-fill vault sleeves (1/sec; skips everything cached)
+    covers.kick_attic()      # fill vault sleeves in the background (skips cached / missed)
     yield
 
 
@@ -688,8 +689,9 @@ def api_attic_albums(request: Request, response: Response):
     from urllib.parse import urlencode
     from .adapters import attic
     albums = attic.list_albums()
+    covers.kick_attic()      # a no-op while a pass is running
     # Only ALREADY-CACHED sleeves get a url here — the grid renders 1,300+ tiles at once
-    # and must never trigger cold iTunes fetches (kick_attic warms the rest at 1/sec).
+    # and must never trigger cold lookups (kick_attic fills the rest, rate-limited).
     for al in albums:
         p = covers.attic_art_path(al.get("artist", ""), al.get("album", ""))
         if p and os.path.exists(p):
@@ -718,35 +720,26 @@ def api_attic_stats(request: Request):
     if not _is_member(request):
         raise HTTPException(403, "members only")
     from .adapters import attic
-    return attic.stats()
+    return {**attic.stats(), "covers": dict(covers.attic_progress)}
 
 
 @app.get("/api/attic/cover")
 def api_attic_cover(request: Request, artist: str, album: str, k: str = ""):
-    """Album art for vault tracks, fetched LAZILY: the vault has no curated covers and
-    nobody is going to hand-curate 16,000 tracks — so the first time a client looks at
-    an album, we ask iTunes (covers._itunes_cover, same fallback the shelf uses), cache
-    the sleeve on the cache volume, and every later look is instant. A miss is cached
-    too (.none marker) so an obscure album can't make every render re-hit iTunes."""
+    """Album art for vault tracks. Usually already cached by the background pass
+    (covers.kick_attic); otherwise the first look asks Cover Art Archive / iTunes for a
+    clear artist + album match (covers.find_cover), caches the sleeve on the data volume,
+    and every later look is instant. A miss is recorded (.none marker) and not asked
+    again for covers.MISS_DAYS."""
     if k != config.MUSIC_KEY and not _is_member(request):
         raise HTTPException(403, "members only")
     dest = covers.attic_art_path(artist, album)
     if not dest:
         raise HTTPException(404, "no art")
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    if not os.path.exists(dest) and not covers.missed_recently(dest):
+        covers.attic_lookup(artist, album, dest)
     if os.path.exists(dest):
         return FileResponse(dest, media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=86400"})
-    if os.path.exists(dest + ".none"):
-        # a miss isn't forever — iTunes rate-limiting a browse spree shouldn't
-        # permanently strip an album of its sleeve. Retry after a week.
-        if time.time() - os.path.getmtime(dest + ".none") < 7 * 86400:
-            raise HTTPException(404, "no art found")
-        os.unlink(dest + ".none")
-    if covers._itunes_cover(artist, album, dest):
-        return FileResponse(dest, media_type="image/jpeg",
-                            headers={"Cache-Control": "public, max-age=86400"})
-    open(dest + ".none", "w").close()
     raise HTTPException(404, "no art found")
 
 

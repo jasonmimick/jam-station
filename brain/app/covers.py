@@ -12,10 +12,12 @@ found, or MB down, just means the UI shows the generated tile. Never blocks a re
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -26,6 +28,7 @@ _NUMPREFIX = re.compile(r"^(\d{1,2})[ .\-_]+")
 
 UA = "jam-station/1.0 (https://jam-station.runslab.run)"
 _lock = threading.Lock()
+log = logging.getLogger("jam.covers")
 
 
 def _get(url: str, timeout: int = 20):
@@ -246,7 +249,8 @@ def _enrich_one(folder: str, name: str) -> None:
         meta = {}
     # skip only when nothing's left to do: cover in hand (or unmatchable), no generic
     # titles, AND genres resolved (the key existing at all counts — [] means "asked, none")
-    cover_done = os.path.exists(cover_p) or meta.get("itunes")   # a cover in hand, or both sources tried
+    # a cover in hand, or every source tried (art_v2 = the careful find_cover pass, 2026-11)
+    cover_done = os.path.exists(cover_p) or (meta.get("itunes") and meta.get("art_v2"))
     if meta.get("tried") and cover_done and not _has_generic(folder) and "genres" in meta:
         return
 
@@ -268,6 +272,11 @@ def _enrich_one(folder: str, name: str) -> None:
         _itunes_cover(artist, album, cover_p)
         meta["itunes"] = True
         time.sleep(0.3)
+    if not os.path.exists(cover_p) and not meta.get("art_v2"):
+        # the first lookups take MB's top hit and iTunes' first result; this one searches
+        # release groups and only accepts a clear artist + album match (see find_cover)
+        if find_cover(artist, album, cover_p) is not None:
+            meta["art_v2"] = True
     if "genres" not in meta:                          # owner-set genres always carry the key
         meta["genres"] = _genres(meta["mbid"]) if meta.get("mbid") else []
         if meta.get("mbid"):
@@ -321,40 +330,237 @@ def kick() -> None:
         threading.Thread(target=run, daemon=True).start()
 
 
-# ── attic sleeves: same iTunes fallback, cached on the cache volume ──────────
+# ── careful cover lookup: Cover Art Archive (via MusicBrainz), then iTunes ──────
+# The names come from folder names, so a loose "first search result" lookup hands a
+# Pearl Jam bootleg some other record's sleeve. find_cover() only accepts a candidate
+# whose artist AND album both agree with ours once case, punctuation, accents, a
+# leading "The" and edition tails ("[Bonus Tracks]", "(Remastered)", "Disc 2") are
+# set aside. No clear match = no cover; the generated tile is better than a wrong one.
+
+_VARIOUS = {"various artists", "various", "va", "soundtrack", "soundtracks", "original soundtrack"}
+_SKIP_ALBUM = re.compile(r"^(unknown album|loose tracks|untitled)\b", re.I)
+_mb_lock = threading.Lock()
+_mb_last = [0.0]
+_it_lock = threading.Lock()
+_it_last = [0.0]
+
+
+def _norm(s: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+    s = s.replace("&", " and ").replace("+", " and ")
+    s = re.sub(r"[\'\u2019.`]", "", s)               # P.O.D. -> pod, Y'All -> yall
+    s = re.sub(r"[^a-z0-9]+", " ", s).strip()
+    return re.sub(r"^the ", "", s)
+
+
+def _album_key(s: str) -> str:
+    """The album's name without edition tails: brackets/parens and 'Disc 2' / 'CD 1'."""
+    # a "[Box Set]" is its own release, never the album that shares its name
+    s = re.sub(r"[\[(]([^\])]*)[\])]",
+               lambda m: f" {m.group(1)} " if re.search(r"\bbox", m.group(1), re.I) else " ", s or "")
+    s = re.sub(r"\b(disc|cd)\s*\d+\b", " ", s, flags=re.I)
+    return _norm(s)
+
+
+def _artist_key(s: str) -> str:
+    s = re.split(r"\s+(feat\.?|featuring|ft\.)\s+", s or "", flags=re.I)[0]
+    return _norm(s)
+
+
+def _is_various(artist: str) -> bool:
+    return _norm(artist) in _VARIOUS
+
+
+def same_artist(ours: str, theirs: str) -> bool:
+    if _is_various(ours):
+        return _is_various(theirs)
+    a, b = _artist_key(ours).replace(" ", ""), _artist_key(theirs).replace(" ", "")
+    return bool(a) and a == b
+
+
+def same_album(ours: str, theirs: str) -> bool:
+    # spaces don't count either ("Hotdog" / "Hot Dog"); words and their order do
+    a, b = _album_key(ours).replace(" ", ""), _album_key(theirs).replace(" ", "")
+    return bool(a) and (a == b or a == _norm(theirs).replace(" ", "")
+                        or _norm(ours).replace(" ", "") == b)
+
+
+def lookable(artist: str, album: str) -> bool:
+    """Worth asking about at all: a real artist and a real album name."""
+    a = _norm(artist)
+    if not a or a.startswith("unknown") or not _album_key(album):
+        return False
+    return not _SKIP_ALBUM.match((album or "").strip())
+
+
+def _polite(lock, last, gap: float) -> None:
+    with lock:
+        wait = last[0] + gap - time.time()
+        if wait > 0:
+            time.sleep(wait)
+        last[0] = time.time()
+
+
+class _Busy(Exception):
+    """The service said slow down (or was unreachable): try again later, don't record a miss."""
+
+
+def _get_json(url: str, lock, last, gap: float):
+    _polite(lock, last, gap)
+    try:
+        return json.load(_get(url))
+    except urllib.error.HTTPError as e:
+        if e.code in (403, 429, 503):
+            raise _Busy(str(e))
+        return {}
+    except Exception as e:                          # network trouble
+        raise _Busy(str(e))
+
+
+def _save(url: str, dest: str) -> bool:
+    if os.path.exists(dest):                         # never overwrite a sleeve already there
+        return True
+    try:
+        data = _get(url, timeout=30).read()
+    except Exception:
+        return False
+    if not data or len(data) < 1500:                 # a stray error page, not a picture
+        return False
+    tmp = dest + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    if os.path.exists(dest):
+        os.unlink(tmp)
+        return True
+    os.replace(tmp, dest)
+    return True
+
+
+def _mb_cover(artist: str, album: str, dest: str) -> bool:
+    title = re.sub(r"\s*[\[(][^\])]*[\])]", "", album).strip() or album
+    title = re.sub(r"\s*\b(disc|cd)\s*\d+\b\s*$", "", title, flags=re.I).strip() or title
+    q = f'releasegroup:"{title}"'
+    if not _is_various(artist):
+        q += f' AND artist:"{_artist_key(artist) or artist}"'
+    url = "https://musicbrainz.org/ws/2/release-group/?" + urllib.parse.urlencode(
+        {"query": q, "fmt": "json", "limit": "10"})
+    data = _get_json(url, _mb_lock, _mb_last, 1.1)  # MusicBrainz asks for 1 request a second
+    for rg in data.get("release-groups") or []:
+        credit = "".join((c.get("name") or (c.get("artist") or {}).get("name") or "")
+                         + (c.get("joinphrase") or "") for c in rg.get("artist-credit") or [])
+        if not (same_album(album, rg.get("title", "")) and same_artist(artist, credit)):
+            continue
+        for size in ("front-500", "front"):
+            if _save(f"https://coverartarchive.org/release-group/{rg['id']}/{size}", dest):
+                return True
+    return False
+
+
+def _itunes_match(artist: str, album: str, dest: str) -> bool:
+    term = f"{'' if _is_various(artist) else _artist_key(artist)} {_album_key(album)}".strip()
+    url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
+        {"term": term, "entity": "album", "limit": "15"})
+    data = _get_json(url, _it_lock, _it_last, 3.0)   # iTunes allows ~20 searches a minute
+    for r in data.get("results") or []:
+        if not (same_album(album, r.get("collectionName", ""))
+                and same_artist(artist, r.get("artistName", ""))):
+            continue
+        art = r.get("artworkUrl100") or ""
+        if art and _save(art.replace("100x100bb", "600x600bb"), dest):
+            return True
+    return False
+
+
+def find_cover(artist: str, album: str, dest: str):
+    """The real sleeve for artist+album, saved at dest. True = found (or already there),
+    False = both sources asked and neither has a clear match, None = a source was busy or
+    unreachable, so ask again later. Never overwrites an existing file."""
+    if os.path.exists(dest):
+        return True
+    if not lookable(artist, album):
+        return False
+    busy = False
+    for source in (_mb_cover, _itunes_match):
+        try:
+            if source(artist, album, dest):
+                return True
+        except _Busy:
+            busy = True
+    return None if busy else False
+
+
+# ── attic sleeves: cached on the brain's data volume ─────────────────────────
+# The vault is a Time Capsule that keeps raw rescued files, so nothing is written there:
+# sleeves live in DATA_DIR/attic-art (a docker volume on the mini's own disk, survives
+# redeploys; /cache did not). A miss is a <slug>.jpg.none marker, retried after MISS_DAYS.
+
+MISS_DAYS = 30
+
 
 def attic_art_path(artist: str, album: str) -> str:
     """Where a vault album's sleeve lives (or would live) in the cache. One slug rule,
     shared by the lazy endpoint, the albums-list enrichment, and the warmer."""
     slug = re.sub(r"[^a-z0-9]+", "-", f"{artist} {album}".lower()).strip("-")[:80]
-    return os.path.join(config.CACHE_DIR, "attic-art", slug + ".jpg") if slug else ""
+    return os.path.join(config.ATTIC_ART_DIR, slug + ".jpg") if slug else ""
+
+
+def missed_recently(dest: str) -> bool:
+    try:
+        return time.time() - os.path.getmtime(dest + ".none") < MISS_DAYS * 86400
+    except OSError:
+        return False
+
+
+def attic_lookup(artist: str, album: str, dest: str):
+    """find_cover for one vault album, recording a miss so it isn't asked again soon.
+    Returns find_cover's True / False / None."""
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    got = find_cover(artist, album, dest)
+    if got and os.path.exists(dest + ".none"):
+        os.unlink(dest + ".none")
+    if got is False:
+        open(dest + ".none", "w").close()
+    return got
 
 
 _attic_lock = threading.Lock()
-WARM_ATTIC = True     # tests flip this off so lifespans can't spawn real iTunes traffic
+WARM_ATTIC = True     # tests flip this off so lifespans can't spawn real lookups
+attic_progress = {"running": False, "checked": 0, "found": 0, "missed": 0, "busy": 0, "total": 0}
 
 
 def kick_attic() -> None:
-    """Trickle-fill the vault's sleeves in the background, one iTunes lookup per second —
-    so the crate grid grows real art without any client ever firing a thousand cold
-    fetches. Skips everything already cached (or marked artless), so re-runs after a
-    redeploy cost seconds, not another pass."""
+    """Fill the vault's sleeves in the background: MusicBrainz at 1 request a second,
+    iTunes at one search every 3 seconds. Skips everything cached or recently missed,
+    so a re-run after a redeploy or on a later albums request costs seconds."""
     if not WARM_ATTIC or not _attic_lock.acquire(blocking=False):
         return
     def run():
         try:
             from .adapters import attic
-            for al in attic.list_albums():
+            albums = attic.list_albums()
+            attic_progress.update(running=True, checked=0, found=0, missed=0, busy=0,
+                                  total=len(albums), started=time.time())
+            for al in albums:
+                attic_progress["checked"] += 1
+                if attic_progress["checked"] % 50 == 0:
+                    log.info("attic covers: %s", attic_progress)
                 dest = attic_art_path(al.get("artist", ""), al.get("album", ""))
-                if not dest or os.path.exists(dest) or os.path.exists(dest + ".none"):
+                if not dest or os.path.exists(dest) or missed_recently(dest):
                     continue
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
                 try:
-                    if not _itunes_cover(al["artist"], al["album"], dest):
-                        open(dest + ".none", "w").close()
+                    got = attic_lookup(al.get("artist", ""), al.get("album", ""), dest)
+                    if got:
+                        attic_progress["found"] += 1
+                    elif got is False:
+                        attic_progress["missed"] += 1
+                    else:
+                        attic_progress["busy"] += 1
+                        time.sleep(30)               # a source pushed back; give it room
                 except Exception:
                     pass
-                time.sleep(1.0)                     # stay polite; ~25 min for the full crate
         finally:
+            attic_progress.update(running=False, finished=time.time())
+            log.info("attic covers pass done: %s", attic_progress)
             _attic_lock.release()
     threading.Thread(target=run, daemon=True).start()

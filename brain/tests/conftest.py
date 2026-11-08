@@ -95,6 +95,7 @@ def app_env(tmp_path, monkeypatch):
     from app import config
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(config, "CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(config, "ATTIC_ART_DIR", str(tmp_path / "data" / "attic-art"))
     monkeypatch.setattr(config, "MUSIC_DIR", str(tmp_path / "music"))
     monkeypatch.setattr(config, "PREFETCH", False)
     # next_track fires a background top-up thread; with the production MIN_QUEUE it races
@@ -119,6 +120,7 @@ def app_env(tmp_path, monkeypatch):
     attic.set_client(None)   # cold cache; tests that want a shelf server inject their own
     from app import covers
     monkeypatch.setattr(covers, "WARM_ATTIC", False)   # no background iTunes traffic in tests
+    monkeypatch.setattr(covers, "find_cover", lambda *a: False)   # never a real lookup
 
     from app import db, channels
     # the pool may still hold connections to the previous URL — rebuild it lazily,
