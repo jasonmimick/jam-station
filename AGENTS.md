@@ -298,6 +298,8 @@ EULER. Verify a provisioning change actually landed with
 `docker exec slab-grafana ls -la /etc/grafana/provisioning/dashboards/` on the mini,
 not just a green deploy message.
 
+**Internal-only routes (`/api/internal/*`)**: `_is_internal` used to trust `Host: jam-brain.localhost` alone, but the Cloudflare tunnel ingress for jam-station.runslab.run sets `httpHostHeader: jam-brain.localhost`, so every public request passed (found 2026-11-25, which made `mint-session` public). It now also refuses anything carrying `cf-ray` / `cf-connecting-ip` / `cdn-loop`. Don't loosen this, and check it again if the tunnel config changes.
+
 ## Usage reports — see docs/DESIGN-usage-reports.md
 
 One `listens` row per finished listening session (radio: when the `/stream` connection closes, on-demand: when heartbeats stop or change channel; under 30 s is not written). `presence.py` stays in-memory and calls `usage.record()` at session end. Report: `GET /api/admin/usage?days=N` (owner) or `/api/internal/usage` (host-only, what jam-listen uses: its service member `jmimick@gmail.com` is NOT an owner, so owner routes 404 for it), shown in jam-listen `#/admin` → Usage, and pushed weekly by `tools/jam-watch`. Clients tag themselves with `?client=` on `/stream` and `/api/presence`. Heartbeats are keyed per device (`aid`) because every jam-listen visitor shares one member session.

@@ -107,3 +107,14 @@ def test_internal_usage_host_gated(app_env):
     assert c.get("/api/internal/usage").status_code == 404
     r = c.get("/api/internal/usage?days=7", headers={"Host": "jam-brain.localhost"})
     assert r.status_code == 200 and r.json()["days"] == 7
+
+
+def test_internal_gate_refuses_tunnel_traffic(app_env):
+    # the tunnel rewrites Host to jam-brain.localhost — the cf headers give it away
+    c = TestClient(app)
+    for hdr in ({"cf-ray": "8f00-EWR"}, {"cf-connecting-ip": "1.2.3.4"}, {"cdn-loop": "cloudflare"}):
+        r = c.get("/api/internal/usage", headers={"Host": "jam-brain.localhost", **hdr})
+        assert r.status_code == 404
+        r = c.post("/api/internal/mint-session", json={"email": "x@example.com"},
+                   headers={"Host": "jam-brain.localhost", **hdr})
+        assert r.status_code == 404

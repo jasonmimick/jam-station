@@ -234,8 +234,18 @@ def _is_internal(request: Request) -> bool:
     tunnel. Gate on the Host header slab's own router already keys on (verified live:
     plain localhost:8080 404s, jam-brain.localhost:8080 200s) — simpler and more honest
     than trusting a source IP that a proxy could rewrite. A public request for this path
-    would arrive with Host: jam-station.runslab.run and get refused."""
-    return (request.headers.get("host") or "").split(":")[0] == "jam-brain.localhost"
+    would arrive with Host: jam-station.runslab.run and get refused.
+
+    ⚠️  NOT TRUE ON ITS OWN (found 2026-11-25): the Cloudflare tunnel's ingress for
+    jam-station.runslab.run sets `httpHostHeader: jam-brain.localhost`, so EVERY public
+    request arrived with the internal Host and passed. Anything that came through
+    Cloudflare carries cf-ray / cf-connecting-ip, which a visitor can't strip, and the
+    real internal callers (jam-listen on the docker network, jam-contribd on the host)
+    never do — so those headers are what actually separate inside from outside."""
+    h = request.headers
+    if h.get("cf-ray") or h.get("cf-connecting-ip") or h.get("cdn-loop"):
+        return False
+    return (h.get("host") or "").split(":")[0] == "jam-brain.localhost"
 
 
 @app.get("/api/internal/member-by-email")

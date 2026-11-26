@@ -51,7 +51,10 @@ def report(days: int = 30) -> dict:
         "SELECT channel, max(started_at) AS last FROM listens GROUP BY channel")}
 
     all_chans = {c["slug"]: c for c in channels.list_all_channels()}
-    continuous = {c["slug"] for c in channels.list_channels(streamable_only=True)}
+    # always-on = has a live icecast mount: playable and not a per-listener genre mix
+    # (same rule as /api/dial). Attic stations (spotlight, vault) are on but not streamed.
+    continuous = {c["slug"] for c in channels.list_channels()
+                  if c["playable"] and not (c.get("query") or {}).get("genre")}
 
     by_channel: dict[str, dict] = {}
     by_client: dict[str, float] = {}
