@@ -54,7 +54,8 @@ def report(days: int = 30) -> dict:
     # always-on = has a live icecast mount: playable and not a per-listener genre mix
     # (same rule as /api/dial). Attic stations (spotlight, vault) are on but not streamed.
     continuous = {c["slug"] for c in channels.list_channels()
-                  if c["playable"] and not (c.get("query") or {}).get("genre")}
+                  if c["playable"] and not (c.get("query") or {}).get("genre")
+                  and c["source"] != "attic"}
 
     by_channel: dict[str, dict] = {}
     by_client: dict[str, float] = {}
