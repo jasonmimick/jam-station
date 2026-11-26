@@ -100,3 +100,10 @@ def test_backfill_loads_once(app_env, monkeypatch, capsys):
     rows = db.query("SELECT channel, client, started_at, seconds FROM listens")
     assert rows == [{"channel": "pat-and-john", "client": "icecast log",
                      "started_at": "2026-11-07 11:50:00", "seconds": 600}]
+
+
+def test_internal_usage_host_gated(app_env):
+    c = TestClient(app)
+    assert c.get("/api/internal/usage").status_code == 404
+    r = c.get("/api/internal/usage?days=7", headers={"Host": "jam-brain.localhost"})
+    assert r.status_code == 200 and r.json()["days"] == 7

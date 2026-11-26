@@ -973,6 +973,16 @@ def api_admin_usage(request: Request, days: int = 30):
     return usage.report(days)
 
 
+@app.get("/api/internal/usage")
+def api_internal_usage(request: Request, days: int = 30):
+    """Same report for jam-listen's #/admin, which checks its own ADMIN_TOKEN and reaches
+    the brain host-only. Its service member isn't an owner, so it can't use the route above."""
+    if not _is_internal(request):
+        raise HTTPException(404, "not found")
+    presence.sweep()
+    return usage.report(days)
+
+
 @app.post("/api/admin/chat")
 def api_admin_chat(body: ChatBody, request: Request):
     if not _is_owner(request):

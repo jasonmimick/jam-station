@@ -300,7 +300,7 @@ not just a green deploy message.
 
 ## Usage reports — see docs/DESIGN-usage-reports.md
 
-One `listens` row per finished listening session (radio: when the `/stream` connection closes, on-demand: when heartbeats stop or change channel; under 30 s is not written). `presence.py` stays in-memory and calls `usage.record()` at session end. Report: `GET /api/admin/usage?days=N` (owner), shown in jam-listen `#/admin` → Usage, and pushed weekly by `tools/jam-watch`. Clients tag themselves with `?client=` on `/stream` and `/api/presence`. Heartbeats are keyed per device (`aid`) because every jam-listen visitor shares one member session.
+One `listens` row per finished listening session (radio: when the `/stream` connection closes, on-demand: when heartbeats stop or change channel; under 30 s is not written). `presence.py` stays in-memory and calls `usage.record()` at session end. Report: `GET /api/admin/usage?days=N` (owner) or `/api/internal/usage` (host-only, what jam-listen uses: its service member `jmimick@gmail.com` is NOT an owner, so owner routes 404 for it), shown in jam-listen `#/admin` → Usage, and pushed weekly by `tools/jam-watch`. Clients tag themselves with `?client=` on `/stream` and `/api/presence`. Heartbeats are keyed per device (`aid`) because every jam-listen visitor shares one member session.
 
 ## Family / affiliate — the two layers (see docs/DESIGN-network.md, DESIGN-family-radio.md)
 
