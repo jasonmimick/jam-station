@@ -1,0 +1,12 @@
+// jam-watch — checks the live stations from outside the mini every 30 min,
+// pushes to ntfy when they go down or come back. Manual run: GET /check.
+{
+  "name": "jam-watch",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-11-01",
+  "triggers": { "crons": ["*/30 * * * *", "0 13 * * 1"] },
+  "kv_namespaces": [{ "binding": "STATE", "id": "7b3cf18557b44f1385e90d4edc4b5181" }],
+  "vars": { "SITE": "https://jam-listen.runslab.run" },
+  "observability": { "enabled": true }
+  // secrets: NTFY_TOPIC, ADMIN_TOKEN (jam-listen's, for the weekly usage summary)
+}

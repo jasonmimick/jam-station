@@ -200,6 +200,19 @@ CREATE TABLE IF NOT EXISTS contribution_tokens(
   revoked_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_contribution_tokens_email ON contribution_tokens(email);
+-- ── listens: one row per finished listening session, for usage reports
+-- (docs/DESIGN-usage-reports.md). presence.py stays in memory, and this is the durable
+-- log it feeds when a session ENDS. Sessions under usage.MIN_SECONDS aren't written.
+CREATE TABLE IF NOT EXISTS listens(
+  id SERIAL PRIMARY KEY,
+  channel TEXT NOT NULL,
+  mode TEXT NOT NULL,               -- radio | ondemand
+  email TEXT DEFAULT '',            -- '' = anonymous
+  client TEXT DEFAULT '',           -- jam-listen | stereotop | web | Session (iOS) | backfill …
+  started_at TEXT NOT NULL,
+  seconds INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_listens_started ON listens(started_at);
 """
 
 # Additive, idempotent, safe to re-run. Postgres does ADD COLUMN IF NOT EXISTS natively, so

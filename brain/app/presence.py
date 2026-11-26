@@ -27,25 +27,48 @@ _seen: dict[tuple, dict] = {}      # (email, client) -> presence of an OPEN app/
 _ids = itertools.count(1)
 
 
-def stream_connect(name: str, email: str, channel: str) -> int:
+def stream_connect(name: str, email: str, channel: str, client: str = "") -> int:
     sid = next(_ids)
     with _lock:
         _streams[sid] = {"name": name or "Someone", "email": email or "",
-                         "channel": channel, "mode": "radio", "since": time.time()}
+                         "channel": channel, "mode": "radio", "since": time.time(),
+                         "client": client}
     return sid
 
 
 def stream_disconnect(sid: int) -> None:
     with _lock:
-        _streams.pop(sid, None)
+        e = _streams.pop(sid, None)
+    if e:   # the session is over — log it for usage reports (outside the lock: it's a DB write)
+        _ended(e, time.time())
 
 
-def heartbeat(name: str, email: str, key: str, channel: str) -> None:
+def _ended(e: dict, end: float) -> None:
+    from . import usage   # lazy: presence stays importable without the DB layer
+    usage.record(e["channel"], e["mode"], e["email"], e.get("client", ""), e["since"],
+                 end - e["since"])
+
+
+def _expire_beats(now: float) -> list[dict]:
+    """Pop expired heartbeats. Caller holds _lock; caller logs the returned ones after."""
+    gone = [k for k, b in _beats.items() if b["until"] < now]
+    return [_beats.pop(k) for k in gone]
+
+
+def heartbeat(name: str, email: str, key: str, channel: str, client: str = "") -> None:
+    now = time.time()
+    ended = []
     with _lock:
+        ended = _expire_beats(now)
         prev = _beats.get(key)
-        since = prev["since"] if prev and prev["channel"] == channel else time.time()
+        if prev and prev["channel"] != channel:
+            ended.append(prev)          # moved to another channel: that session is over
+        since = prev["since"] if prev and prev["channel"] == channel else now
         _beats[key] = {"name": name or "Someone", "email": email or "", "channel": channel,
-                       "mode": "ondemand", "since": since, "until": time.time() + HEARTBEAT_TTL}
+                       "mode": "ondemand", "since": since, "last": now,
+                       "until": now + HEARTBEAT_TTL, "client": client}
+    for b in ended:
+        _ended(b, b.get("last", b["since"]))
 
 
 def seen(email: str, name: str, client: str) -> None:
@@ -59,6 +82,15 @@ def seen(email: str, name: str, client: str) -> None:
         _seen[key] = {"name": name or "Someone", "email": email, "client": client,
                       "since": prev["since"] if prev else time.time(),
                       "until": time.time() + SEEN_TTL}
+
+
+def sweep() -> None:
+    """Log on-demand sessions whose heartbeats stopped. listeners() and heartbeat() do this
+    too; the usage report calls it so a quiet house still gets its last session counted."""
+    with _lock:
+        ended = _expire_beats(time.time())
+    for b in ended:
+        _ended(b, b.get("last", b["since"]))
 
 
 def online() -> list[dict]:
@@ -78,12 +110,13 @@ def listeners() -> list[dict]:
     now = time.time()
     rows: dict[tuple, dict] = {}
     with _lock:
-        for k in [k for k, b in _beats.items() if b["until"] < now]:
-            del _beats[k]
+        ended = _expire_beats(now)
         for src in (list(_beats.values()), list(_streams.values())):   # streams last: radio wins
             for e in src:
                 key = (e["email"] or e["name"], e["channel"])
                 rows[key] = e
+    for b in ended:
+        _ended(b, b.get("last", b["since"]))
     return [{"name": e["name"], "channel": e["channel"], "mode": e["mode"],
              "for_seconds": int(now - e["since"])}
             for e in sorted(rows.values(), key=lambda e: e["since"])]

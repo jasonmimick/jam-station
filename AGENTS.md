@@ -298,6 +298,10 @@ EULER. Verify a provisioning change actually landed with
 `docker exec slab-grafana ls -la /etc/grafana/provisioning/dashboards/` on the mini,
 not just a green deploy message.
 
+## Usage reports — see docs/DESIGN-usage-reports.md
+
+One `listens` row per finished listening session (radio: when the `/stream` connection closes, on-demand: when heartbeats stop or change channel; under 30 s is not written). `presence.py` stays in-memory and calls `usage.record()` at session end. Report: `GET /api/admin/usage?days=N` (owner), shown in jam-listen `#/admin` → Usage, and pushed weekly by `tools/jam-watch`. Clients tag themselves with `?client=` on `/stream` and `/api/presence`. Heartbeats are keyed per device (`aid`) because every jam-listen visitor shares one member session.
+
 ## Family / affiliate — the two layers (see docs/DESIGN-network.md, DESIGN-family-radio.md)
 
 **Sibling project heads-up (2026-07-21):** **shoebox** — a family PHOTO-sharing app over the
@@ -644,3 +648,5 @@ call — clients poll it instead of hammering `/api/nowplaying` per channel.
 ## Radio watchdog (mini)
 
 `tools/mini/radio-watch.sh`, run every 2 min by launchd (`run.jam.radiowatch`, installed by copying the plist to ~/Library/LaunchAgents). Slab only restarts a container that exits, and liquidsoap has hung without exiting (2026-10-04 silent 3 days; 2026-10-13 clock lagging). The script restarts `slab-jam-radio` when icecast has fewer mounts than playable non-library channels, or the clock lag in its log is >= 60s, on two consecutive checks, at most once per 10 min. Log: ~/Library/Logs/jam-radiowatch.log. `--dry-run` prints what it sees. Library `shelf-*` channels are playable but never get mounts (music not mounted on slab), so they are excluded from the count. Heavy load on the mini (praxis-fhir at 250% CPU) was starving the radio and is a likely cause of the lag.
+
+**Outside check: `tools/jam-watch/`** (Cloudflare Worker `jam-watch`, Jason's CF account, free plan). The checks above all run ON the mini, so when the mini's Docker is down they go down too. 2026-11-20: a macOS-update reboot left Docker Desktop waiting on an admin-password dialog ("privileged port mapping" / set-vmnetd) for 5 days and nobody was told. jam-watch runs every 30 min from Cloudflare: it fetches jam-listen `/api/dial`, then reads 4 KB from each live `/stream/<slug>`, re-checks after 40 s before treating it as down, and pushes to ntfy.sh only on state changes (down / back up, plus a reminder every 12 h). Manual run: `curl https://jam-watch.jmimick.workers.dev/check` (JSON; 503 when down). The ntfy topic is the `NTFY_TOPIC` secret, with a copy in `~/.config/jam-watch-topic` on euler. State lives in KV key `state`. Deploy: `cd tools/jam-watch && npx wrangler deploy`. A bot can't fix the Docker-password case. The fix is for Jason to type the password via Screen Sharing, or to run `sudo /Applications/Docker.app/Contents/MacOS/install config --user jason set-vmnetd set-docker-socket` and restart Docker.

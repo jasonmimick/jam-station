@@ -12,7 +12,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, PlainTextResponse,
                                RedirectResponse, StreamingResponse)
 from pydantic import BaseModel
 
-from . import admin, auth, channels, config, covers, db, dj, engineer, presence, spot
+from . import admin, auth, channels, config, covers, db, dj, engineer, presence, spot, usage
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
@@ -434,7 +434,8 @@ async def stream(slug: str, request: Request):
 
     # the open connection is the listener's presence — cookie tells us who (see presence.py)
     me = _me(request)
-    sid = presence.stream_connect(me["name"] if me else "", me["email"] if me else "", slug)
+    sid = presence.stream_connect(me["name"] if me else "", me["email"] if me else "", slug,
+                                  _listen_client(request))
 
     async def body():
         try:
@@ -877,10 +878,22 @@ class PresenceBeat(BaseModel):
 def api_presence(body: PresenceBeat, request: Request):
     """On-demand heartbeat. Radio needs none — the open /stream connection is the presence."""
     me = _me(request)
-    key = me["email"] if me else "anon:" + (body.aid or request.client.host or "?")[:24]
+    # keyed per device too: everyone on jam-listen rides ONE member session, and a member
+    # on two devices is two listening sessions
+    who = me["email"] if me else "anon"
+    key = who + ":" + (body.aid or request.client.host or "?")[:24]
     presence.heartbeat(me["name"] if me else "", me["email"] if me else "",
-                       key, body.channel[:80])
+                       key, body.channel[:80], _listen_client(request))
     return {"ok": True}
+
+
+def _listen_client(request: Request) -> str:
+    """Which app is playing, for usage reports. A proxy or kiosk says so with ?client=
+    (jam-listen, stereotop); otherwise guess from the user agent."""
+    c = request.query_params.get("client", "")
+    if c:
+        return "".join(ch for ch in c if ch.isalnum() or ch in "-_ ")[:40]
+    return _client_of(request.headers.get("user-agent", ""))
 
 
 def _client_of(ua: str) -> str:
@@ -949,6 +962,15 @@ def api_admin_channel_toggle(body: ChannelToggleBody, request: Request):
     if not ch:
         raise HTTPException(404, "no such channel")
     return ch
+
+
+@app.get("/api/admin/usage")
+def api_admin_usage(request: Request, days: int = 30):
+    """Listening hours per channel / app / person (docs/DESIGN-usage-reports.md)."""
+    if not _is_owner(request):
+        raise HTTPException(404, "not found")
+    presence.sweep()
+    return usage.report(days)
 
 
 @app.post("/api/admin/chat")
